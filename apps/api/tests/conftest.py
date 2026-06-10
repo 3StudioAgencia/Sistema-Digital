@@ -1,0 +1,120 @@
+"""Fixtures compartilhadas da suíte.
+
+Princípios (prompt W0-C01 §6):
+- A suíte roda OFFLINE: nada aqui exige Supabase, R2 ou rede externa.
+- Testes que exigem Postgres usam a fixture ``database_url``: skip local
+  quando o banco não está acessível; FALHA no CI (``REQUIRE_DB_TESTS=1``).
+"""
+
+import asyncio
+import os
+from collections.abc import AsyncIterator
+
+import httpx
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+from src.adapters.inbound.http.app import create_app
+from src.adapters.inbound.http.health import DbPing
+from src.application.ports.storage import StorageObjectNotFound, StoragePort
+from src.infrastructure.config import Settings, _coerce_asyncpg_url
+
+DEFAULT_TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test"
+
+
+# ---------------------------------------------------------------------------
+# Dublês
+# ---------------------------------------------------------------------------
+class FakeStorage(StoragePort):
+    """StoragePort em memória — comportamento espelhado na semântica S3."""
+
+    def __init__(self, healthy: bool = True) -> None:
+        self.healthy = healthy
+        self._objects: dict[str, tuple[bytes, str]] = {}
+
+    def upload(self, key: str, data: bytes, content_type: str) -> str:
+        self._objects[key] = (data, content_type)
+        return key
+
+    def download(self, key: str) -> bytes:
+        if key not in self._objects:
+            raise StorageObjectNotFound(key)
+        return self._objects[key][0]
+
+    def delete(self, key: str) -> None:
+        self._objects.pop(key, None)
+
+    def health(self) -> bool:
+        return self.healthy
+
+
+async def ping_ok() -> bool:
+    return True
+
+
+async def ping_down() -> bool:
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Configuração / app / client
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def settings() -> Settings:
+    """Settings explícito e hermético — ``_env_file=None`` impede que um .env
+    local de desenvolvedor vaze para dentro da suíte."""
+    return Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="test",
+        database_url=DEFAULT_TEST_DB_URL,
+        migrations_database_url=DEFAULT_TEST_DB_URL,
+    )
+
+
+@pytest.fixture
+def fake_storage() -> FakeStorage:
+    return FakeStorage()
+
+
+def make_client(settings: Settings, storage: StoragePort, db_ping: DbPing) -> httpx.AsyncClient:
+    """Client httpx falando direto com a app via ASGI (sem rede)."""
+    app = create_app(settings=settings, storage=storage, db_ping=db_ping)
+    transport = httpx.ASGITransport(app=app)
+    return httpx.AsyncClient(transport=transport, base_url="http://testserver")
+
+
+@pytest.fixture
+async def client(settings: Settings, fake_storage: FakeStorage) -> AsyncIterator[httpx.AsyncClient]:
+    """Client padrão: storage ok + banco ok (fakes)."""
+    async with make_client(settings, fake_storage, ping_ok) as c:
+        yield c
+
+
+# ---------------------------------------------------------------------------
+# Postgres real (testes @db)
+# ---------------------------------------------------------------------------
+async def _can_connect(url: str) -> bool:
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+    return True
+
+
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    """URL do Postgres de teste; faz o gate de disponibilidade uma única vez."""
+    url = _coerce_asyncpg_url(os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB_URL))
+    if not asyncio.run(_can_connect(url)):
+        if os.environ.get("REQUIRE_DB_TESTS") == "1":
+            pytest.fail(f"REQUIRE_DB_TESTS=1, mas o Postgres de teste não está acessível em {url}")
+        pytest.skip(
+            "Postgres de teste indisponível — suba com `docker compose up -d db` "
+            "para rodar os testes marcados com @db"
+        )
+    return url
