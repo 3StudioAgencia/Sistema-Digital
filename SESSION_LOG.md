@@ -54,7 +54,9 @@
 - Testes `@db` fazem skip sem Postgres local e FALHAM no CI se o banco sumir (`REQUIRE_DB_TESTS=1`).
 
 **Pendências / em aberto:**
-- [ ] Provisionar Supabase + R2 reais e validar storage com credenciais (roteiro pronto em `docs/setup-infra.md` §5).
+- [x] Provisionar Supabase + R2 — **já existiam** (verificado via MCP em 2026-06-10): projeto `rastreio-provas-digitais` (ref `wmpxxrzbzqgsorjwczvz`, sa-east-1, PG 17, `pgcrypto` instalado) e bucket R2 `rastreio-provas-digitais`. `.env` locais preenchidos com URL e chave publishable.
+- [ ] Preencher a **senha do banco** nos dois `DATABASE_URL`/`MIGRATIONS_DATABASE_URL` de `apps/api/.env` (cofre do responsável; ou reset no Dashboard) e rodar `uv run alembic upgrade head` contra o Supabase.
+- [ ] Criar o **API Token do R2** (Object Read & Write no bucket) + anotar o endpoint da conta e preencher as 4 variáveis `R2_*` (`docs/setup-infra.md` §2); validar com o roteiro do §5.
 - [ ] Confirmar plataformas de deploy com o responsável (ADR-009) e ligar os jobs comentados no `ci.yml`.
 - [ ] Push para o remoto `rastreio-provas-digitais` quando o repositório for criado no GitHub.
 

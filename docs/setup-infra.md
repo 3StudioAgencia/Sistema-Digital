@@ -12,6 +12,11 @@ Guia passo-a-passo para provisionar **Supabase** (Postgres/Auth/Realtime) e
 
 ## 1. Supabase (banco gerenciado + Auth + Realtime)
 
+> **✅ JÁ PROVISIONADO (2026-06-09):** projeto **`rastreio-provas-digitais`**
+> — ref `wmpxxrzbzqgsorjwczvz` · região `sa-east-1` (São Paulo) · PostgreSQL 17 ·
+> URL `https://wmpxxrzbzqgsorjwczvz.supabase.co` · `pgcrypto` já instalado.
+> Os passos abaixo ficam como referência para recriação em outro ambiente.
+
 1. Crie uma conta/organização em [supabase.com](https://supabase.com) e clique
    em **New project** (plano **Free**).
    - Nome: `rastreio-provas-digitais` · Região: `South America (São Paulo)`.
@@ -35,15 +40,21 @@ Guia passo-a-passo para provisionar **Supabase** (Postgres/Auth/Realtime) e
 
 ## 2. Cloudflare R2 (storage S3-compatível, egress zero)
 
+> **✅ BUCKET JÁ CRIADO (2026-06-09):** **`rastreio-provas-digitais`**
+> (storage class Standard). Falta apenas o **API Token** (passo 3) e o
+> **endpoint da conta** (passo 4) para preencher o `.env` da API.
+
 1. Crie uma conta em [dash.cloudflare.com](https://dash.cloudflare.com) e ative
    o **R2** (plano free: 10 GB; pede cartão, sem cobrança dentro do limite).
-2. **R2 → Create bucket**: nome `rastreio-artes` (região automática).
+2. **R2 → Create bucket**: nome `rastreio-provas-digitais` (região automática).
 3. **R2 → Manage R2 API Tokens → Create API Token**:
-   - Permissão **Object Read & Write**, escopo restrito ao bucket `rastreio-artes`.
+   - Permissão **Object Read & Write**, escopo restrito ao bucket
+     `rastreio-provas-digitais`.
    - Copie `Access Key ID` → `R2_ACCESS_KEY_ID` e
      `Secret Access Key` → `R2_SECRET_ACCESS_KEY`.
 4. O endpoint da conta é `https://<account_id>.r2.cloudflarestorage.com`
-   (exibido na página do R2) → `R2_ENDPOINT_URL`; `R2_BUCKET=rastreio-artes`.
+   (exibido na página do R2) → `R2_ENDPOINT_URL`;
+   `R2_BUCKET=rastreio-provas-digitais`.
 5. **Regra tudo-ou-nada:** preencha as 4 variáveis `R2_*` ou nenhuma — config
    parcial falha no boot, de propósito (erro de operação detectado cedo).
 
