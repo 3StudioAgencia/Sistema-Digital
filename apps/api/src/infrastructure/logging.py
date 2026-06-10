@@ -68,7 +68,14 @@ def configure_logging(level: str = "INFO") -> None:
     root.setLevel(level.upper())
 
     # uvicorn instala handlers próprios em texto plano; redireciona ao root JSON.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for name in ("uvicorn", "uvicorn.error"):
         uv_logger = logging.getLogger(name)
         uv_logger.handlers = []
         uv_logger.propagate = True
+
+    # O access log NATIVO do uvicorn é desligado: ele emitiria depois do reset
+    # do ContextVar (request_id nulo) e duplicaria o access log estruturado do
+    # RequestIdMiddleware — fica UMA linha correlacionada por requisição.
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.handlers = []
+    access_logger.propagate = False

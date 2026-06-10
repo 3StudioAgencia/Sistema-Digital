@@ -62,9 +62,17 @@ class TestConfigureLogging:
 
     def test_loggers_do_uvicorn_propagam_para_o_root_json(self) -> None:
         configure_logging("INFO")
-        for nome in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        for nome in ("uvicorn", "uvicorn.error"):
             assert logging.getLogger(nome).handlers == []
             assert logging.getLogger(nome).propagate is True
+
+    def test_access_log_nativo_do_uvicorn_e_silenciado(self) -> None:
+        """O access log da app é o do RequestIdMiddleware (correlacionado);
+        o nativo do uvicorn duplicaria a linha e sairia com request_id nulo."""
+        configure_logging("INFO")
+        access = logging.getLogger("uvicorn.access")
+        assert access.handlers == []
+        assert access.propagate is False
 
 
 class TestRequestIdFilter:

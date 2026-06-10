@@ -73,6 +73,41 @@ class TestErroNaoTratado:
         assert criticos[0].request_id == "corr-err-7"  # type: ignore[attr-defined]
         assert criticos[0].exc_info is not None
 
+    async def test_500_cross_origin_sai_com_headers_cors(
+        self, client_com_rota_explosiva: httpx.AsyncClient
+    ) -> None:
+        """Regressão: o catch-all fica INTERNO ao CORS — sem os headers CORS o
+        frontend cross-origin veria erro de rede opaco e perderia o request_id."""
+        async with client_com_rota_explosiva as client:
+            response = await client.get("/boom", headers={"Origin": "http://localhost:3000"})
+
+        assert response.status_code == 500
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+        assert "x-request-id" in response.headers
+        assert response.json()["error"]["code"] == "internal_error"
+
+    async def test_rede_de_seguranca_do_request_id_middleware(self) -> None:
+        """Exceção que escapasse ENTRE os middlewares (ex.: no próprio CORS)
+        ainda vira envelope 500 correlacionado — exercita o except do
+        RequestIdMiddleware montando uma app SEM o ErrorHandlingMiddleware."""
+        from fastapi import FastAPI
+        from src.adapters.inbound.http.middleware import RequestIdMiddleware
+
+        app = FastAPI()
+        app.add_middleware(RequestIdMiddleware)
+
+        @app.get("/boom")
+        async def boom() -> None:
+            raise RuntimeError("falha entre middlewares")
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            response = await client.get("/boom", headers={"X-Request-ID": "corr-net-1"})
+
+        assert response.status_code == 500
+        assert response.json()["error"]["request_id"] == "corr-net-1"
+        assert response.headers["X-Request-ID"] == "corr-net-1"
+
     async def test_handler_de_ultima_instancia_produz_o_mesmo_envelope(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:

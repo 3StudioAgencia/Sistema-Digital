@@ -88,6 +88,10 @@ jobs:
 
       - name: Instalar pnpm (versão do campo packageManager)
         uses: pnpm/action-setup@v4
+        with:
+          # defaults.run.working-directory não se aplica a steps `uses:` —
+          # apontar o manifesto explicitamente (única fonte da versão do pnpm)
+          package_json_file: apps/web/package.json
 
       - name: Instalar Node (com cache do pnpm)
         uses: actions/setup-node@v4

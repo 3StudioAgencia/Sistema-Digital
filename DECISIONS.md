@@ -21,7 +21,7 @@
 ## ADR-003 — Stack conforme DAT v3.0 §1, com pinagem da versão instalada
 - **Contexto:** A stack está fixada no DAT; algumas versões dizem "≥" (Next ≥14, Python ≥3.11).
 - **Decisão:** Adotar a stack do DAT. Para itens "≥", instalar a **última estável** no momento da execução e **pinar a versão exata** (lockfiles versionados). Python alvo **3.12** (piso 3.11). Next.js: última estável do App Router.
-- **Status:** Aceita.
+- **Status:** Aceita — executada no W0-C01. Versões pinadas na fundação: Python 3.12.13 · FastAPI 0.136.3 · SQLAlchemy 2.0.50 · Pydantic 2.13.4 · Alembic 1.18.4 · asyncpg 0.31.0 · boto3 1.43.26 · PyJWT 2.13.0 · pytest 9.0.3 · Next 16.2.9 · React 19.2.4 · TypeScript 5.x (lockfiles = fonte exata).
 - **Consequências:** Builds reproduzíveis. Atualizações de versão maior viram ADR próprio.
 
 ## ADR-004 — Rota manual e imutável, com 4 rotas (sobrepõe UML/DAT v3.0)
@@ -44,9 +44,9 @@
 
 ## ADR-007 — Estratégia de conexão ao Supabase Postgres
 - **Contexto:** Backend stateless e horizontalmente escalável (RNF-018) sobre Postgres gerenciado do Supabase, que oferece conexão **direta (5432)** e **pooler de transação via PgBouncer (6543)**. Em modo transação, prepared statements/recursos de sessão não são suportados.
-- **Decisão (proposta):** Runtime da aplicação usa o **pooler de transação (6543)** com `asyncpg` + `statement_cache_size=0` + SQLAlchemy `NullPool` (pooling delegado ao PgBouncer) → seguro para escala horizontal. **Migrations (Alembic)** usam a **conexão direta/sessão (5432)**, pois DDL exige recursos de sessão.
-- **Status:** **Proposta** — confirmar e validar na Wave 0 / C01.
-- **Consequências:** Duas URLs de conexão (`DATABASE_URL` runtime vs `MIGRATIONS_DATABASE_URL`). Documentar ambas em `.env.example`.
+- **Decisão:** Runtime da aplicação usa o **pooler de transação (6543)** com `asyncpg` + SQLAlchemy `NullPool` (pooling delegado ao PgBouncer) e **ambos** os caches de prepared statement desligados: `statement_cache_size=0` (cache do asyncpg) **e** `prepared_statement_cache_size=0` (cache do dialeto asyncpg do SQLAlchemy) via `connect_args` → seguro para escala horizontal. **Migrations (Alembic)** usam a **conexão direta/sessão (5432)**, pois DDL exige recursos de sessão (`migrations/env.py` lê `MIGRATIONS_DATABASE_URL` e não exige o `Settings` completo).
+- **Status:** **Aceita** — implementada e validada no W0-C01 (`src/infrastructure/database.py`); suíte de integração executada contra PostgreSQL 17.10 real (66 testes, ciclo completo do Alembic).
+- **Consequências:** Duas URLs de conexão (`DATABASE_URL` runtime vs `MIGRATIONS_DATABASE_URL`), documentadas em `.env.example`. Em dev local ambas apontam para o Postgres do docker-compose.
 
 ## ADR-008 — Como o backend honra a RLS por requisição
 - **Contexto:** Os exemplos de RLS do DAT §7.2 usam `auth.jwt()`. Conexões com a *service role* **ignoram** RLS por padrão. Um backend próprio precisa propagar os claims do usuário ao Postgres para que `auth.jwt()`/escopo funcionem como camada inferior real.
@@ -62,8 +62,8 @@
 
 ## ADR-010 — Gerenciadores de pacote: `uv` (Python) e `pnpm` (web)
 - **Contexto:** Pedido de stack moderna e builds rápidos/reproduzíveis.
-- **Decisão (proposta):** **`uv`** para o backend (resolução rápida, `pyproject.toml`, lockfile) e **`pnpm`** para o frontend. Sem orquestrador de monorepo na v1.0.
-- **Status:** **Proposta** — confirmar na Wave 0 / C01 (fallback: `pip`+venv / `npm` se necessário no ambiente alvo).
+- **Decisão:** **`uv`** para o backend (resolução rápida, `pyproject.toml`, `uv.lock`) e **`pnpm`** para o frontend (`pnpm-lock.yaml`). Sem orquestrador de monorepo na v1.0. Build scripts do pnpm 11 aprovados explicitamente em `pnpm-workspace.yaml` (`sharp`, `unrs-resolver`) — bloqueio por padrão é proteção de supply chain.
+- **Status:** **Aceita** — confirmada no W0-C01 (uv 0.11 / pnpm 11 no ambiente alvo; lockfiles versionados; CI usa `uv sync --frozen` e `pnpm install --frozen-lockfile`).
 - **Consequências:** Lockfiles versionados; comandos padronizados no README e CLAUDE.md §9.
 
 ## ADR-011 — Tratamento dos documentos desatualizados (UML/DAT v3.0)
@@ -72,10 +72,28 @@
 - **Status:** Aceita.
 - **Consequências:** Evita que o Claude Code reintroduza o modelo antigo. Divergências novas devem ser registradas como ADR aqui.
 
+## ADR-012 — Porta de storage SÍNCRONA, executada via threadpool (W0-C01)
+- **Contexto:** O SDK concreto do R2 (boto3) é síncrono; a API é async. Uma porta async exigiria wrapper assíncrono artificial sobre boto3 ou troca de SDK (aioboto3, menos maduro).
+- **Decisão:** `StoragePort` tem assinatura **síncrona** (`upload/download/delete/health`); os handlers async chamam a porta via `run_in_threadpool` (caso do readiness). A porta não conhece boto3 — o cliente S3 é **injetado** no `R2Storage`, o que permite testar com `moto` sem rede nem env.
+- **Status:** Aceita (W0-C01).
+- **Consequências:** Event loop nunca bloqueia; trocar boto3 por SDK async no futuro = novo adapter, sem tocar a porta. `UnconfiguredStorage` cobre ambiente sem credenciais (readiness reporta `storage: down` sem derrubar o boot).
+
+## ADR-013 — Catch-all de exceções DENTRO do middleware de request-id (W0-C01)
+- **Contexto:** O handler genérico de `Exception` do Starlette roda no `ServerErrorMiddleware`, FORA do escopo do `ContextVar` de request_id — o log CRITICAL do erro não tratado sairia sem correlação (e o Starlette re-levanta a exceção após responder).
+- **Decisão:** O `RequestIdMiddleware` captura `Exception` em volta do `call_next` e delega a `log_and_build_internal_error_response()` (em `errors.py`): log CRITICAL **correlacionado** + envelope JSON 500 padronizado, sem stack trace ao cliente. O handler genérico permanece registrado como rede de segurança de última instância. Envelope canônico de erro: `{"error": {"code", "message", "request_id"}}`.
+- **Status:** Aceita (W0-C01).
+- **Consequências:** Toda resposta (inclusive 500) carrega `X-Request-ID`; access log uniforme. Handlers de `HTTPException`/`RequestValidationError` usam o mesmo envelope.
+
+## ADR-014 — Fundação do frontend: Next 16 pinado, build hermético (W0-C01)
+- **Contexto:** ADR-003 manda pinar a última estável. Next 16.2.9 / React 19.2.4 eram as estáveis na execução. `next/font/google` baixa fontes em build (rede) e quebraria builds herméticos/offline.
+- **Decisão:** Next **16.2.9** + React **19.2.4** pinados no lockfile; **fonte de sistema** via tokens CSS (sem `next/font/google`); `turbopack.root` explícito (evita inferência errada de raiz por lockfiles fora do repo); ESLint flat config + `eslint-config-prettier` + Prettier; client Supabase **lazy** (build não exige env; runtime sim).
+- **Status:** Aceita (W0-C01).
+- **Consequências:** Build reproduzível sem rede além do registry; tipografia padronizada por CSS vars (a identidade visual definitiva pode revisitar na Wave 6).
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
-- [ ] ADR-007 — validar pooler de transação + NullPool em execução (W0/C01).
-- [ ] ADR-008 — desenhar propagação de claims/RLS por request (W1/C05).
-- [ ] ADR-009 — confirmar plataformas de deploy com o responsável.
-- [ ] ADR-010 — confirmar `uv`/`pnpm` no ambiente alvo.
+- [x] ADR-007 — validado: pooler/NullPool + caches off, suíte contra PostgreSQL 17.10 real (W0/C01).
+- [ ] ADR-008 — desenhar propagação de claims/RLS por request (W1/C05). Ponto de extensão pronto em `SqlAlchemyUnitOfWork.begin()`.
+- [ ] ADR-009 — confirmar plataformas de deploy com o responsável (CI/Dockerfile prontos e agnósticos).
+- [x] ADR-010 — confirmado: `uv` 0.11 + `pnpm` 11 no ambiente alvo (W0/C01).

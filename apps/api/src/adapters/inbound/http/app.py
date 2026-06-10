@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
-from src.adapters.inbound.http.middleware import RequestIdMiddleware
+from src.adapters.inbound.http.middleware import ErrorHandlingMiddleware, RequestIdMiddleware
 from src.application.ports.storage import StoragePort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
 
@@ -43,9 +43,13 @@ def create_app(
     app.state.storage = storage
     app.state.db_ping = db_ping
 
-    # Ordem dos middlewares: o último adicionado é o mais externo.
-    # RequestId fica por fora do CORS para que TODA resposta (inclusive
-    # preflights e erros) saia com X-Request-ID e access log.
+    # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
+    # para fora: ErrorHandling → CORS → RequestId.
+    # - ErrorHandling interno ao CORS: o envelope 500 sai com headers CORS
+    #   (sem eles o frontend cross-origin não lê o request_id — ADR-013);
+    # - RequestId por fora de tudo: TODA resposta (inclusive preflights e
+    #   erros) sai com X-Request-ID e access log correlacionado.
+    app.add_middleware(ErrorHandlingMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

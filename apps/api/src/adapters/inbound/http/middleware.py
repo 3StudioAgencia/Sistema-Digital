@@ -1,13 +1,17 @@
-"""Middleware de correlação por ``request_id`` (RNF-024).
+"""Middlewares HTTP — correlação por ``request_id`` (RNF-024) e catch-all de erros.
 
-Comportamento:
-- Reusa o ``X-Request-ID`` recebido (propagação entre serviços/proxy) ou gera
-  um novo UUID4 — assim o front pode correlacionar um erro de tela com a linha
-  de log exata do backend.
-- Publica o id no ``ContextVar`` para que TODOS os logs da requisição o levem.
-- Devolve o id no header ``X-Request-ID`` da resposta.
-- Emite um access log estruturado por requisição (método, caminho, status,
-  duração) — uma única linha JSON, sem duplicar o access log do uvicorn.
+Dois middlewares com papéis distintos, em camadas diferentes (ver ``app.py``):
+
+- ``RequestIdMiddleware`` (o MAIS EXTERNO): reusa o ``X-Request-ID`` recebido
+  ou gera um UUID4, publica no ``ContextVar`` (todos os logs da requisição o
+  levam), devolve o header na resposta e emite UM access log estruturado por
+  requisição (o access log nativo do uvicorn é desligado em ``logging.py``).
+- ``ErrorHandlingMiddleware`` (INTERNO ao CORS): captura exceções não tratadas
+  e devolve o envelope 500 padronizado. Fica por dentro do ``CORSMiddleware``
+  de propósito: assim o 500 sai COM os headers CORS — sem eles, um frontend
+  cross-origin veria apenas um erro de rede opaco e não conseguiria ler o
+  ``request_id`` para reportar (ADR-013). A correlação é preservada porque o
+  ``RequestIdMiddleware`` externo já populou o ``ContextVar``.
 """
 
 import logging
@@ -28,6 +32,21 @@ _MAX_INBOUND_ID_LENGTH = 128  # ids arbitrariamente longos viram vetor de log fl
 logger = logging.getLogger("rastreio.http")
 
 
+class ErrorHandlingMiddleware(BaseHTTPMiddleware):
+    """Catch-all de exceções não tratadas → envelope 500 sem stack trace."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        super().__init__(app)
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            # Dentro do escopo do ContextVar (setado pelo RequestIdMiddleware
+            # externo): o log CRITICAL sai correlacionado.
+            return log_and_build_internal_error_response(request, exc)
+
+
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Gera/propaga o request_id e emite o access log estruturado."""
 
@@ -43,8 +62,9 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             try:
                 response = await call_next(request)
             except Exception as exc:
-                # Catch-all DENTRO do escopo do ContextVar: o log CRITICAL sai
-                # correlacionado e o cliente recebe o envelope 500 sem stack trace.
+                # Rede de segurança: só dispara se uma camada ENTRE este
+                # middleware e o ErrorHandlingMiddleware falhar (ex.: CORS).
+                # O caminho normal de erro é o ErrorHandlingMiddleware interno.
                 response = log_and_build_internal_error_response(request, exc)
         finally:
             request_id_var.reset(token)

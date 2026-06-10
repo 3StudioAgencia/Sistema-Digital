@@ -220,23 +220,26 @@ Antes de marcar um componente como concluído:
 - RLS: **todo** `.sql` existe em `migrations/rls/` **antes** de ser aplicado; reaplicar após qualquer `DROP/recriação` de tabela.
 - Sincronização de enums: PR que toca só Python **ou** só o banco é **bloqueado** (ver DAT §4.5).
 
-**Comandos** *(consolidar/atualizar conforme implementado — fonte: README.md)*
+**Comandos** *(confirmados no W0-C01 — fonte: README.md)*
 ```bash
-# Backend
-cd apps/api && uv sync                      # instalar deps
-uv run uvicorn src.main:app --reload        # dev server
-uv run alembic upgrade head                 # migrations
-uv run pytest --cov                          # testes + cobertura
-uv run ruff check . && uv run mypy src       # lint + types
+# Backend (apps/api)
+cd apps/api && uv sync                      # instalar deps (uv.lock pinado)
+uv run uvicorn src.main:app --reload        # dev server → http://localhost:8000/docs
+uv run alembic upgrade head                 # migrations (usa MIGRATIONS_DATABASE_URL)
+uv run pytest --cov                         # testes + cobertura (offline; @db pula sem Postgres)
+uv run ruff check . && uv run mypy          # lint + types (strict; mypy lê files do pyproject)
 
-# Frontend
+# Frontend (apps/web)
 cd apps/web && pnpm install
-pnpm dev                                     # dev server
+pnpm dev                                     # dev server → http://localhost:3000
 pnpm build && pnpm lint                      # build + lint
+pnpm format:check                            # Prettier
 
 # Infra local
-docker compose up -d db                      # Postgres local p/ testes
+docker compose up -d db                      # Postgres 17 local (cria rastreio + rastreio_test)
 ```
+
+> Notas operacionais: `alembic.ini` deve permanecer **ASCII puro** (o Alembic lê o `.ini` no encoding do locale — cp1252 no Windows). Testes `@db` usam `TEST_DATABASE_URL` (default: Postgres local) e viram falha com `REQUIRE_DB_TESTS=1` (CI).
 
 ---
 
