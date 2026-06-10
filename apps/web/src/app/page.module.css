@@ -1,0 +1,55 @@
+.page {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 640px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 32px;
+}
+
+.kicker {
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: 1.6rem;
+  line-height: 1.2;
+  margin-bottom: 12px;
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+
+.meta {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.metaItem dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.metaItem dd {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
