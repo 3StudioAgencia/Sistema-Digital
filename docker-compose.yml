@@ -1,0 +1,25 @@
+# Postgres local para desenvolvimento e testes (espelha o Postgres gerenciado do Supabase).
+# Versão 17 = mesma major provisionada pelo Supabase para projetos novos (free tier).
+# Uso: docker compose up -d db
+services:
+  db:
+    image: postgres:17
+    container_name: rastreio-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rastreio
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Cria o banco isolado de testes (rastreio_test) na primeira inicialização
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rastreio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
