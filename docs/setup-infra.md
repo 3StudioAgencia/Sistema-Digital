@@ -22,13 +22,21 @@ Guia passo-a-passo para provisionar **Supabase** (Postgres/Auth/Realtime) e
    - Nome: `rastreio-provas-digitais` · Região: `South America (São Paulo)`.
    - Guarde a **senha do banco** num cofre (não será exibida de novo).
 2. Obtenha as **duas connection strings** (ADR-007) em
-   **Project Settings → Database → Connection string**:
+   **Project Settings → Database → Connection string** (o host do pooler deste
+   projeto é `aws-1-sa-east-1.pooler.supabase.com` — confirme no painel, o
+   prefixo `aws-N` varia por projeto):
    - **Runtime (pooler de transação, porta 6543)** — seletor "Transaction":
-     `postgresql://postgres.<ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:6543/postgres`
+     `postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:6543/postgres`
      → vai em `DATABASE_URL` da API.
-   - **Migrations (conexão direta, porta 5432)** — seletor "Direct connection":
-     `postgresql://postgres:<senha>@db.<ref>.supabase.co:5432/postgres`
-     → vai em `MIGRATIONS_DATABASE_URL` da API.
+   - **Migrations (porta 5432)** → vai em `MIGRATIONS_DATABASE_URL` da API:
+     - ⚠️ A **conexão direta** (`db.<ref>.supabase.co:5432`) é **somente IPv6**
+       em projetos novos. Em rede sem IPv6 (caso da máquina de dev — verificado
+       em 2026-06-10, `gaierror`), use o **pooler em modo SESSION** (mesma porta
+       5432, mesmo host do pooler, usuário `postgres.<ref>`):
+       `postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres`
+       — modo session é 1:1 (suporta DDL/prepared statements; adequado a migrations).
+     - Em hosts com IPv6 (maioria dos provedores de deploy), a conexão direta
+       também funciona.
 3. Em **Project Settings → API**, copie:
    - **Project URL** → `SUPABASE_URL` (api) e `NEXT_PUBLIC_SUPABASE_URL` (web);
    - **anon/publishable key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY` (web);
