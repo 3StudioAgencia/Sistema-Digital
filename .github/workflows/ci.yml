@@ -1,0 +1,140 @@
+# ============================================================================
+# CI — Rastreio de Provas Digitais
+# api: lint + tipos + migrations (upgrade E downgrade) + testes com Postgres real
+# web: lint + build
+#
+# Deploy: documentado e parametrizável ao final do arquivo (ADR-009).
+# ============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API (ruff · mypy · alembic · pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rastreio_test
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # CI usa o Postgres do service container para runtime e migrations.
+      # Em produção são DUAS URLs distintas (pooler 6543 vs direta 5432 — ADR-007).
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test
+      MIGRATIONS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test
+      # No CI, banco indisponível é FALHA (localmente os testes @db fazem skip)
+      REQUIRE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv (com cache do lockfile)
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Instalar dependências (pinadas pelo lockfile)
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Tipos (mypy strict)
+        run: uv run mypy
+
+      - name: Migrations — upgrade em ambiente limpo (critério §5.1)
+        run: uv run alembic upgrade head
+
+      - name: Migrations — downgrade e reaplicação (repetibilidade)
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: Testes + cobertura (falha abaixo do piso configurado)
+        run: uv run pytest --cov
+
+  web:
+    name: Web (lint · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      # Placeholders de build: o client Supabase é lazy e só valida em runtime
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar pnpm (versão do campo packageManager)
+        uses: pnpm/action-setup@v4
+
+      - name: Instalar Node (com cache do pnpm)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Instalar dependências (lockfile congelado)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+# ============================================================================
+# DEPLOY (documentado e parametrizável — ADR-009; sem segredos no repositório)
+#
+# As plataformas-alvo são revisáveis (free tier): Vercel para o web; host de
+# containers (Fly.io/Render) para a API. Quando confirmadas com o responsável,
+# descomente e parametrize com SECRETS do repositório (Settings → Secrets):
+#
+#   deploy-web:
+#     needs: [api, web]
+#     if: github.ref == 'refs/heads/main'
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       # Vercel: vincule o projeto (vercel link) e cadastre os secrets
+#       #   VERCEL_TOKEN · VERCEL_ORG_ID · VERCEL_PROJECT_ID
+#       # As variáveis NEXT_PUBLIC_* são configuradas no painel da Vercel.
+#       - run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+#
+#   deploy-api:
+#     needs: [api, web]
+#     if: github.ref == 'refs/heads/main'
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       # A API é um container portável (apps/api/Dockerfile) — qualquer host serve.
+#       # Exemplo Fly.io (secrets: FLY_API_TOKEN; app criada com `fly launch`):
+#       #   - uses: superfly/flyctl-actions/setup-flyctl@master
+#       #   - run: flyctl deploy --remote-only -c apps/api/fly.toml
+#       #     env: { FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }} }
+#       # O passo de release do host DEVE rodar `alembic upgrade head` (e aplicar
+#       # os .sql de migrations/rls/ a partir da Wave 1) antes de trocar o tráfego.
+#       # Smoke test pós-deploy: GET /health e GET /health/ready (RNF-024).
+# ============================================================================

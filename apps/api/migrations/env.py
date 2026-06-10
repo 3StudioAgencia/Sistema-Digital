@@ -19,7 +19,9 @@ from src.infrastructure.config import _coerce_asyncpg_url
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: rodar migrations no mesmo processo da app
+    # (ou da suíte de testes) não pode silenciar os loggers já configurados
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Sem tabelas de domínio nesta wave — o metadata chega na Wave 2 (C06).
 # Quando existir: from src.adapters.outbound.db.models import metadata

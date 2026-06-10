@@ -6,12 +6,12 @@ Roda offline: sem R2 a app usa o UnconfiguredStorage; o ciclo de vida
 
 from collections.abc import Callable
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from src.adapters.outbound.storage.r2_storage import R2Storage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
 from src.infrastructure.config import get_settings
-from starlette.testclient import TestClient
 
 PG_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test"
 
@@ -38,7 +38,7 @@ def build_app() -> Callable[[], FastAPI]:
     return factory
 
 
-def test_app_sobe_sem_r2_com_storage_nao_configurado(
+async def test_app_sobe_sem_r2_com_storage_nao_configurado(
     build_app: Callable[[], FastAPI],
 ) -> None:
     app = build_app()
@@ -46,9 +46,11 @@ def test_app_sobe_sem_r2_com_storage_nao_configurado(
     assert isinstance(app.state.storage, UnconfiguredStorage)
     assert app.state.settings.app_env == "test"
 
-    # TestClient como context manager executa o lifespan (startup/shutdown)
-    with TestClient(app) as client:
-        response = client.get("/health")
+    # lifespan explícito: exercita startup/shutdown (log + dispose do engine)
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            response = await client.get("/health")
 
     assert response.status_code == 200
     assert response.headers.get("X-Request-ID")
@@ -69,11 +71,13 @@ def test_app_usa_r2_quando_configurado(
     assert isinstance(app.state.storage, R2Storage)
 
 
-def test_docs_openapi_expostos(build_app: Callable[[], FastAPI]) -> None:
+async def test_docs_openapi_expostos(build_app: Callable[[], FastAPI]) -> None:
     app = build_app()
-    with TestClient(app) as client:
-        assert client.get("/docs").status_code == 200
-        schema = client.get("/openapi.json").json()
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            assert (await client.get("/docs")).status_code == 200
+            schema = (await client.get("/openapi.json")).json()
 
     assert schema["info"]["title"] == "rastreio-api"
     assert "/health/ready" in schema["paths"]
