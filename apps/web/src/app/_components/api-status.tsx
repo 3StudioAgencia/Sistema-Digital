@@ -21,6 +21,26 @@ type ApiState =
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 /**
+ * Valida minimamente o shape do corpo antes de tratá-lo como pronto (W0-A-017).
+ * Um JSON válido mas fora do contrato (ex.: `{"detail":"Not Found"}` de um
+ * NEXT_PUBLIC_API_BASE_URL com path errado, ou um corpo de proxy) passaria pelo
+ * cast e quebraria `Object.entries(payload.checks)` na renderização.
+ */
+function isReadyPayload(value: unknown): value is ReadyPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  const checks = record.checks;
+  if (typeof checks !== "object" || checks === null) return false;
+  const checksRecord = checks as Record<string, unknown>;
+  return (
+    typeof record.version === "string" &&
+    typeof record.env === "string" &&
+    typeof checksRecord.database === "string" &&
+    typeof checksRecord.storage === "string"
+  );
+}
+
+/**
  * Consulta o readiness da API uma única vez no mount — sem polling, conforme o
  * princípio do mínimo de requisições (RNF-020/021). Degrada com mensagem
  * amigável quando a API não está configurada ou está fora do ar.
@@ -36,12 +56,23 @@ export function ApiStatus() {
 
     async function check() {
       try {
-        // /health/ready responde 200 ou 503 — ambos trazem o JSON de checks
+        // /health/ready responde 200 (ok) ou 503 (degraded) — ambos trazem o
+        // JSON de checks. Qualquer outro status (404 de path errado, 5xx de
+        // proxy) ou corpo fora do contrato degrada para "offline" em vez de
+        // quebrar a renderização (RNF-014/016).
         const response = await fetch(`${API_BASE_URL}/health/ready`, {
           cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });
-        const payload = (await response.json()) as ReadyPayload;
+        if (!response.ok && response.status !== 503) {
+          if (!cancelled) setState({ kind: "offline" });
+          return;
+        }
+        const payload: unknown = await response.json();
+        if (!isReadyPayload(payload)) {
+          if (!cancelled) setState({ kind: "offline" });
+          return;
+        }
         if (!cancelled) setState({ kind: "ready", payload });
       } catch {
         if (!cancelled) setState({ kind: "offline" });
