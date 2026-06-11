@@ -1,7 +1,8 @@
 # ============================================================================
 # CI — Rastreio de Provas Digitais
 # api: lint + tipos + migrations (upgrade E downgrade) + testes com Postgres real
-# web: lint + build
+# web: lint + format + build + vitest (E2E Playwright roda local/gated — precisa
+#      de browsers + stack rodando; ver docs/auth.md)
 #
 # Deploy: documentado e parametrizável ao final do arquivo (ADR-009).
 # ============================================================================
@@ -85,7 +86,7 @@ jobs:
         run: uv run pytest --cov
 
   web:
-    name: Web (lint · build)
+    name: Web (lint · build · vitest)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -125,6 +126,11 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Testes de componente/unidade (vitest)
+        # Herméticos: mockam Supabase/next-navigation, sem rede/env. O E2E
+        # (Playwright) é local/gated (browsers + dev server) — não roda aqui.
+        run: pnpm test
 
 # ============================================================================
 # DEPLOY (documentado e parametrizável — ADR-009; sem segredos no repositório)
