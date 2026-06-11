@@ -55,7 +55,7 @@ jobs:
       # No CI, banco indisponível é FALHA (localmente os testes @db fazem skip)
       REQUIRE_DB_TESTS: "1"
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Instalar uv (com cache do lockfile)
         uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
@@ -97,7 +97,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Instalar pnpm (versão do campo packageManager)
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -144,7 +144,7 @@ jobs:
 #     if: github.ref == 'refs/heads/main'
 #     runs-on: ubuntu-latest
 #     steps:
-#       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+#       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 #       # Vercel: vincule o projeto (vercel link) e cadastre os secrets
 #       #   VERCEL_TOKEN · VERCEL_ORG_ID · VERCEL_PROJECT_ID
 #       # As variáveis NEXT_PUBLIC_* são configuradas no painel da Vercel.
@@ -155,7 +155,7 @@ jobs:
 #     if: github.ref == 'refs/heads/main'
 #     runs-on: ubuntu-latest
 #     steps:
-#       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+#       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 #       # A API é um container portável (apps/api/Dockerfile) — qualquer host serve.
 #       # Exemplo Fly.io (secrets: FLY_API_TOKEN; app criada com `fly launch`):
 #       #   - uses: superfly/flyctl-actions/setup-flyctl@<sha> # pinar por SHA
