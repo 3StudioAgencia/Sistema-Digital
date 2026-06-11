@@ -57,6 +57,14 @@ class TestValidacaoDeUrls:
         with pytest.raises(ValidationError):
             _settings(database_url="mysql://u:p@h/db")
 
+    def test_validation_error_nao_ecoa_a_connection_string(self) -> None:
+        """W0-A-005: hide_input_in_errors impede que a URL rejeitada (com
+        credencial) apareça no texto da ValidationError."""
+        senha = "sup3r-s3cr3t-pw"
+        with pytest.raises(ValidationError) as exc_info:
+            _settings(database_url=f"mysql://user:{senha}@host:3306/db")
+        assert senha not in str(exc_info.value)
+
 
 class TestR2TudoOuNada:
     def test_sem_r2_e_valido_e_nao_configurado(self) -> None:

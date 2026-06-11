@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Uma ValidationError do Pydantic v2 imprime input_value='<valor>' por
+        # padrão — para uma URL de banco isso ECOA a connection string (com
+        # credencial) no traceback. Ocultar a entrada nos erros é defesa em
+        # profundidade contra vazamento de segredo (W0-A-005 / CLAUDE.md §9).
+        hide_input_in_errors=True,
     )
 
     # --- Aplicação -------------------------------------------------------

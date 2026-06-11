@@ -119,8 +119,24 @@ def run(settings: Settings) -> int:
 
 
 def main() -> int:
-    """Entry point CLI: lê e valida o ambiente (falha rápido) e executa a rotina."""
-    return run(get_settings())
+    """Entry point CLI: lê e valida o ambiente (falha rápido) e executa a rotina.
+
+    ``get_settings()`` roda FORA do contrato de erro de :func:`run` — uma
+    ``ValidationError`` do ``Settings`` (ex.: ``KEEPALIVE_DATABASE_URL``
+    malformado mas com credencial) imprimiria um traceback cru. Envolvemos a
+    carga no MESMO contrato: log só com ``error_type`` e exit 1, nunca o valor
+    (W0-A-005). ``hide_input_in_errors`` no ``Settings`` é a segunda camada.
+    """
+    try:
+        settings = get_settings()
+    except Exception as exc:
+        configure_logging("INFO")
+        logger.error(
+            "keep-alive falhou ao carregar configuração",
+            extra=_error_fields(exc, uuid.uuid4().hex, "unknown"),
+        )
+        return 1
+    return run(settings)
 
 
 if __name__ == "__main__":

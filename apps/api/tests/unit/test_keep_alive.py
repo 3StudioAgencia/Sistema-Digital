@@ -118,3 +118,29 @@ class TestExecucaoOffline:
 
         assert keep_alive.main() == 0
         assert chamado_com["settings"] is sentinela
+
+    def test_main_falha_de_config_retorna_1_sem_vazar_credencial(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """W0-A-005: um Settings inválido (URL malformada com credencial)
+        carregado em main() vira exit 1 + log só com error_type — sem traceback
+        cru nem connection string em stdout."""
+
+        def get_settings_invalido() -> Settings:
+            # mesma falha de um KEEPALIVE_DATABASE_URL malformado com credencial
+            return Settings(
+                _env_file=None,  # type: ignore[call-arg]
+                database_url=f"mysql://user:{_SENHA_SECRETA}@host:3306/db",
+                migrations_database_url=_URL_INALCANCAVEL,
+            )
+
+        monkeypatch.setattr(keep_alive, "get_settings", get_settings_invalido)
+
+        code = keep_alive.main()
+
+        assert code == 1
+        captured = capsys.readouterr().out
+        assert _SENHA_SECRETA not in captured
+        evento = _ultima_linha_json(captured)
+        assert evento["status"] == "error"
+        assert "error_type" in evento
