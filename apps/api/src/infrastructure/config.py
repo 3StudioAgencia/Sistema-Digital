@@ -98,6 +98,25 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return coerced
 
+    @field_validator("cors_allowed_origins")
+    @classmethod
+    def _reject_wildcard_cors(cls, value: str) -> str:
+        """Proíbe origem curinga no CORS (W0-A-015).
+
+        A app envia ``Access-Control-Allow-Credentials: true``; com ``"*"`` o
+        Starlette **reflete** a Origin do request — qualquer site leria respostas
+        autenticadas. A app sempre conhece suas origens, então exigi-las
+        explícitas é seguro e falha rápido contra má configuração (mesmo
+        princípio do validador tudo-ou-nada do R2)."""
+        origens = [o.strip() for o in value.split(",") if o.strip()]
+        if "*" in origens:
+            msg = (
+                "CORS_ALLOWED_ORIGINS não pode conter '*' (a API usa credentials): "
+                "liste as origens explicitamente."
+            )
+            raise ValueError(msg)
+        return value
+
     @model_validator(mode="after")
     def _validate_r2_all_or_nothing(self) -> Self:
         """R2 parcialmente configurado é quase sempre erro de operação — falhe rápido."""

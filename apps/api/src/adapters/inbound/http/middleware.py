@@ -15,6 +15,7 @@ Dois middlewares com papéis distintos, em camadas diferentes (ver ``app.py``):
 """
 
 import logging
+import re
 import time
 import uuid
 
@@ -27,7 +28,10 @@ from src.adapters.inbound.http.errors import log_and_build_internal_error_respon
 from src.infrastructure.logging import request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
-_MAX_INBOUND_ID_LENGTH = 128  # ids arbitrariamente longos viram vetor de log flooding
+# Whitelist de formato para o id recebido: charset seguro + limite de 128
+# (ids longos/arbitrários viram vetor de flooding e de poluição de log). Fora do
+# padrão → gera um uuid4 próprio (W0-A-023).
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 logger = logging.getLogger("rastreio.http")
 
@@ -55,7 +59,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         inbound = request.headers.get(REQUEST_ID_HEADER, "")
-        request_id = inbound[:_MAX_INBOUND_ID_LENGTH] if inbound else uuid.uuid4().hex
+        request_id = inbound if _REQUEST_ID_PATTERN.match(inbound) else uuid.uuid4().hex
         token = request_id_var.set(request_id)
         started = time.perf_counter()
         try:
@@ -71,6 +75,12 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         response.headers[REQUEST_ID_HEADER] = request_id
+        # Hardening mínimo de toda resposta (W0-A-016): sem MIME sniffing e sem
+        # cache (relevante a partir da Wave 1, com endpoints autenticados). HSTS
+        # pertence ao edge/TLS, não à app. `setdefault` deixa um handler futuro
+        # sobrescrever o cache quando precisar (ex.: assets imutáveis).
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers.setdefault("Cache-Control", "no-store")
         logger.info(
             "request completed",
             extra={

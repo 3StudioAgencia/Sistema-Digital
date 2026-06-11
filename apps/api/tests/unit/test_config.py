@@ -93,6 +93,11 @@ class TestCors:
         s = _settings(cors_allowed_origins="http://a.com, http://b.com ,,http://c.com")
         assert s.cors_origins == ["http://a.com", "http://b.com", "http://c.com"]
 
+    def test_origem_curinga_rejeitada(self) -> None:
+        """W0-A-015: '*' + credentials refletiria qualquer origem — proibido."""
+        with pytest.raises(ValidationError, match="CORS_ALLOWED_ORIGINS"):
+            _settings(cors_allowed_origins="https://app.exemplo.com, *")
+
 
 class TestLogLevel:
     def test_normaliza_caixa_e_espacos(self) -> None:

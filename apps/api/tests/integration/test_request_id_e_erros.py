@@ -1,6 +1,7 @@
 """Correlação por request_id (RNF-024) e tratamento de erros sem vazar stack trace."""
 
 import logging
+import re
 
 import httpx
 import pytest
@@ -18,6 +19,23 @@ class TestRequestId:
     async def test_header_recebido_e_propagado_de_volta(self, client: httpx.AsyncClient) -> None:
         response = await client.get("/health", headers={"X-Request-ID": "id-do-proxy-123"})
         assert response.headers["X-Request-ID"] == "id-do-proxy-123"
+
+    async def test_request_id_fora_do_formato_cai_para_uuid(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        """W0-A-023: id recebido fora do charset/limite não é refletido —
+        gera um uuid4 próprio (sem poluir log nem espelhar lixo do chamador)."""
+        lixo = "bad id with spaces!"  # espaços e '!' fora do whitelist
+        response = await client.get("/health", headers={"X-Request-ID": lixo})
+        retornado = response.headers["X-Request-ID"]
+        assert retornado != lixo
+        assert re.fullmatch(r"[0-9a-f]{32}", retornado)  # uuid4().hex
+
+    async def test_resposta_traz_security_headers_minimos(self, client: httpx.AsyncClient) -> None:
+        """W0-A-016: toda resposta sai com nosniff e no-store."""
+        response = await client.get("/health")
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["Cache-Control"] == "no-store"
 
     async def test_mesmo_id_aparece_no_log_da_requisicao(
         self, client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
