@@ -5,6 +5,7 @@ Roda offline: sem R2 a app usa o UnconfiguredStorage; o ciclo de vida
 """
 
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 import pytest
@@ -17,9 +18,14 @@ PG_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test"
 
 
 @pytest.fixture(autouse=True)
-def _ambiente_minimo(monkeypatch: pytest.MonkeyPatch) -> object:
+def _ambiente_minimo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> object:
     """Ambiente limpo e determinístico para cada teste (sem vazar .env local)."""
     get_settings.cache_clear()
+    # Settings lê `.env` RELATIVO ao CWD; rodar de um diretório vazio garante
+    # hermeticidade mesmo com um `.env` real preenchido em apps/api (R2/Supabase
+    # configurados na validação do C01). delenv só cobre o ambiente do processo,
+    # não o arquivo — daí o chdir.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("DATABASE_URL", PG_URL)
     monkeypatch.setenv("MIGRATIONS_DATABASE_URL", PG_URL)

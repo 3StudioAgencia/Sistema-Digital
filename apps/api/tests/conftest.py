@@ -7,8 +7,9 @@ Princípios (prompt W0-C01 §6):
 """
 
 import asyncio
+import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
@@ -55,6 +56,25 @@ async def ping_ok() -> bool:
 
 async def ping_down() -> bool:
     return False
+
+
+# ---------------------------------------------------------------------------
+# Isolamento de estado global
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _isola_logging_global() -> Iterator[None]:
+    """Impede que a (re)configuração global de logging vaze entre testes.
+
+    Tarefas como o keep-alive (W0-C02) chamam ``configure_logging`` como efeito
+    de borda; sem isolamento, os handlers do root trocados por um teste afetariam
+    os seguintes. Snapshot + restore por teste mantém a suíte hermética.
+    """
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    try:
+        yield
+    finally:
+        root.handlers, root.level = handlers, level
 
 
 # ---------------------------------------------------------------------------
