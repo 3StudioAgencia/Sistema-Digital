@@ -16,7 +16,8 @@ do cache de statements.
 """
 
 from collections.abc import AsyncIterator
-from typing import Any
+from datetime import datetime
+from typing import Any, cast
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -47,6 +48,22 @@ def create_runtime_engine(settings: Settings) -> AsyncEngine:
     )
 
 
+def create_direct_engine(settings: Settings) -> AsyncEngine:
+    """Engine async sobre a conexão DIRETA/sessão (porta 5432, ``MIGRATIONS_DATABASE_URL``).
+
+    Para tarefas *one-shot* fora do ciclo de request — caso do keep-alive (W0-C02,
+    ADR-015): abre UMA conexão curta, faz um ``SELECT`` trivial e devolve.
+    ``NullPool`` porque o processo é efêmero (não há pool a manter); a conexão
+    direta evita qualquer peculiaridade do pooler de transação para um único
+    comando. Em dev local as duas URLs apontam para o mesmo Postgres.
+    """
+    return create_async_engine(
+        settings.migrations_database_url,
+        poolclass=NullPool,
+        pool_pre_ping=False,  # processo de vida curta: pre-ping seria custo morto
+    )
+
+
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     """Fábrica de sessões compartilhada pelo app (estado de processo, não de usuário).
 
@@ -56,11 +73,26 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
+async def fetch_db_time(engine: AsyncEngine) -> datetime:
+    """Núcleo do *ping* read-only: abre uma conexão curta e lê o ``now()`` do
+    servidor Postgres.
+
+    É a ÚNICA função com a lógica de ida ao banco do *ping* — reutilizada pelo
+    readiness (via ``ping``) e pelo keep-alive (W0-C02), atendendo ao DRY
+    (CLAUDE.md §3). Devolve o instante do servidor (útil ao keep-alive como
+    prova de atividade) e **levanta** a exceção de conexão para quem precisa
+    distinguir falha (o keep-alive a converte em status/exit code); ``ping``
+    envelopa e degrada para ``False``.
+    """
+    async with engine.connect() as conn:
+        result = await conn.execute(text("SELECT now()"))
+        return cast(datetime, result.scalar_one())
+
+
 async def ping(engine: AsyncEngine) -> bool:
-    """``SELECT 1`` — usado pelo readiness check. Nunca levanta exceção."""
+    """Ping read-only ao banco — usado pelo readiness check. Nunca levanta exceção."""
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        await fetch_db_time(engine)
     except Exception:
         return False
     return True

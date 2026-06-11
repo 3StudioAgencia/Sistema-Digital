@@ -100,4 +100,6 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     # corpo de método abstrato é só docstring — nunca executa
     "@abstractmethod",
+    # guarda de entry point de CLI/tarefa: não roda sob pytest (módulo != __main__)
+    'if __name__ == "__main__":',
 ]
