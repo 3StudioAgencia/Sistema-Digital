@@ -1,0 +1,90 @@
+# ============================================================================
+# Keep-Alive do Postgres do Supabase (W0-C02 · ADR-015)
+#
+# O free tier do Supabase PAUSA o projeto após 7 dias sem requisições. Este
+# workflow agendado — gatilho EXTERNO e independente do host da API — invoca
+# uma rotina READ-ONLY que faz um SELECT trivial no banco, mantendo o projeto
+# ativo e "quente" no horário comercial (RNF-011), com log estruturado e
+# alerta de falha (RNF-024). Custo: R$ 0.
+#
+# Para LIGAR em produção: cadastre o secret do repositório
+#   KEEPALIVE_DATABASE_URL  → connection string da conexão DIRETA/sessão (5432)
+#                             do Supabase (a mesma de MIGRATIONS_DATABASE_URL).
+# Opcional: ALERT_WEBHOOK_URL → webhook (Slack/Discord/genérico) p/ alerta.
+# Detalhes e racional: docs/keep-alive.md
+#
+# Caveat (documentado em docs/keep-alive.md): o GitHub DESABILITA workflows
+# agendados após 60 dias de inatividade do repositório e pode atrasar/saltar
+# execuções sob carga — a cadência diária (~7× de margem sobre o limite de 7
+# dias) absorve atrasos. Hardening de longo prazo: Cloudflare Worker Cron.
+# ============================================================================
+name: Keep-Alive (Supabase)
+
+on:
+  schedule:
+    # 06:00 America/Sao_Paulo = 09:00 UTC (BRT = UTC−3 o ano todo; sem DST
+    # desde 2019). Uma hora antes do horário comercial (07:00) — banco "quente".
+    # Cadência diária: ~7× de margem sobre o limite de 7 dias do free tier.
+    # Alternativa aceitável (gap de fim de semana ainda < 7 dias): só dias úteis
+    #   - cron: "0 9 * * 1-5"
+    - cron: "0 9 * * *"
+  # Execução manual (teste/validação) pela aba Actions → Run workflow.
+  workflow_dispatch:
+
+# Least privilege: a rotina só lê o banco; não precisa de escopo no repositório.
+permissions:
+  contents: read
+
+# Nunca duas execuções sobrepostas; não cancela uma em curso (deixa terminar).
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Postgres (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv (com cache do lockfile)
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Instalar dependências (pinadas pelo lockfile)
+        run: uv sync --frozen
+
+      - name: Keep-alive ping (read-only)
+        env:
+          # A rotina usa a conexão DIRETA/sessão (MIGRATIONS_DATABASE_URL) para
+          # o SELECT one-shot. Settings exige também DATABASE_URL (validação de
+          # boot do C01); como a rotina NÃO a usa, apontamos para o mesmo secret
+          # — inócuo. Um único secret a configurar: KEEPALIVE_DATABASE_URL.
+          MIGRATIONS_DATABASE_URL: ${{ secrets.KEEPALIVE_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.KEEPALIVE_DATABASE_URL }}
+          APP_ENV: production
+          LOG_LEVEL: INFO
+        run: uv run python -m src.tasks.keep_alive
+
+      - name: Alerta de falha (opcional — só posta se o webhook existir)
+        # Dispara apenas quando um passo anterior falhou. O secret NÃO pode ser
+        # lido em `if:` (contexto indisponível ali); por isso a checagem de
+        # presença é feita no shell, com o valor trazido via env.
+        if: failure()
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: |
+          if [ -z "$ALERT_WEBHOOK_URL" ]; then
+            echo "ALERT_WEBHOOK_URL não configurado — alerta via webhook pulado."
+            echo "(A própria falha do workflow já gera a notificação nativa do GitHub.)"
+            exit 0
+          fi
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="{\"text\":\":x: Keep-alive do Supabase FALHOU em ${GITHUB_REPOSITORY}. Run: ${run_url}\"}"
+          curl -fsS -X POST -H "Content-Type: application/json" -d "$payload" "$ALERT_WEBHOOK_URL"
