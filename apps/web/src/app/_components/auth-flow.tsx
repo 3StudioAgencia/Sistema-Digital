@@ -4,7 +4,7 @@ import { type MouseEvent, useState } from "react";
 import { AnimatePresence, type Variants, motion, useMotionValue, useSpring } from "framer-motion";
 
 import { useReducedMotion } from "@/lib/motion/hooks";
-import { DURATION, EASING } from "@/lib/motion/tokens";
+import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 
 import styles from "../login/login.module.css";
 import { LoginPanel } from "./login-panel";
@@ -27,8 +27,8 @@ export function AuthFlow({ expired }: { expired: boolean }) {
   // Parallax do herói no desktop: a imagem segue o cursor de leve (mola).
   const mvX = useMotionValue(0);
   const mvY = useMotionValue(0);
-  const x = useSpring(mvX, { stiffness: 120, damping: 18, mass: 0.4 });
-  const y = useSpring(mvY, { stiffness: 120, damping: 18, mass: 0.4 });
+  const x = useSpring(mvX, SPRING.parallax);
+  const y = useSpring(mvY, SPRING.parallax);
 
   function onHeroMove(event: MouseEvent<HTMLDivElement>) {
     if (reduce) return;
@@ -43,7 +43,7 @@ export function AuthFlow({ expired }: { expired: boolean }) {
 
   const welcomeContainer: Variants = {
     hidden: {},
-    show: { transition: { staggerChildren: reduce ? 0 : 0.08, delayChildren: reduce ? 0 : 0.08 } },
+    show: { transition: { staggerChildren: reduce ? 0 : 0.07, delayChildren: reduce ? 0 : 0.06 } },
   };
   const welcomeItem: Variants = {
     hidden: { opacity: 0, y: reduce ? 0 : 18 },
@@ -69,8 +69,8 @@ export function AuthFlow({ expired }: { expired: boolean }) {
         <motion.div
           className={styles.heroImg}
           style={{ x, y }}
-          whileHover={reduce ? undefined : { scale: 1.06 }}
-          transition={{ duration: reduce ? 0 : DURATION.long, ease: EASING.standard }}
+          whileHover={reduce ? undefined : { scale: 1.04 }}
+          transition={SPRING.interactive}
         />
       </motion.div>
 
@@ -119,8 +119,9 @@ export function AuthFlow({ expired }: { expired: boolean }) {
                 className={styles.welcomeCta}
                 variants={welcomeItem}
                 onClick={() => setShowForm(true)}
-                whileHover={reduce ? undefined : { scale: 1.02 }}
+                whileHover={reduce ? undefined : { scale: 1.03 }}
                 whileTap={reduce ? undefined : { scale: 0.97 }}
+                transition={SPRING.interactive}
               >
                 Entrar
               </motion.button>

@@ -5,20 +5,23 @@ import { useRouter } from "next/navigation";
 import { type Variants, motion } from "framer-motion";
 
 import { useReducedMotion } from "@/lib/motion/hooks";
-import { DURATION, EASING } from "@/lib/motion/tokens";
+import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import styles from "../login/login.module.css";
 
+type FocusedField = "email" | "senha" | null;
+
 /**
  * Bloco do formulário de login (cliente) — wordmark, título, campos e botão,
- * com entrada coreografada e microinterações.
+ * com entrada coreografada e microinterações harmônicas.
  *
  * - signInWithPassword (Supabase Auth); em falha, mensagem GENÉRICA que não
  *   revela se errou e-mail ou senha (acceptance do Backlog C03 / §3.4).
  * - "Esqueci minha senha" é inerte nesta wave (DP-5): exibe uma dica.
- * - Animações sobre os tokens (DAT §5.1), só transform/opacity, degradando para
- *   instantâneas com prefers-reduced-motion (RN-012, RNF-010).
+ * - Foco do campo: o contorno faz fade-in/out (só opacity — GPU). Hover/press
+ *   usam a MESMA mola (SPRING.interactive) do resto da UI, para harmonia.
+ * - Tudo degrada para instantâneo com prefers-reduced-motion (RN-012, RNF-010).
  */
 export function LoginPanel({ expired }: { expired: boolean }) {
   const router = useRouter();
@@ -28,13 +31,14 @@ export function LoginPanel({ expired }: { expired: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
+  const [focused, setFocused] = useState<FocusedField>(null);
 
   const container: Variants = {
     hidden: {},
     show: {
       transition: {
         staggerChildren: reduce ? 0 : 0.07,
-        delayChildren: reduce ? 0 : 0.05,
+        delayChildren: reduce ? 0 : 0.06,
       },
     },
   };
@@ -46,9 +50,11 @@ export function LoginPanel({ expired }: { expired: boolean }) {
       transition: { duration: reduce ? DURATION.instant : DURATION.long, ease: EASING.emphasized },
     },
   };
-  // Microinteração de foco: leve "respiro" do campo (transform — GPU).
-  const fieldFocus = reduce ? undefined : { scale: 1.015 };
-  const fieldTransition = { duration: reduce ? 0 : DURATION.micro, ease: EASING.standard };
+  // Contorno do campo: fade suave (opacity). Hover/press dos botões: mola comum.
+  const ringTransition = { duration: reduce ? 0 : DURATION.short, ease: EASING.standard };
+  const press = reduce
+    ? {}
+    : { whileHover: { scale: 1.03 }, whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,7 +98,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         Fazer login
       </motion.h1>
       <motion.p className={styles.subtitle} variants={item}>
-        Lorem ipsum silor domor amet
+        Entre no sistema de provas digitais.
       </motion.p>
 
       {expired && (
@@ -105,36 +111,54 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         <label className={styles.label} htmlFor="email">
           E-mail:
         </label>
-        <motion.input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          className={styles.field}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-          whileFocus={fieldFocus}
-          transition={fieldTransition}
-        />
+        <div className={styles.fieldWrap}>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            className={styles.field}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onFocus={() => setFocused("email")}
+            onBlur={() => setFocused((f) => (f === "email" ? null : f))}
+            disabled={loading}
+          />
+          <motion.span
+            className={styles.fieldRing}
+            aria-hidden="true"
+            initial={false}
+            animate={{ opacity: focused === "email" ? 1 : 0 }}
+            transition={ringTransition}
+          />
+        </div>
 
         <label className={styles.label} htmlFor="senha">
           Senha:
         </label>
-        <motion.input
-          id="senha"
-          name="senha"
-          type="password"
-          autoComplete="current-password"
-          required
-          className={styles.field}
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          disabled={loading}
-          whileFocus={fieldFocus}
-          transition={fieldTransition}
-        />
+        <div className={styles.fieldWrap}>
+          <input
+            id="senha"
+            name="senha"
+            type="password"
+            autoComplete="current-password"
+            required
+            className={styles.field}
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            onFocus={() => setFocused("senha")}
+            onBlur={() => setFocused((f) => (f === "senha" ? null : f))}
+            disabled={loading}
+          />
+          <motion.span
+            className={styles.fieldRing}
+            aria-hidden="true"
+            initial={false}
+            animate={{ opacity: focused === "senha" ? 1 : 0 }}
+            transition={ringTransition}
+          />
+        </div>
 
         <button type="button" className={styles.forgot} onClick={() => setHint(true)}>
           Esqueci minha senha
@@ -151,14 +175,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
           </p>
         )}
 
-        <motion.button
-          type="submit"
-          className={styles.submit}
-          disabled={loading}
-          whileHover={reduce ? undefined : { scale: 1.02 }}
-          whileTap={reduce ? undefined : { scale: 0.98 }}
-          transition={{ duration: reduce ? 0 : DURATION.micro, ease: EASING.standard }}
-        >
+        <motion.button type="submit" className={styles.submit} disabled={loading} {...press}>
           {loading ? "Entrando…" : "Entrar"}
         </motion.button>
       </motion.form>

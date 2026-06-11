@@ -79,31 +79,45 @@
   margin-bottom: 10px;
 }
 
+.fieldWrap {
+  position: relative;
+  margin-bottom: 20px;
+}
+
 .field {
+  display: block;
   height: var(--auth-control-h);
   width: 100%;
-  border: 2px solid transparent;
+  border: none;
   border-radius: var(--auth-radius-pill);
   background: var(--auth-field);
   color: var(--auth-text);
   font: inherit;
   font-size: 1rem;
   padding: 0 22px;
-  margin-bottom: 20px;
 }
 
 .field::placeholder {
   color: #6f6f6f;
 }
 
-/* Foco: anel instantâneo (a suavidade vem do scale via Framer Motion). */
 .field:focus-visible {
   outline: none;
-  border-color: var(--auth-accent);
 }
 
 .field:disabled {
   opacity: 0.6;
+}
+
+/* Contorno de foco: sobreposição que faz fade-in/out (só opacity — GPU).
+   A opacidade é animada pelo Framer Motion (ver login-panel.tsx). */
+.fieldRing {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--auth-radius-pill);
+  border: 2px solid var(--auth-accent);
+  pointer-events: none;
+  opacity: 0;
 }
 
 .forgot {

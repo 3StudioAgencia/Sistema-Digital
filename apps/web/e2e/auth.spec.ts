@@ -55,6 +55,17 @@ test.describe("Login e sessão (W1-C03)", () => {
     }
   });
 
+  test("foco do input faz o contorno aparecer (fade) e some ao desfocar", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/login");
+    const emailRing = page.locator('input[name="email"] + span');
+    await expect(emailRing).toHaveCSS("opacity", "0");
+    await page.getByLabel("E-mail:").focus();
+    await expect(emailRing).toHaveCSS("opacity", "1");
+    await page.getByLabel("Senha:").focus(); // desfoca o e-mail
+    await expect(emailRing).toHaveCSS("opacity", "0");
+  });
+
   test("credenciais inválidas → mensagem genérica (sem revelar o campo)", async ({ page }) => {
     // Mocka só o endpoint de token do Supabase: signInWithPassword falha (400).
     await page.route("**/auth/v1/token**", (route) =>
