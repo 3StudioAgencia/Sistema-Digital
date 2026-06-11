@@ -19,6 +19,10 @@ APP_VERSION = "0.1.0"
 
 AppEnv = Literal["dev", "test", "staging", "production"]
 
+# Níveis de log aceitos (contrato documentado em .env.example). Validados no
+# boot para falhar rápido com mensagem nomeando a variável (W0-A-013).
+_VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+
 
 def _coerce_asyncpg_url(url: str) -> str:
     """Normaliza URLs Postgres para o driver async usado pelo runtime.
@@ -72,6 +76,18 @@ class Settings(BaseSettings):
 
     # --- HTTP -------------------------------------------------------------
     cors_allowed_origins: str = "http://localhost:3000"
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _validate_log_level(cls, value: object) -> str:
+        """Normaliza (caixa/espaços) e valida o nível no boot — em vez de
+        estourar um ``ValueError`` genérico depois, em ``configure_logging``."""
+        normalized = str(value).strip().upper()
+        if normalized not in _VALID_LOG_LEVELS:
+            opcoes = ", ".join(sorted(_VALID_LOG_LEVELS))
+            msg = f"LOG_LEVEL inválido: use um de [{opcoes}]"
+            raise ValueError(msg)
+        return normalized
 
     @field_validator("database_url", "migrations_database_url")
     @classmethod

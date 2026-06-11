@@ -1,8 +1,12 @@
 """Settings: carga por ambiente, validação na inicialização e coerções."""
 
+import os
+
 import pytest
 from pydantic import ValidationError
 from src.infrastructure.config import Settings
+
+from tests.conftest import _SETTINGS_ENV_KEYS
 
 PG = "postgresql+asyncpg://user:pass@host:6543/db"
 PG_DIRECT = "postgresql+asyncpg://user:pass@host:5432/db"
@@ -88,3 +92,22 @@ class TestCors:
     def test_origens_separadas_por_virgula(self) -> None:
         s = _settings(cors_allowed_origins="http://a.com, http://b.com ,,http://c.com")
         assert s.cors_origins == ["http://a.com", "http://b.com", "http://c.com"]
+
+
+class TestLogLevel:
+    def test_normaliza_caixa_e_espacos(self) -> None:
+        assert _settings(log_level="  debug ").log_level == "DEBUG"
+
+    def test_nivel_invalido_falha_no_boot_citando_a_variavel(self) -> None:
+        # W0-A-013: antes, LOG_LEVEL inválido só estourava em configure_logging
+        with pytest.raises(ValidationError, match="LOG_LEVEL"):
+            _settings(log_level="VERBOSE")
+
+
+class TestHermeticidade:
+    def test_chaves_do_settings_nao_vazam_do_shell(self) -> None:
+        """W0-A-012: o autouse de conftest limpa toda chave do Settings — a
+        suíte não depende do ambiente local nem do shell do CI (que exporta
+        DATABASE_URL/MIGRATIONS_DATABASE_URL no job)."""
+        presentes = [k for k in _SETTINGS_ENV_KEYS if k in os.environ]
+        assert not presentes, f"chaves do Settings vazaram do ambiente: {presentes}"

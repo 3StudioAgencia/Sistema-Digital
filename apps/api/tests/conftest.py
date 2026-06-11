@@ -61,6 +61,38 @@ async def ping_down() -> bool:
 # ---------------------------------------------------------------------------
 # Isolamento de estado global
 # ---------------------------------------------------------------------------
+# Chaves que o Settings lê do ambiente. NÃO inclui TEST_DATABASE_URL nem
+# REQUIRE_DB_TESTS — esses gateiam os testes @db e são lidos direto de os.environ.
+_SETTINGS_ENV_KEYS = (
+    "APP_ENV",
+    "LOG_LEVEL",
+    "DATABASE_URL",
+    "MIGRATIONS_DATABASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_JWT_SECRET",
+    "R2_ENDPOINT_URL",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_BUCKET",
+    "CORS_ALLOWED_ORIGINS",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isola_env_do_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermeticidade total: remove do ambiente do processo TODAS as chaves do
+    Settings antes de cada teste (W0-A-012).
+
+    ``Settings(_env_file=None)`` isola apenas o arquivo ``.env``; variáveis
+    exportadas no shell do desenvolvedor (R2_*, SUPABASE_*, LOG_LEVEL, ...)
+    ainda vazariam para os campos não fixados explicitamente, causando falhas
+    espúrias. Testes que precisam de uma variável a definem via
+    ``monkeypatch.setenv`` no próprio corpo (executado após este autouse).
+    """
+    for key in _SETTINGS_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def _isola_logging_global() -> Iterator[None]:
     """Impede que a (re)configuração global de logging vaze entre testes.
