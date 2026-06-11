@@ -32,6 +32,35 @@
 
 ---
 
+## Sessão 05 — 2026-06-11 — [Wave 1 / W1-C03] Tela de Login e Sessão
+
+**Objetivo:** Autenticação por e-mail/senha (Supabase Auth), sessão stateless em cookie + refresh, encerramento por inatividade de 30 min, verificação de JWT no backend e as **três telas do design** — primeiro componente da Wave 1.
+
+**Feito:**
+- **Backend** — `JwtVerifier` (`adapters/inbound/http/auth.py`): **ES256 via JWKS** cacheado (`PyJWKClient`) + **HS256 fallback**, valida `aud="authenticated"`/`exp`, rejeita `alg=none` e confusão de algoritmo; **`GET /auth/me`** (prova). `Settings` ganhou `SUPABASE_JWKS_URL`/`effective_jwks_url`; dependência `pyjwt[crypto]`. 18 testes offline; ruff + mypy + pytest verdes (cobertura **98%**, 104 passed/7 skipped).
+- **Frontend** — clients **`@supabase/ssr`** (browser/servidor) + `updateSession` + **`src/proxy.ts`** (só refresh; `getUser()`); **três telas** em CSS Modules fiéis ao Figma (`/login` adaptativa desktop-split/mobile, `/bem-vindo`, `/inicio` placeholder com `AuthProof → /auth/me` + Sair); **erro de login genérico**; **inatividade 30 min** (`InactivityGuard`); fundação de **motion** (tokens DAT §5.1 + `useReducedMotion`) com **Framer Motion** (transform/opacity, reduced-motion-aware). **Inter** self-hospedada; herói **17,8 MB → 540 KB**. **vitest 11/11** + **Playwright 4/4** (+1 *live* gated); `pnpm lint`/`build` verdes; fidelidade conferida por screenshots.
+- **Docs** — `docs/auth.md`; `.env.example` (api/web) atualizados.
+
+**Decisões (ADRs):**
+- **ADR-018** (auth/sessão), **ADR-019** (verificação JWT ES256/JWKS+HS256 — corrige a premissa HS256), **ADR-020** (fundação de motion C03↔C19), **ADR-021** (`proxy.ts` no Next 16); **emendas** ADR-014 (Inter local) e ADR-009 (Vercel + Railway confirmados).
+- **Pontos de decisão (respostas do dono):** DP-1 ✓ · DP-2 = ES256/JWKS+HS256 + publishable moderna · DP-3 ✓ · DP-4 = `/inicio` · DP-5 = link inerte · DP-6 = instalar Framer Motion · DP-7 ✓ (breakpoint 768px) · DP-8 = tokens via link do Figma.
+
+**Testes / cobertura:**
+- Backend: **104 passed / 7 skipped (@db)**, cobertura **98%**. Web: **vitest 11/11**, **Playwright 4/4** (+1 *live* gated). ruff/mypy/eslint/`next build` verdes.
+
+**Pendências / em aberto:**
+- [ ] **Reset de senha** (fora do escopo do C03 — DP-5; link inerte por ora).
+- [ ] **Caminho feliz E2E autenticado**: atrás de `E2E_LIVE` (requer usuário semeado + API rodando; a checagem `getUser` do servidor não é route-mockável). Sucesso já coberto pelo teste de componente.
+- [ ] **Responsável:** ajustar o **TTL do access token** no dashboard (DP-3); cadastrar `KEEPALIVE_DATABASE_URL` (W0-A-001, herdada).
+- [ ] Node Figma `70:171` (login mobile) reproduzido por tokens compartilhados + PNG anexado (rate limit do Figma Starter) — revalidar se necessário.
+
+**Próximo passo:**
+- **W1-C04 · Cadastro e Gestão de Usuários.**
+
+**Definition of Done:** ✅ (subconjunto aplicável ao C03): testes verdes; sem erro de console/log crítico; docs do módulo (`docs/auth.md`); error handling (401 genérico, error boundaries herdados); animações validadas com `prefers-reduced-motion`; sem segredos versionados. RLS/migrations **não se aplicam** ao C03 (tabelas de auth são do Supabase).
+
+---
+
 ## Sessão 04 — 2026-06-11 — [Wave 0 / W0-REMEDIATION] Remediação da Wave 0
 
 **Objetivo:** Corrigir os achados da auditoria (`docs/audits/wave-0-audit.md`) por severidade/dependência, com teste por correção e **gate de re-verificação**, sem regressão nem escopo novo (escopo de `PROMPTS/W0-REMEDIATION-remediacao.md`).

@@ -72,6 +72,8 @@ pnpm dev                                  # http://localhost:3000
 ```
 
 > Estes comandos são consolidados conforme os componentes são implementados. A fonte canônica de comandos é este README + `CLAUDE.md §9`.
+>
+> **Auth (W1-C03):** preencha `SUPABASE_URL` (api) e a *publishable key* em `NEXT_PUBLIC_SUPABASE_ANON_KEY` (web). O backend **verifica** o JWT do Supabase (**ES256 via JWKS + HS256 fallback**; prova em `GET /auth/me`) — nunca emite. Arquitetura, fluxo e validação local em [`docs/auth.md`](./docs/auth.md). Ajuste o **TTL do access token** no dashboard do Supabase (a inatividade de 30 min no app é complementar).
 
 ---
 
@@ -86,8 +88,11 @@ uv run ruff check . && uv run mypy        # lint + tipos (strict)
 uv run python -m src.tasks.keep_alive     # keep-alive: ping read-only ao banco (W0-C02)
                                           #   ver docs/keep-alive.md p/ ligar em produção
 
-# E2E (após as telas existirem)
-pnpm exec playwright test
+# Frontend
+cd apps/web
+pnpm lint && pnpm build                   # lint + type-check (build)
+pnpm test                                 # vitest (componentes/lógica — RTL/jsdom)
+pnpm test:e2e                             # Playwright E2E (telas, responsivo, erro genérico)
 ```
 
 **Metas de cobertura:** ≥ 80% em domínio/serviço · **≥ 95% na máquina de estados** · 100% dos endpoints críticos na integração.
@@ -110,7 +115,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | Wave | Componentes | Status |
 | --- | --- | --- |
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
-| **1 · Auth/RBAC** | 03 Login · 04 Usuários · 05 Matriz RBAC | ⬜ |
+| **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários · 05 Matriz RBAC | **Em andamento** 🟡 |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta · 07 Listagem · 08 Detalhe · 09 Config | ⬜ |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |

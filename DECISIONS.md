@@ -58,7 +58,7 @@
 ## ADR-009 — Alvos de deploy (revisável)
 - **Contexto:** Backlog C01 exige pipeline de deploy (web + api) e staging acessível com health check, dentro do free tier. Plataformas não foram especificadas pelo cliente.
 - **Decisão (proposta/revisável):** **Web (Next.js)** → Vercel (free; melhor suporte a App Router + middleware). **API (FastAPI)** → **containerizada (Dockerfile)** e portável; alvo de referência free tier a confirmar (ex.: Fly.io ou Render). CI agnóstica de plataforma (GitHub Actions: lint, types, testes com Postgres de serviço, build, `alembic upgrade head` no staging).
-- **Status:** **Proposta / Revisável** — confirmar plataformas com o responsável antes do deploy real. O **core portável** (Docker + CI) não muda com a escolha.
+- **Status:** **Aceita (plataformas) / Revisável (futuro)** — o responsável confirmou no W1-C03: **Web → Vercel**, **API → Railway** (free tier). O futuro **on-prem** (rede interna) permanece revisável. O **core portável** (Docker + CI) não muda com a escolha.
 - **Consequências:** Trocar de host afeta só o passo de deploy. Documentar o procedimento escolhido no README quando confirmado.
 
 ## ADR-010 — Gerenciadores de pacote: `uv` (Python) e `pnpm` (web)
@@ -89,7 +89,8 @@
 ## ADR-014 — Fundação do frontend: Next 16 pinado, build hermético (W0-C01)
 - **Contexto:** ADR-003 manda pinar a última estável. Next 16.2.9 / React 19.2.4 eram as estáveis na execução. `next/font/google` baixa fontes em build (rede) e quebraria builds herméticos/offline.
 - **Decisão:** Next **16.2.9** + React **19.2.4** pinados no lockfile; **fonte de sistema** via tokens CSS (sem `next/font/google`); `turbopack.root` explícito (evita inferência errada de raiz por lockfiles fora do repo); ESLint flat config + `eslint-config-prettier` + Prettier; client Supabase **lazy** (build não exige env; runtime sim).
-- **Status:** Aceita (W0-C01).
+- **Status:** Aceita (W0-C01) — **emendada no W1-C03** (ver abaixo).
+- **Emenda (W1-C03):** a UI do produto passou a usar **Inter self-hospedada via `next/font/local`** (pesos 300/400/600, woff2 em `apps/web/src/app/fonts/`), substituindo a fonte de sistema **sem** quebrar o build hermético — `next/font/local` não baixa nada em build (ao contrário de `next/font/google`, que segue **proibido**). A imagem-herói do login é servida otimizada (`login-bg.jpg`, ~540 KB); o PNG-fonte (17,8 MB) fica fora do git/bundle (`.gitignore`).
 - **Consequências:** Build reproduzível sem rede além do registry; tipografia padronizada por CSS vars (a identidade visual definitiva pode revisitar na Wave 6).
 
 ## ADR-015 — Keep-alive externo do Postgres do Supabase (W0-C02)
@@ -112,6 +113,30 @@
 - **Status:** **Aceita** — resolvida **documentalmente** na remediação da Wave 0. A movimentação física do `SqlAlchemyUnitOfWork` e a criação de `adapters/outbound/db/` acontecem **junto com o primeiro repositório concreto, na Wave 2 (C06)** — não se move código agora para não tocar a fundação fora de escopo.
 - **Consequências:** Convenção única para implementações de porta. A Wave 2 cria `adapters/outbound/db/` e move a UoW para lá no mesmo PR dos primeiros repositórios; o ponto de extensão de RLS (ADR-008) acompanha a UoW. O mapeamento do CLAUDE.md §5.1 ("DB (SQLAlchemy) → adapters/outbound/") passa a valer também para a UoW.
 
+## ADR-018 — Arquitetura de autenticação e sessão (W1-C03)
+- **Contexto:** A Wave 1 inicia a autenticação. Era preciso fixar o padrão de login/sessão sobre o Supabase Auth no App Router do Next, mantendo o backend stateless e "só verifica" (DAT §1.3, DP-1).
+- **Decisão:** Login **direto Frontend ↔ Supabase Auth** via **`@supabase/ssr`** (`signInWithPassword`) — o `@supabase/auth-helpers` está deprecado. Sessão **stateless** em **cookies HTTP-only**, com três clients: **browser** (`createBrowserClient`), **servidor** (`createServerClient`, cookies via `next/headers`) e o helper `updateSession` chamado pelo **proxy** do App Router. Proteção **sempre** via `supabase.auth.getUser()` (valida no servidor de auth), **nunca** `getSession()`. O backend FastAPI **não** intermedia o login — apenas verifica o JWT (ADR-019). Destino pós-login = `/inicio` (placeholder, DP-4). Inatividade de 30 min no app (DP-3) **+** TTL do token no dashboard (ação do responsável).
+- **Status:** **Aceita** (W1-C03) — DP-1/3/4 confirmados pelo dono do produto.
+- **Consequências:** O `proxy.ts` desta wave **só faz refresh**; o RBAC (camada superior) entra no C05 sobre esta base (ADR-006, ADR-021). Rotas que emitem `Set-Cookie` de refresh recebem `Cache-Control: no-store` (cuidado de CDN, prompt §3.5). O reset de senha ficou fora do escopo (DP-5 — link inerte).
+
+## ADR-019 — Verificação de JWT robusta a ES256(JWKS) + HS256 (W1-C03)
+- **Contexto:** O C01/`.env.example` e a leitura inicial do DAT assumiam verificação **HS256** via `SUPABASE_JWT_SECRET`. Porém **projetos atuais do Supabase assinam o JWT com ES256 (assimétrico)** por padrão; verificar só com o segredo HS256 retorna 401 e quebra na rotação de chaves. Confirmado no projeto real `wmpxxrzbzqgsorjwczvz`: o JWKS publica **uma chave ES256 (EC P-256)** (DP-2, prompt §1.1).
+- **Decisão:** O `JwtVerifier` (`adapters/inbound/http/auth.py`) verifica de forma **robusta a ambos**: lê o `alg` do header; **ES256/RS256 via JWKS** (cacheado pelo `PyJWKClient` nativo do PyJWT — sem nova dependência de runtime) e **HS256** (segredo) como **fallback**. Valida assinatura, **`aud="authenticated"`** e **`exp`**; rejeita `alg=none` e impede confusão de algoritmo (chave pública só p/ assimétrico; segredo só p/ HS256). Falha → **401 genérico** + log só do `error_type`. Endpoint de prova **`GET /auth/me`**. Variáveis: **`SUPABASE_JWKS_URL`** (derivado de `SUPABASE_URL` se vazio) + `SUPABASE_JWT_SECRET` (opcional). Dependência **`pyjwt[crypto]`**.
+- **Status:** **Aceita** (W1-C03). **Corrige a premissa antiga** (HS256-only) do DAT/C01: o default vigente do Supabase é **ES256**; `SUPABASE_JWT_SECRET` deixa de ser obrigatório e vira fallback.
+- **Consequências:** PyJWT continua **só verificando** (nunca emite — CLAUDE.md §11). A propagação de claims à RLS (ADR-008) se apoiará nesses claims verificados, no C05. O `Settings` do C01 ganhou os campos novos; o `.env.example` foi atualizado.
+
+## ADR-020 — Fundação mínima da camada de animações no C03 (fronteira C03↔C19)
+- **Contexto:** O C03 precisa de animações (entrada do login, microinterações) sobre tokens, mas a camada completa de animação é o C19 (Wave 6). O DAT §5.1 proíbe literais inline de duração/easing.
+- **Decisão:** Trazer **agora** a fatia mínima: `apps/web/src/lib/motion/tokens.ts` (DURATION/EASING **exatos do DAT §5.1**) e `src/lib/motion/hooks.ts` (`useReducedMotion`, SSR-safe via `useSyncExternalStore`). As animações do login usam **Framer Motion sobre esses tokens** (DP-6 — instalado nesta wave), **só `transform`/`opacity`** (GPU), degradando para instantâneas com `prefers-reduced-motion`. O C19 **estende** (`<PageTransition>`, `<MotionModal>`, Toaster, etc.) sem reescrever a fundação.
+- **Status:** **Aceita** (W1-C03) — DP-6 confirmado (usar Framer Motion).
+- **Consequências:** Tokens centralizados desde já evitam literais espalhados; o aviso de inatividade do C03 é um *notice* local, não o Toaster global do C19.
+
+## ADR-021 — Convenção do App Router: `proxy.ts` (Next 16) no lugar de `middleware.ts`
+- **Contexto:** CLAUDE.md §5.4 e o prompt nomeiam `middleware.ts` (escritos para Next 14). O ambiente pina **Next 16.2.9** (ADR-014), que **deprecou a convenção `middleware`** em favor de **`proxy`** (mesma capacidade; `middleware.ts` ainda funciona mas emite aviso e será removido num major futuro).
+- **Decisão:** Adotar **`apps/web/src/proxy.ts`** (exporta `proxy` + `config.matcher`) como a convenção do App Router. Onde os documentos dizem "middleware (camada superior)", **lê-se `proxy.ts`** no Next 16. O helper de refresh permanece em `lib/supabase/middleware.ts` (nome do `@supabase/ssr`, não é a convenção do Next). Confirmado pelo dono do produto nesta sessão.
+- **Status:** **Aceita** (W1-C03). Emenda terminológica à ADR-006 (a camada superior do RBAC vive no `proxy.ts`).
+- **Consequências:** Build sem aviso de depreciação e à prova do próximo major. O C05 acrescenta o enforcement de RBAC **dentro do `proxy.ts`** (após o refresh), lendo `lib/access-matrix.ts`. CLAUDE.md §5.1/§5.4 atualizados.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
@@ -122,3 +147,7 @@
 - [x] ADR-015 — keep-alive externo entregue e validado em execução real (W0/C02).
 - [x] ADR-016 (parte CI) — **resolvido na remediação W0 (W0-A-002):** `develop` adicionado aos gatilhos de `push` do `ci.yml`. (Branch protection + PR continua opcional para o futuro.)
 - [ ] ADR-016 (parte secret) — **ação do responsável (W0-A-001):** cadastrar o secret `KEEPALIVE_DATABASE_URL` no GitHub (Settings → Secrets and variables → Actions) e validar via `workflow_dispatch` — sem ele o cron diário do keep-alive falha e o Supabase fica desprotegido contra a pausa de 7 dias.
+- [x] **ADR-018/019/020/021 (W1/C03)** — auth/sessão (`@supabase/ssr`, cookies, `getUser`), verificação de JWT **ES256/JWKS+HS256** (`/auth/me`), fundação de motion (C03↔C19) e convenção `proxy.ts`: entregues, testados (backend 98% + web vitest/Playwright) e validados.
+- [x] **ADR-009 (plataformas)** — responsável confirmou **Vercel (web) + Railway (API)** no W1-C03; on-prem futuro permanece revisável.
+- [ ] **ADR-008** — desenhar a propagação de claims/RLS por request no **W1/C05**, agora sobre os claims já verificados pela ADR-019.
+- [ ] **Responsável (DP-3):** ajustar o **TTL do access token** no dashboard do Supabase (Authentication → Sessions) coerente com a inatividade de 30 min.

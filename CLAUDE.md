@@ -114,7 +114,7 @@ rastreio-provas-digitais/
 │   ├── web/                      # Frontend Next.js
 │   │   ├── src/app/              # App Router (rotas + page.tsx)
 │   │   ├── src/lib/              # access-matrix.ts, motion/, supabase/
-│   │   ├── src/middleware.ts     # Middleware RBAC (camada superior)
+│   │   ├── src/proxy.ts          # Proxy do App Router = RBAC camada superior (Next 16; ex-middleware.ts — ADR-021)
 │   │   └── package.json · .env.example
 ├── docs/                         # Documentação técnica viva
 ├── .github/workflows/            # CI/CD
@@ -122,7 +122,7 @@ rastreio-provas-digitais/
 ├── CLAUDE.md · DECISIONS.md · CHANGELOG.md · README.md · SESSION_LOG.md
 ```
 
-> Mapeamento de caminhos do DAT (relativos à app): `/domain/state_machine/` → `apps/api/src/domain/state_machine/`; `/migrations/rls/` → `apps/api/migrations/rls/`; `/middleware.ts`, `/lib/access-matrix.ts`, `/lib/motion/tokens.ts` → `apps/web/src/...`.
+> Mapeamento de caminhos do DAT (relativos à app): `/domain/state_machine/` → `apps/api/src/domain/state_machine/`; `/migrations/rls/` → `apps/api/migrations/rls/`; `/proxy.ts` (ex-`middleware.ts`, renomeado no Next 16 — ADR-021), `/lib/access-matrix.ts`, `/lib/motion/tokens.ts` → `apps/web/src/...`.
 
 ### 5.2 Regra de dependência (Hexagonal)
 
@@ -135,7 +135,7 @@ Vive em **código** (`apps/api/src/domain/state_machine/rules.py`), **nunca no b
 ### 5.4 RBAC — defesa em profundidade
 
 A **Matriz de Acesso (Requisitos §7)** é fonte única. Implementada em **duas camadas independentes**:
-- **Superior:** middleware do App Router (`apps/web/src/middleware.ts`) + tabela determinística `lib/access-matrix.ts` `{ rota: [perfis, escopo] }` (lida por middleware **e** UI via hook `useAuthorization`).
+- **Superior:** proxy do App Router (`apps/web/src/proxy.ts` — no Next 16 a convenção `middleware` virou `proxy`; ADR-021) + tabela determinística `lib/access-matrix.ts` `{ rota: [perfis, escopo] }` (lida pelo proxy **e** UI via hook `useAuthorization`). Proteção sempre via `supabase.auth.getUser()` (servidor de auth), **nunca** `getSession()`. *(No W1-C03 o `proxy.ts` faz só refresh de sessão; o enforcement por perfil entra no C05.)*
 - **Inferior:** **RLS** do PostgreSQL, políticas versionadas em `apps/api/migrations/rls/` (uma por perfil × tabela sensível).
 
 > Negação em **qualquer** camada basta. **Toda alteração na Matriz exige PR único cobrindo `access-matrix.ts` E as migrations de RLS** — nunca só um lado.
@@ -221,7 +221,7 @@ Antes de marcar um componente como concluído:
 - RLS: **todo** `.sql` existe em `migrations/rls/` **antes** de ser aplicado; reaplicar após qualquer `DROP/recriação` de tabela.
 - Sincronização de enums: PR que toca só Python **ou** só o banco é **bloqueado** (ver DAT §4.5).
 
-**Comandos** *(confirmados no W0-C01 — fonte: README.md)*
+**Comandos** *(confirmados no W0-C01 e W1-C03 — fonte: README.md)*
 ```bash
 # Backend (apps/api)
 cd apps/api && uv sync                      # instalar deps (uv.lock pinado)
@@ -234,7 +234,9 @@ uv run python -m src.tasks.keep_alive       # keep-alive: ping read-only ao banc
 # Frontend (apps/web)
 cd apps/web && pnpm install
 pnpm dev                                     # dev server → http://localhost:3000
-pnpm build && pnpm lint                      # build + lint
+pnpm build && pnpm lint                      # build (type-check) + lint
+pnpm test                                    # vitest (componentes/lógica — RTL/jsdom)  [W1-C03]
+pnpm test:e2e                                # Playwright E2E (telas, responsivo)        [W1-C03]
 pnpm format:check                            # Prettier
 
 # Infra local
@@ -242,6 +244,8 @@ docker compose up -d db                      # Postgres 17 local (cria rastreio 
 ```
 
 > Notas operacionais: `alembic.ini` deve permanecer **ASCII puro** (o Alembic lê o `.ini` no encoding do locale — cp1252 no Windows). Testes `@db` usam `TEST_DATABASE_URL` (default: Postgres local) e viram falha com `REQUIRE_DB_TESTS=1` (CI).
+>
+> **Auth (W1-C03):** front via `@supabase/ssr` (clients browser/servidor + `src/proxy.ts` de refresh; proteção com `getUser()`). O backend **verifica** o JWT do Supabase (**ES256 via JWKS + HS256 fallback**) em `adapters/inbound/http/auth.py`, exposto por `GET /auth/me` (`uv run pytest tests/unit/test_auth.py tests/integration/test_auth_me.py`). Vars de auth: `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_JWT_SECRET` (api) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` *publishable* (web). PyJWT **só verifica**, nunca emite. Detalhes em `docs/auth.md`.
 
 ---
 

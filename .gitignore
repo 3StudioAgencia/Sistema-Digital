@@ -23,6 +23,13 @@ next-env.d.ts
 *.tsbuildinfo
 .pnpm-store/
 
+# --- Testes (Playwright / Vitest) ---
+test-results/
+playwright-report/
+blob-report/
+__screenshots__/
+coverage/
+
 # --- Build / dist ---
 dist/
 build/
@@ -41,3 +48,7 @@ Desktop.ini
 
 # --- Docker / banco local ---
 pgdata/
+
+# --- Asset-fonte pesado: servimos a versão otimizada login-bg.jpg (~540 KB).
+#     O PNG de origem (3584x4608, ~18 MB) não vai para o git nem para o bundle. ---
+apps/web/public/login-bg.png
