@@ -19,7 +19,7 @@ from sqlalchemy.pool import NullPool
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.health import DbPing
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
-from src.infrastructure.config import Settings, _coerce_asyncpg_url
+from src.infrastructure.config import Settings, coerce_asyncpg_url
 
 DEFAULT_TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test"
 
@@ -161,7 +161,7 @@ async def _can_connect(url: str) -> bool:
 @pytest.fixture(scope="session")
 def database_url() -> str:
     """URL do Postgres de teste; faz o gate de disponibilidade uma única vez."""
-    url = _coerce_asyncpg_url(os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB_URL))
+    url = coerce_asyncpg_url(os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB_URL))
     if not asyncio.run(_can_connect(url)):
         if os.environ.get("REQUIRE_DB_TESTS") == "1":
             pytest.fail(f"REQUIRE_DB_TESTS=1, mas o Postgres de teste não está acessível em {url}")

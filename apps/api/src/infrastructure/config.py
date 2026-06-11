@@ -24,7 +24,7 @@ AppEnv = Literal["dev", "test", "staging", "production"]
 _VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
-def _coerce_asyncpg_url(url: str) -> str:
+def coerce_asyncpg_url(url: str) -> str:
     """Normaliza URLs Postgres para o driver async usado pelo runtime.
 
     Supabase/ferramentas costumam fornecer ``postgres://`` ou ``postgresql://``;
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     @field_validator("database_url", "migrations_database_url")
     @classmethod
     def _validate_pg_url(cls, value: str) -> str:
-        coerced = _coerce_asyncpg_url(value)
+        coerced = coerce_asyncpg_url(value)
         if not coerced.startswith("postgresql+asyncpg://"):
             msg = "URL de banco deve ser PostgreSQL (postgresql://... ou postgresql+asyncpg://...)"
             raise ValueError(msg)

@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from src.infrastructure.config import _coerce_asyncpg_url
+from src.infrastructure.config import coerce_asyncpg_url
 
 config = context.config
 
@@ -37,7 +37,7 @@ class _MigrationSettings(BaseSettings):
 
 
 def _database_url() -> str:
-    return _coerce_asyncpg_url(_MigrationSettings().migrations_database_url)  # type: ignore[call-arg]
+    return coerce_asyncpg_url(_MigrationSettings().migrations_database_url)  # type: ignore[call-arg]
 
 
 def run_migrations_offline() -> None:

@@ -37,19 +37,8 @@ async def test_ping_executa_select_1_com_sucesso(engine: AsyncEngine) -> None:
     assert await ping(engine) is True
 
 
-async def test_ping_retorna_false_para_banco_inacessivel() -> None:
-    settings = Settings(
-        _env_file=None,  # type: ignore[call-arg]
-        app_env="test",
-        # porta 9 (discard) — conexão recusada rapidamente, sem depender de DNS
-        database_url="postgresql+asyncpg://nouser:nopass@127.0.0.1:9/nada",
-        migrations_database_url="postgresql+asyncpg://nouser:nopass@127.0.0.1:9/nada",
-    )
-    engine = create_runtime_engine(settings)
-    try:
-        assert await ping(engine) is False
-    finally:
-        await engine.dispose()
+# O caminho de ping com banco inacessível roda OFFLINE e vive em
+# tests/unit/test_database_offline.py — não precisa do marker @db (W0-A-026).
 
 
 async def test_sessao_async_executa_select_1(engine: AsyncEngine) -> None:

@@ -6,14 +6,8 @@ import logging
 import pytest
 from src.infrastructure.logging import RequestIdFilter, configure_logging, request_id_var
 
-
-@pytest.fixture(autouse=True)
-def _restaura_logging() -> object:
-    """Garante que a configuração global de logging não vaza entre testes."""
-    root = logging.getLogger()
-    handlers, level = root.handlers[:], root.level
-    yield
-    root.handlers, root.level = handlers, level
+# O isolamento global de logging entre testes é garantido pela fixture autouse
+# `_isola_logging_global` em conftest.py (W0-A-025: fixture local removida).
 
 
 def _ultima_linha_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:

@@ -4,6 +4,12 @@
 # Run:    docker run --env-file apps/api/.env -p 8000:8000 rastreio-api
 # ============================================================================
 
+# Bases pinadas por tag. Hardening recomendado (deferido — W0-A-029): pinar por
+# DIGEST (ex.: python:3.12-slim-bookworm@sha256:...) com renovação automática via
+# Dependabot (ecossistema docker). Adiado por ora: o ambiente de dev não tem
+# Docker para resolver/validar o digest e a exposição é nula até o deploy (a CI
+# não builda a imagem hoje; a plataforma de deploy é ADR-009/Proposta).
+
 # --- Stage 1: resolve dependências com uv (ADR-010) -------------------------
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
@@ -24,7 +30,10 @@ WORKDIR /app
 # Usuário não-root (princípio do menor privilégio)
 RUN groupadd --system api && useradd --system --gid api --no-create-home api
 
-COPY --from=builder --chown=api:api /app /app
+# Sem --chown: código e venv ficam root:root (legíveis a todos), porém NÃO
+# graváveis pelo usuário de runtime — menor privilégio (W0-A-029). USER api
+# executa normalmente; PYTHONDONTWRITEBYTECODE já evita escrita de .pyc em /app.
+COPY --from=builder /app /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
