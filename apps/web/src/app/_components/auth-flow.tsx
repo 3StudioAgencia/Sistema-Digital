@@ -1,7 +1,7 @@
 "use client";
 
-import { type MouseEvent, useState } from "react";
-import { AnimatePresence, type Variants, motion, useMotionValue, useSpring } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, type Variants, motion } from "framer-motion";
 
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
@@ -13,10 +13,10 @@ import { LoginPanel } from "./login-panel";
  * Experiência de login adaptativa (W1-C03 / DP-7).
  *
  * - **Desktop (>=768px):** split — herói com formato custom (máscara SVG) +
- *   formulário. O herói reage ao cursor com um parallax suave (hover).
+ *   formulário. A imagem é estática (sem parallax/zoom).
  * - **Mobile:** boas-vindas PRIMEIRO (overlay) e o formulário só aparece ao
- *   clicar em "Entrar" — uma troca de passo (estado), sem mudar de rota, com
- *   transição fluida. Sem redirecionamento por viewport (robusto).
+ *   clicar em "Entrar" — troca de passo (estado), sem mudar de rota, com
+ *   transição fluida (sem redirecionamento por viewport).
  *
  * Toda animação degrada para instantânea com prefers-reduced-motion.
  */
@@ -24,29 +24,12 @@ export function AuthFlow({ expired }: { expired: boolean }) {
   const reduce = useReducedMotion();
   const [showForm, setShowForm] = useState(false);
 
-  // Parallax do herói no desktop: a imagem segue o cursor de leve (mola).
-  const mvX = useMotionValue(0);
-  const mvY = useMotionValue(0);
-  const x = useSpring(mvX, SPRING.parallax);
-  const y = useSpring(mvY, SPRING.parallax);
-
-  function onHeroMove(event: MouseEvent<HTMLDivElement>) {
-    if (reduce) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    mvX.set(((event.clientX - rect.left) / rect.width - 0.5) * 18);
-    mvY.set(((event.clientY - rect.top) / rect.height - 0.5) * 18);
-  }
-  function onHeroLeave() {
-    mvX.set(0);
-    mvY.set(0);
-  }
-
   const welcomeContainer: Variants = {
     hidden: {},
     show: { transition: { staggerChildren: reduce ? 0 : 0.07, delayChildren: reduce ? 0 : 0.06 } },
   };
   const welcomeItem: Variants = {
-    hidden: { opacity: 0, y: reduce ? 0 : 18 },
+    hidden: { opacity: 0, y: reduce ? 0 : 16 },
     show: {
       opacity: 1,
       y: 0,
@@ -56,22 +39,16 @@ export function AuthFlow({ expired }: { expired: boolean }) {
 
   return (
     <div className={styles.page}>
-      {/* Herói desktop — formato custom (máscara) + parallax suave no hover. */}
+      {/* Herói desktop — formato custom (máscara). Imagem estática; apenas um
+          fade discreto na entrada, em sintonia com o restante. */}
       <motion.div
         className={styles.hero}
         aria-hidden="true"
-        onMouseMove={onHeroMove}
-        onMouseLeave={onHeroLeave}
-        initial={reduce ? false : { opacity: 0, scale: 1.04 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: reduce ? 0 : DURATION.long, ease: EASING.emphasized }}
       >
-        <motion.div
-          className={styles.heroImg}
-          style={{ x, y }}
-          whileHover={reduce ? undefined : { scale: 1.04 }}
-          transition={SPRING.interactive}
-        />
+        <div className={styles.heroImg} />
       </motion.div>
 
       {/* Formulário — desktop: à direita; mobile: revelado após as boas-vindas. */}

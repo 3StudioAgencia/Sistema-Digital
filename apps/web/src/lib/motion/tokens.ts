@@ -23,13 +23,10 @@ export const EASING: Record<"standard" | "emphasized" | "exit", [number, number,
   };
 
 /**
- * Molas (física de microinteração) — extensão do DAT §5.1 para dar uma cara
- * fluida e CONSISTENTE a todas as interações. Reutilizar SEMPRE estas, para que
- * hover/press/parallax tenham o mesmo "peso" em toda a UI (harmonia).
- * - `interactive`: hover/press/realce (quase crítico, sem overshoot perceptível).
- * - `parallax`: seguir o cursor (mais solto, sobreamortecido — sem balanço).
+ * Mola (física de microinteração) — extensão do DAT §5.1 para dar uma cara
+ * fluida e CONSISTENTE às interações. Reutilizar SEMPRE em hover/press, para que
+ * toda a UI tenha o mesmo "peso" (harmonia). Quase crítica: sem overshoot perceptível.
  */
 export const SPRING = {
   interactive: { type: "spring" as const, stiffness: 300, damping: 26, mass: 0.6 },
-  parallax: { type: "spring" as const, stiffness: 120, damping: 18, mass: 0.4 },
 };

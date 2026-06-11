@@ -19,11 +19,10 @@
 
 .heroImg {
   position: absolute;
-  inset: -6%; /* maior que o container: o parallax desloca sem revelar bordas */
+  inset: 0;
   background-image: url("/login-bg.jpg");
   background-size: cover;
   background-position: center;
-  will-change: transform;
 }
 
 /* ---------------- Área do formulário ---------------- */
