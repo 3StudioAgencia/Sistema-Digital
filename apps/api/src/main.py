@@ -16,6 +16,7 @@ from functools import partial
 from fastapi import FastAPI
 
 from src.adapters.inbound.http.app import create_app
+from src.adapters.inbound.http.auth import build_jwt_verifier
 from src.adapters.outbound.storage.r2_storage import R2Storage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
 from src.application.ports.storage import StoragePort
@@ -45,6 +46,7 @@ def build_app() -> FastAPI:
 
     engine = database.create_runtime_engine(settings)
     storage = _build_storage(settings)
+    jwt_verifier = build_jwt_verifier(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -61,6 +63,7 @@ def build_app() -> FastAPI:
         settings=settings,
         storage=storage,
         db_ping=partial(database.ping, engine),
+        jwt_verifier=jwt_verifier,
         lifespan=lifespan,
     )
 

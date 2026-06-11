@@ -61,8 +61,13 @@ class Settings(BaseSettings):
     # Migrations/Alembic: conexão direta/sessão (porta 5432) — DDL exige sessão.
     migrations_database_url: str
 
-    # --- Supabase (previsto para a Wave 1/C03 — apenas documentado) ------
+    # --- Supabase Auth (Wave 1/C03 — verificação de JWT, DP-2) -----------
+    # URL do projeto (deriva o JWKS quando supabase_jwks_url está vazio).
     supabase_url: str | None = None
+    # JWKS do projeto p/ verificação ES256 (assimétrica). Vazio → derivado de
+    # supabase_url. O default atual do Supabase é ES256 (ADR-018).
+    supabase_jwks_url: str | None = None
+    # Segredo HS256 legado — fallback opcional de verificação (PyJWT só verifica).
     supabase_jwt_secret: SecretStr | None = None
 
     # --- Cloudflare R2 (S3-compatível) -----------------------------------
@@ -142,6 +147,20 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
+    @property
+    def effective_jwks_url(self) -> str | None:
+        """URL do JWKS para verificação assimétrica (ES256).
+
+        Explícita (``SUPABASE_JWKS_URL``) ou derivada de ``SUPABASE_URL`` no
+        endpoint padrão do GoTrue. ``None`` quando nada está configurado — aí o
+        verifier opera só com HS256 (se houver segredo) ou rejeita tudo.
+        """
+        if self.supabase_jwks_url:
+            return self.supabase_jwks_url
+        if self.supabase_url:
+            return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        return None
 
 
 @lru_cache

@@ -11,6 +11,8 @@ from contextlib import AbstractAsyncContextManager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.adapters.inbound.http.auth import JwtVerifier
+from src.adapters.inbound.http.auth import router as auth_router
 from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
@@ -25,9 +27,15 @@ def create_app(
     settings: Settings,
     storage: StoragePort,
     db_ping: DbPing,
+    jwt_verifier: JwtVerifier | None = None,
     lifespan: Lifespan = None,
 ) -> FastAPI:
-    """Cria a aplicação FastAPI com middlewares, handlers de erro e routers."""
+    """Cria a aplicação FastAPI com middlewares, handlers de erro e routers.
+
+    ``jwt_verifier`` é injetado pelo composition root (``main.py``). O default
+    é um verifier *deny-all* (sem JWKS nem segredo): mantém testes que não
+    exercitam auth funcionando sem precisar montá-lo.
+    """
     app = FastAPI(
         title=APP_NAME,
         version=APP_VERSION,
@@ -42,6 +50,7 @@ def create_app(
     app.state.settings = settings
     app.state.storage = storage
     app.state.db_ping = db_ping
+    app.state.jwt_verifier = jwt_verifier or JwtVerifier()
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
     # para fora: ErrorHandling → CORS → RequestId.
@@ -62,6 +71,7 @@ def create_app(
 
     install_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(auth_router)
     return app
 
 

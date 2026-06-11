@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 from src.adapters.inbound.http.app import create_app
+from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.health import DbPing
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.infrastructure.config import Settings, coerce_asyncpg_url
@@ -69,6 +70,7 @@ _SETTINGS_ENV_KEYS = (
     "DATABASE_URL",
     "MIGRATIONS_DATABASE_URL",
     "SUPABASE_URL",
+    "SUPABASE_JWKS_URL",
     "SUPABASE_JWT_SECRET",
     "R2_ENDPOINT_URL",
     "R2_ACCESS_KEY_ID",
@@ -129,9 +131,18 @@ def fake_storage() -> FakeStorage:
     return FakeStorage()
 
 
-def make_client(settings: Settings, storage: StoragePort, db_ping: DbPing) -> httpx.AsyncClient:
-    """Client httpx falando direto com a app via ASGI (sem rede)."""
-    app = create_app(settings=settings, storage=storage, db_ping=db_ping)
+def make_client(
+    settings: Settings,
+    storage: StoragePort,
+    db_ping: DbPing,
+    jwt_verifier: JwtVerifier | None = None,
+) -> httpx.AsyncClient:
+    """Client httpx falando direto com a app via ASGI (sem rede).
+
+    ``jwt_verifier`` opcional: testes de auth injetam um verifier de teste
+    (segredo HS256 conhecido / JWKS dublê); os demais usam o default deny-all.
+    """
+    app = create_app(settings=settings, storage=storage, db_ping=db_ping, jwt_verifier=jwt_verifier)
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(transport=transport, base_url="http://testserver")
 
