@@ -123,6 +123,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 
 ## Como contribuir
 
+- **Branches (gitflow leve, ADR-016):** `main` = estável · `develop` = integração (**padrão**). O trabalho dos componentes segue em `develop` (ou branches de feature); PRs apontam para `develop`. Repositório: [`3studioagn/Sistema-Digital`](https://github.com/3studioagn/Sistema-Digital).
 - Commits em **Conventional Commits**, com escopo de componente: `feat(w0-c01): ...`.
 - Toda alteração na **Matriz de Acesso** exige **PR único** cobrindo `access-matrix.ts` **e** as migrations de RLS.
 - PR que sincroniza enums deve tocar **os dois lados** (Python e PostgreSQL).

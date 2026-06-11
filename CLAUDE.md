@@ -10,7 +10,7 @@
 
 - **Organização:** 3Studio
 - **Responsável de produto:** Mario Souza
-- **Repositório:** `rastreio-provas-digitais` (monorepo)
+- **Repositório:** `rastreio-provas-digitais` (monorepo). **No GitHub:** [`3studioagn/Sistema-Digital`](https://github.com/3studioagn/Sistema-Digital) *(o nome no GitHub difere do slug canônico)*. Branches: `main` (estável) + `develop` (integração, **padrão**) — ver ADR-016.
 - **Linha de base:** v1.0 (Junho/2026) — versão definitiva e inicial, *greenfield*.
 
 ---

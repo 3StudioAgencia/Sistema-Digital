@@ -44,6 +44,7 @@
 - **Docs:** `docs/keep-alive.md` (racional, cadência, ligar em produção, teste manual, alternativa Cloudflare Worker Cron) + link em `docs/setup-infra.md`.
 - **Validação em execução real:** *ping* read-only ao **Supabase real** → `exit 0`, `status="ok"`, `db_time` real, `latency_ms≈331ms`; falha com credencial inválida → `exit 1`, `status="error"`, sem vazar a senha.
 - Revisão adversarial multi-agente (6 dimensões × verificação cética) sobre o change set.
+- **Publicado no GitHub:** repositório [`3studioagn/Sistema-Digital`](https://github.com/3studioagn/Sistema-Digital) criado; remote `origin` configurado; branches `main` (estável) e `develop` (integração, **padrão**) enviadas em `abc293c` via Git Credential Manager (ambiente sem `gh`).
 
 **Decisões (ADRs):**
 - **ADR-015** (keep-alive externo; scheduler primário GitHub Actions; conexão direta para o *one-shot*; cadência diária; alerta nativo + webhook opcional; alternativa Cloudflare documentada). **Nota:** o prompt referenciava "ADR-012", mas 012–014 já existiam (W0-C01) → adotado o próximo livre, **015** (divergência registrada, `CLAUDE.md §2.1`).
@@ -52,12 +53,15 @@
 - **70 passaram, 6 skip** (`@db`, sem Postgres local) offline; cobertura **98.81%** (linhas restantes são caminhos de sucesso `@db`, cobertos no CI). `ruff`, `ruff format` e `mypy --strict` verdes. Sem segredos versionados.
 
 **Pendências / em aberto:**
-- [ ] **Ligar em produção:** cadastrar o secret `KEEPALIVE_DATABASE_URL` (e opcional `ALERT_WEBHOOK_URL`) no repositório GitHub quando o remoto existir; validar via `workflow_dispatch`.
-- [ ] Push para o remoto `rastreio-provas-digitais` (workflow agendado só roda no GitHub).
+- [x] Push para o remoto — **feito**: `3studioagn/Sistema-Digital` (branches `main` + `develop`). Resolve também a pendência herdada do C01.
+- [ ] **Ligar keep-alive em produção:** cadastrar o secret `KEEPALIVE_DATABASE_URL` (e opcional `ALERT_WEBHOOK_URL`) em **Settings → Secrets and variables → Actions** — o cron diário (06:00) **falha** sem ele; validar via `workflow_dispatch`.
+- [ ] **CI em `develop`:** `ci.yml` só dispara em `main` + PRs; pushes diretos em `develop` não acionam a CI. Decidir adicionar `develop` aos gatilhos de push **ou** adotar fluxo por PR (ADR-016).
+- [ ] **`apps/web/public/`** (`login-bg.png` 18 MB + `logo-3studio.svg`) untracked — decidir **Git LFS** vs commit normal; pertence ao W1-C03.
+- [ ] (Opcional) Branch padrão no GitHub = `develop`; trocar para `main` em Settings → Branches se preferir.
 - [ ] (Herdada) Confirmar plataformas de deploy (ADR-009).
 
 **Próximo passo:**
-- **Wave 1 · W1-C03 · Tela de Login e Sessão** (primeiro componente da Wave 1; Wave 0 concluída).
+- **Wave 1 · W1-C03 · Tela de Login e Sessão** (primeiro componente da Wave 1; Wave 0 concluída). Trabalhar na branch `develop`.
 
 **Definition of Done:** ✅ atendida no subconjunto aplicável (testes ≥ piso, observabilidade/log estruturado, error handling com exit code + alerta, docs do módulo, sem segredos versionados, idempotência N/A — operação read-only sem escrita).
 

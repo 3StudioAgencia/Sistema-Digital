@@ -98,6 +98,12 @@
 - **Status:** **Aceita** (W0-C02) — validada em execução: *ping* read-only ao **Supabase real** (`exit 0`, `status="ok"`, `db_time` real, `latency_ms` medida) e falha controlada com credencial inválida (`exit 1`, `status="error"`, `error_type` sem vazar a senha).
 - **Consequências:** ligar em produção = cadastrar o secret `KEEPALIVE_DATABASE_URL` (mesma string de `MIGRATIONS_DATABASE_URL`) e, opcional, `ALERT_WEBHOOK_URL`. O workflow mapeia esse único secret para `DATABASE_URL` **e** `MIGRATIONS_DATABASE_URL` (o `Settings` do C01 exige ambas no boot; a rotina usa só a direta). **Caveat:** o GitHub desabilita workflows agendados após **60 dias de inatividade do repositório** e pode atrasar/saltar execuções — a margem diária absorve atrasos; o **hardening de longo prazo é um Cloudflare Worker Cron** (mesmo ecossistema do R2, sem o limite de 60 dias), **apenas documentado** (`docs/keep-alive.md`), pois o ADR mantém o scheduler **trocável**.
 
+## ADR-016 — Modelo de branches e publicação no GitHub (gitflow leve)
+- **Contexto:** ao fim do W0-C02 o repositório foi publicado no GitHub (`3studioagn/Sistema-Digital`). Era preciso um modelo de branches simples que separe linha estável de integração e conviva com a CI e com o cron do keep-alive (que roda a partir da **branch padrão**).
+- **Decisão:** **gitflow leve** — `main` = linha **estável**; `develop` = **integração** (branch **padrão** no GitHub, onde os componentes seguem). Commits em Conventional Commits com escopo por componente; quando houver fluxo de PR, os PRs apontam para `develop`. Push via **HTTPS + Git Credential Manager** (o ambiente de dev **não tem `gh`**; operações de repositório pelo Git/UI do GitHub).
+- **Status:** **Aceita** (W0-C02) — `main` e `develop` enviadas em `abc293c`.
+- **Consequências:** (1) a CI (`.github/workflows/ci.yml`) hoje dispara em `push` para `main` **e** em `pull_request` — pushes diretos em `develop` **NÃO** acionam a CI; decidir se `develop` entra nos gatilhos de push ou se o fluxo será sempre por PR. (2) O **workflow agendado do keep-alive roda a partir da branch padrão (`develop`)** — exige o secret `KEEPALIVE_DATABASE_URL` configurado, senão a execução diária falha (ADR-015). (3) O nome do repo no GitHub (`Sistema-Digital`) **difere** do slug canônico interno (`rastreio-provas-digitais`, CLAUDE.md §1).
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
@@ -105,3 +111,5 @@
 - [ ] ADR-008 — desenhar propagação de claims/RLS por request (W1/C05). Ponto de extensão pronto em `SqlAlchemyUnitOfWork.begin()`.
 - [ ] ADR-009 — confirmar plataformas de deploy com o responsável (CI/Dockerfile prontos e agnósticos).
 - [x] ADR-010 — confirmado: `uv` 0.11 + `pnpm` 11 no ambiente alvo (W0/C01).
+- [x] ADR-015 — keep-alive externo entregue e validado em execução real (W0/C02).
+- [ ] ADR-016 — decidir gatilhos de CI para `develop` (push direto vs PR) e cadastrar o secret `KEEPALIVE_DATABASE_URL` no GitHub.
