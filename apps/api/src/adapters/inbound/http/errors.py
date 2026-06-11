@@ -23,6 +23,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.application.ports.identity_provider import (
+    IdentityProviderError,
+    IdentityProviderNaoConfigurado,
+)
+from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
+from src.domain.usuarios import ErroDeDominio
 from src.infrastructure.logging import request_id_var
 
 logger = logging.getLogger("rastreio.http.errors")
@@ -86,7 +92,50 @@ async def _last_resort_handler(request: Request, exc: Exception) -> JSONResponse
     return log_and_build_internal_error_response(request, exc)
 
 
+def _status_de_dominio(exc: ErroDeDominio) -> int:
+    """Violações de regra de negócio → HTTP (W1-C04). 422 é o default; os dois
+    casos com semântica própria têm status dedicado."""
+    if isinstance(exc, UsuarioNaoEncontradoError):
+        return status.HTTP_404_NOT_FOUND
+    if isinstance(exc, EmailJaCadastradoError):
+        return status.HTTP_409_CONFLICT
+    return status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+async def _dominio_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    erro = cast(ErroDeDominio, exc)
+    return JSONResponse(
+        status_code=_status_de_dominio(erro),
+        content=error_envelope(erro.codigo, str(erro), request_id_var.get()),
+    )
+
+
+async def _identity_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Falha no provedor de identidade: o adapter já logou os detalhes; ao
+    cliente vai um envelope genérico SEM ecoar a causa (a mensagem interna
+    poderia carregar status/códigos do provedor)."""
+    if isinstance(exc, IdentityProviderNaoConfigurado):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=error_envelope(
+                "identidade_nao_configurada",
+                "Gestão de usuários indisponível: provedor de identidade não configurado.",
+                request_id_var.get(),
+            ),
+        )
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content=error_envelope(
+            "provedor_identidade",
+            "Falha ao comunicar com o provedor de identidade. Tente novamente.",
+            request_id_var.get(),
+        ),
+    )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    app.add_exception_handler(ErroDeDominio, _dominio_exception_handler)
+    app.add_exception_handler(IdentityProviderError, _identity_exception_handler)
     app.add_exception_handler(Exception, _last_resort_handler)

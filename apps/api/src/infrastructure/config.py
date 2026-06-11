@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     supabase_jwks_url: str | None = None
     # Segredo HS256 legado — fallback opcional de verificação (PyJWT só verifica).
     supabase_jwt_secret: SecretStr | None = None
+    # Chave SECRETA da Admin API (W1-C04 — provisionamento de usuários).
+    # Formato novo ``sb_secret_...`` (ou a service_role legada). SERVER-ONLY:
+    # jamais em NEXT_PUBLIC_*/bundle de cliente — dá acesso com BYPASSRLS.
+    supabase_secret_key: SecretStr | None = None
 
     # --- Cloudflare R2 (S3-compatível) -----------------------------------
     # Opcionais por design: o ambiente pode não ter credenciais reais
@@ -143,6 +147,11 @@ class Settings(BaseSettings):
     @property
     def r2_configured(self) -> bool:
         return self.r2_bucket is not None
+
+    @property
+    def identity_admin_configured(self) -> bool:
+        """Admin API utilizável: precisa da URL do projeto E da chave secreta."""
+        return self.supabase_url is not None and self.supabase_secret_key is not None
 
     @property
     def cors_origins(self) -> list[str]:

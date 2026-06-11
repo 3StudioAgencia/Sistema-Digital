@@ -53,15 +53,25 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0001", (
-        "head deve registrar a revisão 0001"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0002", (
+        "head deve registrar a revisão 0002 (usuarios — W1-C04)"
     )
+    assert _scalar(
+        database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'"
+    ) == 1, "0002 deve criar a tabela usuarios"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
     assert _scalar(database_url, "SELECT count(*) FROM alembic_version") == 0, (
         "base deve zerar o histórico de revisões"
     )
+    assert _scalar(
+        database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'"
+    ) == 0, "downgrade da 0002 deve remover a tabela usuarios"
+    assert _scalar(
+        database_url,
+        "SELECT count(*) FROM pg_type WHERE typname IN ('setor_enum', 'localizacao_enum')",
+    ) == 0, "downgrade da 0002 deve remover os enums de domínio"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

@@ -23,9 +23,9 @@ if config.config_file_name is not None:
     # (ou da suíte de testes) não pode silenciar os loggers já configurados
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# Sem tabelas de domínio nesta wave — o metadata chega na Wave 2 (C06).
-# Quando existir: from src.adapters.outbound.db.models import metadata
-target_metadata = None
+# Metadata das tabelas de domínio (W1-C04+) — base de comparação do
+# autogenerate. As migrations continuam escritas/revisadas à mão (DAT §2).
+from src.adapters.outbound.db.models import metadata as target_metadata  # noqa: E402
 
 
 class _MigrationSettings(BaseSettings):

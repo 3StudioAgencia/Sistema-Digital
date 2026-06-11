@@ -9,16 +9,21 @@ Princípios (prompt W0-C01 §6):
 import asyncio
 import logging
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping
 
 import httpx
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.health import DbPing
+from src.application.ports.identity_provider import (
+    EmailJaExisteNoProvedorError,
+    IdentidadeAuth,
+    IdentityProviderPort,
+)
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.infrastructure.config import Settings, coerce_asyncpg_url
 
@@ -57,6 +62,80 @@ async def ping_ok() -> bool:
 
 async def ping_down() -> bool:
     return False
+
+
+class FakeIdentityProvider(IdentityProviderPort):
+    """IdentityProviderPort em memória (W1-C04) — espelha a semântica da Admin API.
+
+    Falhas roteirizáveis via ``fail_<operacao>`` permitem exercitar compensação
+    e falha parcial sem rede. ``calls`` registra a ordem das operações.
+    """
+
+    def __init__(self) -> None:
+        self.users: dict[str, dict[str, object]] = {}
+        self.calls: list[tuple[str, str]] = []
+        self.fail_create: Exception | None = None
+        self.fail_delete: Exception | None = None
+        self.fail_set_banned: Exception | None = None
+        self.fail_update_metadata: Exception | None = None
+        self.fail_revoke: Exception | None = None
+        self._seq = 0
+
+    def seed(self, email: str, app_metadata: dict[str, object] | None = None) -> str:
+        """Pré-existência de conta no auth (ex.: órfão ou conta de dashboard)."""
+        self._seq += 1
+        uid = f"00000000-0000-0000-0000-{self._seq:012d}"
+        self.users[uid] = {"email": email, "app_metadata": app_metadata or {}, "banned": False}
+        return uid
+
+    async def create_user(
+        self, email: str, senha: str, app_metadata: Mapping[str, object]
+    ) -> str:
+        self.calls.append(("create_user", email))
+        if self.fail_create is not None:
+            raise self.fail_create
+        if any(u["email"] == email for u in self.users.values()):
+            raise EmailJaExisteNoProvedorError("email_exists")
+        return self.seed(email, dict(app_metadata))
+
+    async def delete_user(self, user_id: str) -> None:
+        self.calls.append(("delete_user", user_id))
+        if self.fail_delete is not None:
+            raise self.fail_delete
+        self.users.pop(user_id, None)
+
+    async def set_banned(self, user_id: str, banned: bool) -> None:
+        self.calls.append(("set_banned", f"{user_id}:{banned}"))
+        if self.fail_set_banned is not None:
+            raise self.fail_set_banned
+        if user_id in self.users:
+            self.users[user_id]["banned"] = banned
+
+    async def update_app_metadata(
+        self, user_id: str, app_metadata: Mapping[str, object]
+    ) -> None:
+        self.calls.append(("update_app_metadata", user_id))
+        if self.fail_update_metadata is not None:
+            raise self.fail_update_metadata
+        if user_id in self.users:
+            atual = self.users[user_id]["app_metadata"]
+            assert isinstance(atual, dict)
+            atual.update(dict(app_metadata))
+
+    async def revoke_sessions(self, user_id: str) -> None:
+        self.calls.append(("revoke_sessions", user_id))
+        if self.fail_revoke is not None:
+            raise self.fail_revoke
+
+    async def find_user_by_email(self, email: str) -> IdentidadeAuth | None:
+        self.calls.append(("find_user_by_email", email))
+        alvo = email.strip().lower()
+        for uid, dados in self.users.items():
+            if str(dados["email"]).lower() == alvo:
+                metadata = dados["app_metadata"]
+                assert isinstance(metadata, dict)
+                return IdentidadeAuth(id=uid, email=alvo, app_metadata=metadata)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -136,13 +215,25 @@ def make_client(
     storage: StoragePort,
     db_ping: DbPing,
     jwt_verifier: JwtVerifier | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    identity_provider: IdentityProviderPort | None = None,
 ) -> httpx.AsyncClient:
     """Client httpx falando direto com a app via ASGI (sem rede).
 
     ``jwt_verifier`` opcional: testes de auth injetam um verifier de teste
     (segredo HS256 conhecido / JWKS dublê); os demais usam o default deny-all.
+    ``session_factory``/``identity_provider`` (W1-C04): testes de usuários
+    injetam o Postgres de teste + FakeIdentityProvider; o default (None) faz as
+    rotas de usuários responderem 503/erro claro.
     """
-    app = create_app(settings=settings, storage=storage, db_ping=db_ping, jwt_verifier=jwt_verifier)
+    app = create_app(
+        settings=settings,
+        storage=storage,
+        db_ping=db_ping,
+        jwt_verifier=jwt_verifier,
+        session_factory=session_factory,
+        identity_provider=identity_provider,
+    )
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(transport=transport, base_url="http://testserver")
 

@@ -17,8 +17,13 @@ from fastapi import FastAPI
 
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import build_jwt_verifier
+from src.adapters.outbound.identity.supabase_admin import (
+    SupabaseAdminIdentityProvider,
+    UnconfiguredIdentityProvider,
+)
 from src.adapters.outbound.storage.r2_storage import R2Storage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
+from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
 from src.infrastructure import database
 from src.infrastructure.config import Settings, get_settings
@@ -39,14 +44,30 @@ def _build_storage(settings: Settings) -> StoragePort:
     return UnconfiguredStorage()
 
 
+def _build_identity_provider(settings: Settings) -> IdentityProviderPort:
+    """Admin API real quando a chave secreta está configurada; stand-in claro
+    caso contrário (gestão de usuários responde 503 — mesma filosofia do R2)."""
+    if settings.supabase_url is not None and settings.supabase_secret_key is not None:
+        return SupabaseAdminIdentityProvider(
+            supabase_url=settings.supabase_url,
+            secret_key=settings.supabase_secret_key.get_secret_value(),
+        )
+    logger.warning(
+        "SUPABASE_SECRET_KEY não configurada — gestão de usuários indisponível (503)"
+    )
+    return UnconfiguredIdentityProvider()
+
+
 def build_app() -> FastAPI:
     """Monta a aplicação completa a partir do ambiente."""
     settings = get_settings()
     configure_logging(settings.log_level)
 
     engine = database.create_runtime_engine(settings)
+    session_factory = database.create_session_factory(engine)
     storage = _build_storage(settings)
     jwt_verifier = build_jwt_verifier(settings)
+    identity_provider = _build_identity_provider(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -56,6 +77,8 @@ def build_app() -> FastAPI:
         )
         yield
         # Backend stateless: nada a persistir no shutdown — apenas devolve recursos
+        if isinstance(identity_provider, SupabaseAdminIdentityProvider):
+            await identity_provider.aclose()
         await engine.dispose()
         logger.info("api encerrada")
 
@@ -64,6 +87,8 @@ def build_app() -> FastAPI:
         storage=storage,
         db_ping=partial(database.ping, engine),
         jwt_verifier=jwt_verifier,
+        session_factory=session_factory,
+        identity_provider=identity_provider,
         lifespan=lifespan,
     )
 

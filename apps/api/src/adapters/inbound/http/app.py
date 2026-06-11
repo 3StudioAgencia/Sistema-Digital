@@ -10,6 +10,7 @@ from contextlib import AbstractAsyncContextManager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.auth import router as auth_router
@@ -17,6 +18,9 @@ from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
 from src.adapters.inbound.http.middleware import ErrorHandlingMiddleware, RequestIdMiddleware
+from src.adapters.inbound.http.usuarios import router as usuarios_router
+from src.adapters.outbound.identity.supabase_admin import UnconfiguredIdentityProvider
+from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
 
@@ -28,13 +32,17 @@ def create_app(
     storage: StoragePort,
     db_ping: DbPing,
     jwt_verifier: JwtVerifier | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    identity_provider: IdentityProviderPort | None = None,
     lifespan: Lifespan = None,
 ) -> FastAPI:
     """Cria a aplicação FastAPI com middlewares, handlers de erro e routers.
 
     ``jwt_verifier`` é injetado pelo composition root (``main.py``). O default
     é um verifier *deny-all* (sem JWKS nem segredo): mantém testes que não
-    exercitam auth funcionando sem precisar montá-lo.
+    exercitam auth funcionando sem precisar montá-lo. ``session_factory`` e
+    ``identity_provider`` (W1-C04) seguem o mesmo princípio: defaults seguros
+    (503/erro claro) para testes que não exercitam usuários.
     """
     app = FastAPI(
         title=APP_NAME,
@@ -51,6 +59,8 @@ def create_app(
     app.state.storage = storage
     app.state.db_ping = db_ping
     app.state.jwt_verifier = jwt_verifier or JwtVerifier()
+    app.state.session_factory = session_factory
+    app.state.identity_provider = identity_provider or UnconfiguredIdentityProvider()
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
     # para fora: ErrorHandling → CORS → RequestId.
@@ -72,6 +82,7 @@ def create_app(
     install_error_handlers(app)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(usuarios_router)
     return app
 
 
