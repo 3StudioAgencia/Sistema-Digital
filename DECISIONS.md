@@ -137,6 +137,12 @@
 - **Status:** **Aceita** (W1-C03). Emenda terminológica à ADR-006 (a camada superior do RBAC vive no `proxy.ts`).
 - **Consequências:** Build sem aviso de depreciação e à prova do próximo major. O C05 acrescenta o enforcement de RBAC **dentro do `proxy.ts`** (após o refresh), lendo `lib/access-matrix.ts`. CLAUDE.md §5.1/§5.4 atualizados.
 
+## ADR-022 — Fluxo de login adaptativo em rota única + herói com formato custom (refino W1-C03)
+- **Contexto:** A 1ª entrega do C03 usava rotas separadas (`/bem-vindo` + `/login`) com **redirecionamento por viewport no cliente** — frágil (no mobile, sem o meta viewport correto, o breakpoint de desktop disparava e o **login aparecia antes** das boas-vindas) e com flash. O herói do desktop fora aproximado por `border-radius`, mas o Figma usa um **vetor custom** (retângulo arredondado com a borda direita inclinada para dentro).
+- **Decisão:** (1) **Rota única `/login` adaptativa** (`<AuthFlow>`): desktop = split; mobile = **boas-vindas primeiro** e o formulário revelado por **troca de passo (estado)** ao clicar em "Entrar" — sem redirecionamento por viewport, com transição via `AnimatePresence`. `/` e `/bem-vindo` passam a **redirecionar para `/login`**. Adicionado `export const viewport` (width=device-width). (2) **Herói com o formato EXATO do Figma** via **máscara SVG** (`public/login-shape.svg` + `mask-image`), não mais `border-radius`. (3) **Animações mais imersivas** sobre os tokens: parallax suave do herói no hover, scale no hover/foco de campos e botão, entradas em *stagger* e transição boas-vindas→formulário — só `transform`/`opacity`, reduced-motion-aware.
+- **Status:** **Aceita** (W1-C03, refino pós-feedback do dono).
+- **Consequências:** Emenda o desenho de rotas do DP-7/ADR-018 (as boas-vindas viram **passo do `/login`**, não rota própria). `Welcome`/`bem-vindo.module.css` removidos; `/bem-vindo` vira redirect. O C05 (RBAC) segue apoiado no `proxy.ts`. vitest 11/11 + Playwright 4/4 verdes; fidelidade reconferida por screenshots.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
@@ -147,7 +153,7 @@
 - [x] ADR-015 — keep-alive externo entregue e validado em execução real (W0/C02).
 - [x] ADR-016 (parte CI) — **resolvido na remediação W0 (W0-A-002):** `develop` adicionado aos gatilhos de `push` do `ci.yml`. (Branch protection + PR continua opcional para o futuro.)
 - [ ] ADR-016 (parte secret) — **ação do responsável (W0-A-001):** cadastrar o secret `KEEPALIVE_DATABASE_URL` no GitHub (Settings → Secrets and variables → Actions) e validar via `workflow_dispatch` — sem ele o cron diário do keep-alive falha e o Supabase fica desprotegido contra a pausa de 7 dias.
-- [x] **ADR-018/019/020/021 (W1/C03)** — auth/sessão (`@supabase/ssr`, cookies, `getUser`), verificação de JWT **ES256/JWKS+HS256** (`/auth/me`), fundação de motion (C03↔C19) e convenção `proxy.ts`: entregues, testados (backend 98% + web vitest/Playwright) e validados.
+- [x] **ADR-018/019/020/021/022 (W1/C03)** — auth/sessão (`@supabase/ssr`, cookies, `getUser`), verificação de JWT **ES256/JWKS+HS256** (`/auth/me`), fundação de motion (C03↔C19), convenção `proxy.ts` e o **fluxo adaptativo em rota única + herói com formato custom** (refino): entregues, testados (backend 98% + web vitest/Playwright) e validados.
 - [x] **ADR-009 (plataformas)** — responsável confirmou **Vercel (web) + Railway (API)** no W1-C03; on-prem futuro permanece revisável.
 - [ ] **ADR-008** — desenhar a propagação de claims/RLS por request no **W1/C05**, agora sobre os claims já verificados pela ADR-019.
 - [ ] **Responsável (DP-3):** ajustar o **TTL do access token** no dashboard do Supabase (Authentication → Sessions) coerente com a inatividade de 30 min.
