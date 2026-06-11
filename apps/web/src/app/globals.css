@@ -13,8 +13,20 @@
   --color-warn: #e7b416;
   --color-down: #e05252;
 
+  /* Tela de login/auth (W1-C03) — tokens extraídos do Figma (nodes 56:167, 70:20). */
+  --auth-bg: #000000;
+  --auth-field: #1f1f1f;
+  --auth-accent: #ffcb5c;
+  --auth-text: #ffffff;
+  --auth-text-muted: #9e9e9e;
+  --auth-text-faint: #9c9c9c;
+  --auth-error: #ff9b9b;
+  --auth-radius-pill: 50px;
+  --auth-control-h: 56px;
+
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
 }
 

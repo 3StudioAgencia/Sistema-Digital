@@ -1,0 +1,91 @@
+.page {
+  min-height: 100svh;
+  background: var(--auth-bg);
+  color: var(--auth-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--auth-field);
+  border-radius: 24px;
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.wordmark {
+  height: 26px;
+  width: auto;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.lead {
+  color: var(--auth-text-muted);
+  font-size: 1rem;
+}
+
+.identity {
+  width: 100%;
+  margin-top: 8px;
+  background: #000000;
+  border-radius: 16px;
+  padding: 16px 18px;
+  text-align: left;
+  font-size: 0.9375rem;
+}
+
+.identity dt {
+  color: var(--auth-text-faint);
+  font-size: 0.8125rem;
+}
+
+.identity dd {
+  margin: 2px 0 12px;
+  word-break: break-all;
+}
+
+.identity dd:last-child {
+  margin-bottom: 0;
+}
+
+.sair {
+  margin-top: 8px;
+  height: 48px;
+  padding: 0 28px;
+  border: none;
+  border-radius: var(--auth-radius-pill);
+  background: var(--auth-accent);
+  color: #000000;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sair:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.muted {
+  color: var(--auth-text-muted);
+  font-size: 0.875rem;
+}
+
+.error {
+  color: var(--auth-error);
+  font-size: 0.9375rem;
+}

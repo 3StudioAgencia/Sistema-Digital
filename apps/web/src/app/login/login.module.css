@@ -1,0 +1,206 @@
+/* Tela de login (W1-C03). Mobile-first; ≥768px vira split com imagem.
+   Cores/raios/altura vêm dos tokens --auth-* (globals.css, extraídos do Figma). */
+
+.split {
+  min-height: 100svh;
+  background: var(--auth-bg);
+  color: var(--auth-text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Painel da imagem-herói: só no desktop. */
+.hero {
+  display: none;
+}
+
+.formArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 28px;
+}
+
+.panel {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wordmarkWrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 36px;
+}
+
+.wordmark {
+  height: 26px;
+  width: auto;
+}
+
+.title {
+  font-size: clamp(2.5rem, 11vw, 4rem); /* 40 → 64px (64px = Figma desktop) */
+  font-weight: 400;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.subtitle {
+  margin-top: 10px;
+  font-size: 1rem;
+  color: var(--auth-text-muted);
+  text-align: center;
+}
+
+.form {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  font-size: 1.125rem;
+  margin-bottom: 10px;
+}
+
+.field {
+  height: var(--auth-control-h);
+  width: 100%;
+  border: 2px solid transparent;
+  border-radius: var(--auth-radius-pill);
+  background: var(--auth-field);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0 22px;
+  margin-bottom: 20px;
+}
+
+.field::placeholder {
+  color: #6f6f6f;
+}
+
+/* Foco: estado instantâneo (sem animar — só transform/opacity são animáveis). */
+.field:focus-visible {
+  outline: none;
+  border-color: var(--auth-accent);
+}
+
+.field:disabled {
+  opacity: 0.6;
+}
+
+.forgot {
+  align-self: center;
+  background: none;
+  border: none;
+  color: var(--auth-text-faint);
+  font-size: 0.875rem;
+  font-weight: 300;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.hint {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--auth-text-faint);
+  margin-top: 6px;
+}
+
+.error {
+  text-align: center;
+  font-size: 0.9375rem;
+  color: var(--auth-error);
+  margin: 12px 0 2px;
+}
+
+.notice {
+  text-align: center;
+  font-size: 0.9375rem;
+  color: var(--auth-text-muted);
+  margin-top: 14px;
+}
+
+.submit {
+  height: var(--auth-control-h);
+  width: 100%;
+  margin-top: 18px;
+  border: none;
+  border-radius: var(--auth-radius-pill);
+  background: var(--auth-accent);
+  color: #000000;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.submit:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.footer {
+  margin-top: 36px;
+  text-align: center;
+  color: var(--auth-text-muted);
+  font-size: 1rem;
+}
+
+/* ---------------------- Desktop (≥768px): split ---------------------- */
+@media (min-width: 768px) {
+  .split {
+    flex-direction: row;
+  }
+
+  .hero {
+    display: block;
+    flex: 0 0 52%;
+    margin: 24px;
+    border-radius: 28px;
+    background-image: url("/login-bg.jpg");
+    background-size: cover;
+    background-position: center;
+  }
+
+  .formArea {
+    flex: 1;
+    align-items: flex-start;
+    padding: 64px clamp(40px, 6vw, 110px);
+  }
+
+  .panel {
+    max-width: 440px; /* largura do bloco no Figma */
+  }
+
+  .title {
+    font-size: 4rem;
+    text-align: left;
+  }
+
+  .subtitle {
+    font-size: 1.25rem;
+    text-align: left;
+  }
+
+  .label {
+    font-size: 1.25rem;
+  }
+
+  .forgot {
+    align-self: flex-start;
+  }
+
+  .submit {
+    font-size: 1.5rem;
+  }
+}

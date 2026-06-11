@@ -1,0 +1,90 @@
+/* Boas-vindas (mobile). Hero no topo com fade para o preto; bloco de texto +
+   CTA na base. No desktop a tela some (redireciona para /login). */
+
+.screen {
+  position: relative;
+  min-height: 100svh;
+  background: var(--auth-bg);
+  color: var(--auth-text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64%;
+  background-image: url("/login-bg.jpg");
+  background-size: cover;
+  background-position: center top;
+}
+
+/* Degradê de fusão da imagem para o preto (reproduz o inner-shadow do Figma). */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 35%, var(--auth-bg) 90%);
+}
+
+.content {
+  position: relative;
+  margin-top: auto;
+  padding: 0 32px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.wordmark {
+  height: 28px;
+  width: auto;
+}
+
+.title {
+  font-weight: 600;
+  font-size: clamp(2.75rem, 14vw, 3.5rem); /* até 56px (Figma) */
+  line-height: 1;
+  max-width: 16rem;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: var(--auth-text-muted);
+  margin-top: -2px;
+}
+
+.ctaWrap {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 18px;
+}
+
+.cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border-radius: var(--auth-radius-pill);
+  background: var(--auth-accent);
+  color: #000000;
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.cta:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* Boas-vindas é mobile-only: no desktop some (o efeito encaminha para /login). */
+@media (min-width: 768px) {
+  .screen {
+    display: none;
+  }
+}

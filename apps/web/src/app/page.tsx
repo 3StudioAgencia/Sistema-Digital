@@ -1,36 +1,21 @@
-import styles from "./page.module.css";
-import { ApiStatus } from "./_components/api-status";
+import { redirect } from "next/navigation";
+
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+
+// Usa cookies (getUser) → renderização dinâmica; nunca prerenderizada no build.
+export const dynamic = "force-dynamic";
 
 /**
- * Página de status da fundação (W0-C01).
+ * Raiz — porta de entrada (W1-C03 / DP-4, DP-7).
  *
- * Confirma que o build/deploy do frontend está saudável e mostra o estado da
- * API (health checks — RNF-024). As telas de domínio chegam nas waves 1+.
+ * Autenticado → /inicio. Não autenticado → /bem-vindo (que no mobile mostra as
+ * boas-vindas e no desktop encaminha para o /login em split). A proteção usa
+ * getUser() (valida no servidor de auth), nunca getSession() (§3.2).
  */
-export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.card}>
-        <p className={styles.kicker}>3Studio</p>
-        <h1 className={styles.title}>Rastreio de Provas Digitais</h1>
-        <p className={styles.subtitle}>
-          Fundação de infraestrutura (Wave 0 · C01) — monorepo, API FastAPI, banco PostgreSQL,
-          storage R2 e observabilidade prontos para as próximas waves.
-        </p>
-
-        <dl className={styles.meta}>
-          <div className={styles.metaItem}>
-            <dt>Ambiente do build</dt>
-            <dd>{process.env.NODE_ENV}</dd>
-          </div>
-          <div className={styles.metaItem}>
-            <dt>API configurada</dt>
-            <dd>{process.env.NEXT_PUBLIC_API_BASE_URL ?? "— (defina NEXT_PUBLIC_API_BASE_URL)"}</dd>
-          </div>
-        </dl>
-
-        <ApiStatus />
-      </main>
-    </div>
-  );
+export default async function Home() {
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  redirect(user ? "/inicio" : "/bem-vindo");
 }
