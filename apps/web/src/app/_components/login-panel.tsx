@@ -11,7 +11,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import styles from "../login/login.module.css";
 
 /**
- * Painel de login (cliente) — formulário controlado + entrada coreografada.
+ * Bloco do formulário de login (cliente) — wordmark, título, campos e botão,
+ * com entrada coreografada e microinterações.
  *
  * - signInWithPassword (Supabase Auth); em falha, mensagem GENÉRICA que não
  *   revela se errou e-mail ou senha (acceptance do Backlog C03 / §3.4).
@@ -32,19 +33,22 @@ export function LoginPanel({ expired }: { expired: boolean }) {
     hidden: {},
     show: {
       transition: {
-        staggerChildren: reduce ? 0 : 0.06,
+        staggerChildren: reduce ? 0 : 0.07,
         delayChildren: reduce ? 0 : 0.05,
       },
     },
   };
   const item: Variants = {
-    hidden: { opacity: 0, y: reduce ? 0 : 12 },
+    hidden: { opacity: 0, y: reduce ? 0 : 14 },
     show: {
       opacity: 1,
       y: 0,
       transition: { duration: reduce ? DURATION.instant : DURATION.long, ease: EASING.emphasized },
     },
   };
+  // Microinteração de foco: leve "respiro" do campo (transform — GPU).
+  const fieldFocus = reduce ? undefined : { scale: 1.015 };
+  const fieldTransition = { duration: reduce ? 0 : DURATION.micro, ease: EASING.standard };
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,7 +105,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         <label className={styles.label} htmlFor="email">
           E-mail:
         </label>
-        <input
+        <motion.input
           id="email"
           name="email"
           type="email"
@@ -111,12 +115,14 @@ export function LoginPanel({ expired }: { expired: boolean }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
+          whileFocus={fieldFocus}
+          transition={fieldTransition}
         />
 
         <label className={styles.label} htmlFor="senha">
           Senha:
         </label>
-        <input
+        <motion.input
           id="senha"
           name="senha"
           type="password"
@@ -126,6 +132,8 @@ export function LoginPanel({ expired }: { expired: boolean }) {
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           disabled={loading}
+          whileFocus={fieldFocus}
+          transition={fieldTransition}
         />
 
         <button type="button" className={styles.forgot} onClick={() => setHint(true)}>
@@ -149,6 +157,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
           disabled={loading}
           whileHover={reduce ? undefined : { scale: 1.02 }}
           whileTap={reduce ? undefined : { scale: 0.98 }}
+          transition={{ duration: reduce ? 0 : DURATION.micro, ease: EASING.standard }}
         >
           {loading ? "Entrando…" : "Entrar"}
         </motion.button>

@@ -1,7 +1,10 @@
-/* Tela de login (W1-C03). Mobile-first; ≥768px vira split com imagem.
+/* Tela de login (W1-C03).
+   - Desktop (>=768px): split — herói com FORMATO CUSTOM (máscara SVG) + formulário.
+   - Mobile: boas-vindas (overlay) -> formulário, no mesmo /login.
    Cores/raios/altura vêm dos tokens --auth-* (globals.css, extraídos do Figma). */
 
-.split {
+.page {
+  position: relative;
   min-height: 100svh;
   background: var(--auth-bg);
   color: var(--auth-text);
@@ -9,11 +12,21 @@
   flex-direction: column;
 }
 
-/* Painel da imagem-herói: só no desktop. */
+/* ---------------- Herói (desktop) — formato custom via máscara ---------------- */
 .hero {
-  display: none;
+  display: none; /* mobile usa o herói próprio das boas-vindas */
 }
 
+.heroImg {
+  position: absolute;
+  inset: -6%; /* maior que o container: o parallax desloca sem revelar bordas */
+  background-image: url("/login-bg.jpg");
+  background-size: cover;
+  background-position: center;
+  will-change: transform;
+}
+
+/* ---------------- Área do formulário ---------------- */
 .formArea {
   flex: 1;
   display: flex;
@@ -42,7 +55,7 @@
 }
 
 .title {
-  font-size: clamp(2.5rem, 11vw, 4rem); /* 40 → 64px (64px = Figma desktop) */
+  font-size: clamp(2.5rem, 11vw, 4rem); /* 40 -> 64px (64px = Figma desktop) */
   font-weight: 400;
   line-height: 1.05;
   text-align: center;
@@ -83,7 +96,7 @@
   color: #6f6f6f;
 }
 
-/* Foco: estado instantâneo (sem animar — só transform/opacity são animáveis). */
+/* Foco: anel instantâneo (a suavidade vem do scale via Framer Motion). */
 .field:focus-visible {
   outline: none;
   border-color: var(--auth-accent);
@@ -137,6 +150,7 @@
   font-size: 1.25rem;
   font-weight: 400;
   cursor: pointer;
+  will-change: transform;
 }
 
 .submit:disabled {
@@ -156,30 +170,119 @@
   font-size: 1rem;
 }
 
-/* ---------------------- Desktop (≥768px): split ---------------------- */
+/* ---------------- Boas-vindas (overlay mobile) ---------------- */
+.welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--auth-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.welcomeHero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64%;
+  background-image: url("/login-bg.jpg");
+  background-size: cover;
+  background-position: center top;
+}
+
+/* Fusão da imagem para o preto (reproduz o inner-shadow do Figma). */
+.welcomeHero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 35%, var(--auth-bg) 90%);
+}
+
+.welcomeContent {
+  position: relative;
+  margin-top: auto;
+  padding: 0 32px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.welcomeWordmark {
+  height: 28px;
+  width: auto;
+}
+
+.welcomeTitle {
+  font-weight: 600;
+  font-size: clamp(2.75rem, 14vw, 3.5rem); /* até 56px (Figma) */
+  line-height: 1;
+  max-width: 16rem;
+}
+
+.welcomeSubtitle {
+  font-size: 1rem;
+  color: var(--auth-text-muted);
+  margin-top: -2px;
+}
+
+.welcomeCta {
+  margin-top: 18px;
+  width: 100%;
+  max-width: 360px;
+  height: 52px;
+  border: none;
+  border-radius: var(--auth-radius-pill);
+  background: var(--auth-accent);
+  color: #000000;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 400;
+  cursor: pointer;
+  will-change: transform;
+}
+
+.welcomeCta:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* ---------------------- Desktop (>=768px): split ---------------------- */
 @media (min-width: 768px) {
-  .split {
+  .page {
     flex-direction: row;
+  }
+
+  /* boas-vindas é mobile-only */
+  .welcome {
+    display: none;
   }
 
   .hero {
     display: block;
+    position: relative;
     flex: 0 0 52%;
     margin: 24px;
-    border-radius: 28px;
-    background-image: url("/login-bg.jpg");
-    background-size: cover;
-    background-position: center;
+    overflow: hidden;
+    /* Formato custom EXATO do Figma (rounded trapezoid) via máscara SVG. */
+    -webkit-mask-image: url("/login-shape.svg");
+    mask-image: url("/login-shape.svg");
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
   }
 
   .formArea {
-    flex: 1;
     align-items: flex-start;
     padding: 64px clamp(40px, 6vw, 110px);
   }
 
   .panel {
-    max-width: 440px; /* largura do bloco no Figma */
+    max-width: 440px;
   }
 
   .title {

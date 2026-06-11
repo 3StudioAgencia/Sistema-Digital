@@ -17,23 +17,37 @@ test.describe("Login e sessão (W1-C03)", () => {
     await page.screenshot({ path: "e2e/__screenshots__/login-desktop.png", fullPage: true });
   });
 
-  test("mobile: boas-vindas → Entrar leva ao login", async ({ page }) => {
+  test("mobile: boas-vindas aparecem primeiro; Entrar revela o login (mesmo /login)", async ({
+    page,
+  }) => {
     await page.setViewportSize(MOBILE);
-    await page.goto("/bem-vindo");
-    await expect(page.getByRole("heading", { name: "Seja bem vindo!" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Seja bem vindo!" })).toHaveCSS("opacity", "1");
+    await page.goto("/login");
+
+    // Boas-vindas PRIMEIRO no mobile (overlay sobre o formulário).
+    const welcome = page.getByRole("region", { name: "Boas-vindas" });
+    await expect(welcome).toBeVisible();
+    const welcomeTitle = welcome.getByRole("heading", { name: "Seja bem vindo!" });
+    await expect(welcomeTitle).toBeVisible();
+    await expect(welcomeTitle).toHaveCSS("opacity", "1"); // espera a entrada assentar
     await page.screenshot({ path: "e2e/__screenshots__/bem-vindo-mobile.png", fullPage: true });
 
-    await page.getByRole("link", { name: "Entrar" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    // Só ao clicar em "Entrar" o formulário é revelado (sem trocar de URL).
+    await welcome.getByRole("button", { name: "Entrar" }).click();
+    await expect(welcome).toBeHidden();
     await expect(page.getByRole("heading", { name: "Fazer login" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Fazer login" })).toHaveCSS("opacity", "1");
+    await expect(page).toHaveURL(/\/login$/);
     await page.screenshot({ path: "e2e/__screenshots__/login-mobile.png", fullPage: true });
   });
 
   test("mobile: touch targets ≥ 44px (RNF-013)", async ({ page }) => {
     await page.setViewportSize(MOBILE);
     await page.goto("/login");
+    // Revela o formulário (sai das boas-vindas) antes de medir os controles.
+    await page
+      .getByRole("region", { name: "Boas-vindas" })
+      .getByRole("button", { name: "Entrar" })
+      .click();
+    await expect(page.getByRole("heading", { name: "Fazer login" })).toBeVisible();
     for (const sel of ['input[name="email"]', 'input[name="senha"]', 'button[type="submit"]']) {
       const box = await page.locator(sel).boundingBox();
       expect(box, sel).not.toBeNull();

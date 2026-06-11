@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
 import "./globals.css";
@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   title: "Rastreio de Provas Digitais · 3Studio",
   description:
     "Controle e rastreabilidade do fluxo físico-digital de provas de impressão — da criação à clicheria.",
+};
+
+// Garante layout responsivo correto no mobile (sem isso, browsers móveis
+// assumem ~980px e o breakpoint de desktop dispararia no celular).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

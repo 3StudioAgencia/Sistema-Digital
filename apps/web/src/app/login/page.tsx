@@ -2,18 +2,16 @@ import { redirect } from "next/navigation";
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-import { LoginPanel } from "../_components/login-panel";
-import styles from "./login.module.css";
+import { AuthFlow } from "../_components/auth-flow";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Tela de login (W1-C03) — adaptativa:
- * - desktop (≥768px): split com a imagem-herói à esquerda e o formulário à direita;
- * - mobile: formulário em coluna centrada sobre fundo preto.
+ * Tela de login (W1-C03) — experiência adaptativa em `<AuthFlow>`:
+ * - desktop (>=768px): split com a imagem-herói (formato custom) + formulário;
+ * - mobile: boas-vindas primeiro e o formulário ao clicar em "Entrar" (mesmo /login).
  *
- * Já autenticado → /inicio. O notice de inatividade chega por ?expirado=1 (DP-3),
- * lido aqui no servidor e repassado ao painel (evita useSearchParams/Suspense).
+ * Já autenticado → /inicio. O notice de inatividade chega por ?expirado=1 (DP-3).
  */
 export default async function LoginPage({
   searchParams,
@@ -27,13 +25,5 @@ export default async function LoginPage({
   if (user) redirect("/inicio");
 
   const sp = await searchParams;
-
-  return (
-    <div className={styles.split}>
-      <div className={styles.hero} aria-hidden="true" />
-      <div className={styles.formArea}>
-        <LoginPanel expired={sp.expirado === "1"} />
-      </div>
-    </div>
-  );
+  return <AuthFlow expired={sp.expirado === "1"} />;
 }
