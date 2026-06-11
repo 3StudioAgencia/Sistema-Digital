@@ -66,3 +66,25 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url)
+
+
+def test_downgrade_em_producao_preserva_extensao_compartilhada(
+    alembic_cfg: Config, database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W0-A-014: em ambiente gerenciado (staging/produção) o downgrade NÃO dropa
+    pgcrypto (extensão compartilhada do Supabase) — só desfaz o registro da
+    revisão. O ciclo de dev/test (teste acima) continua removendo a extensão."""
+    command.downgrade(alembic_cfg, "base")
+    command.upgrade(alembic_cfg, "head")
+    assert _pgcrypto_instalada(database_url)
+
+    monkeypatch.setenv("APP_ENV", "production")
+    command.downgrade(alembic_cfg, "base")
+
+    assert _pgcrypto_instalada(database_url), "produção: extensão compartilhada preservada"
+    assert _scalar(database_url, "SELECT count(*) FROM alembic_version") == 0, (
+        "o registro da revisão é desfeito mesmo sem dropar a extensão"
+    )
+
+    # Deixa o banco no estado limpo esperado pelos demais testes
+    command.upgrade(alembic_cfg, "head")

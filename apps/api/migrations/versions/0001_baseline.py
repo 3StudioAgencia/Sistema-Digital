@@ -12,6 +12,7 @@ Revises:
 Create Date: 2026-06-10
 """
 
+import os
 from collections.abc import Sequence
 
 from alembic import op
@@ -27,7 +28,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Atenção em ambientes gerenciados (Supabase): a extensão pode ser
-    # compartilhada com outros recursos. O downgrade existe para validar o
-    # ciclo completo em ambiente limpo (critério de aceitação §5.1).
-    op.execute("DROP EXTENSION IF EXISTS pgcrypto")
+    # Downgrade defensivo (W0-A-014): o upgrade é no-op em ambiente gerenciado
+    # (Supabase) — a extensão já existe e é COMPARTILHADA. Remover
+    # incondicionalmente dropa um recurso que esta migration não criou (ou falha
+    # por dependência RESTRICT). Só desfaz em dev/test, onde o ciclo completo
+    # (upgrade→downgrade→upgrade) é validado em banco limpo; em staging/produção
+    # é no-op — desfaz apenas o registro da revisão.
+    app_env = os.environ.get("APP_ENV", "dev").strip().lower()
+    if app_env in ("dev", "test"):
+        op.execute("DROP EXTENSION IF EXISTS pgcrypto")
