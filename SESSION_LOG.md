@@ -32,6 +32,58 @@
 
 ---
 
+## Sessão 04 — 2026-06-11 — [Wave 0 / W0-REMEDIATION] Remediação da Wave 0
+
+**Objetivo:** Corrigir os achados da auditoria (`docs/audits/wave-0-audit.md`) por severidade/dependência, com teste por correção e **gate de re-verificação**, sem regressão nem escopo novo (escopo de `PROMPTS/W0-REMEDIATION-remediacao.md`).
+
+**Feito:**
+- **29/29 achados endereçados** (0 Blocker · 0 High · 2 Medium · 16 Low · 11 Nit): **26 Resolvidos**, **1 Resolvido documental** (W0-A-018 → ADR-017, código na Wave 2), **1 Ação do responsável** (W0-A-001), **1 Parcial + dívida** (W0-A-029).
+- **Medium:** W0-A-002 — CI dispara em push para `develop` (decisão do responsável); W0-A-001 — o responsável **cadastrará o secret** `KEEPALIVE_DATABASE_URL` (workflow mantido fail-loud, correto após o secret existir).
+- **Robustez/observabilidade:** log da causa no readiness/`ping`/storage (003), R2 com timeouts (004), keep-alive sem vazar credencial na carga de config (005), `LOG_LEVEL` validado no boot (013), hermeticidade total da suíte vs. env de shell (012), downgrade defensivo da baseline (014).
+- **Segurança HTTP:** guarda CORS curinga (015), security headers nosniff/no-store (016), whitelist de `X-Request-ID` (023), SHA-pinning de actions + Dependabot (008).
+- **Frontend:** validação de shape + `error.tsx` (017). **Workflows:** permissions/concurrency/format:check/--no-dev (009/010/011/024). **Docs/ADRs:** emenda ADR-013 (007), ADR-017 (018), keep-alive §6 (006), `.env.example` (020/021), CLAUDE §5.1 (019), README (028); nits (022/025/026/027/029).
+- Suíte **70 → 88 testes**, cobertura **100%** mantida. Log completo em `docs/audits/wave-0-remediation.md`.
+
+**Decisões (ADRs):**
+- **ADR-017** (novo): lar das implementações de porta de DB = `adapters/outbound/db/` (UoW move na Wave 2). **ADR-013 emendada** (catch-all = `ErrorHandlingMiddleware` interno ao CORS). **ADR-016** checklist: parte CI resolvida (`develop` nos gatilhos de push); secret = ação do responsável.
+
+**Testes / cobertura:**
+- **Gate de re-verificação (§5) VERDE:** ruff + ruff format + mypy strict; ciclo Alembic `upgrade→downgrade→upgrade` (PostgreSQL 16.9 real, porta 5433); **88 passed, cobertura 100%** (`REQUIRE_DB_TESTS=1`); keep-alive `exit 0`; domínio limpo; varredura de segredos limpa; `pnpm install/lint/format:check/build` verdes; lockfiles versionados.
+
+**Pendências / em aberto:**
+- [ ] **W0-A-001 (responsável):** cadastrar `KEEPALIVE_DATABASE_URL` no GitHub (Settings → Secrets and variables → Actions) e validar via `workflow_dispatch`. Até lá o cron diário falha e o Supabase fica desprotegido.
+- [ ] **Dívida W0-A-029:** pinar as imagens base do `Dockerfile` por digest ao definir a plataforma de deploy (ADR-009).
+- [ ] **W0-A-018:** mover `SqlAlchemyUnitOfWork` para `adapters/outbound/db/` na Wave 2 (C06).
+- [ ] (Herdada) `apps/web/public/` untracked (assets do W1-C03); confirmar plataformas de deploy (ADR-009).
+
+**Próximo passo:**
+- **Wave 1 · W1-C03 · Tela de Login e Sessão** na branch `develop`.
+
+**Definition of Done:** ✅ Gate verde; correções testadas e aderentes ao `CLAUDE.md`; sem regressão; sem segredos versionados; protocolo de encerramento executado.
+
+---
+
+## Sessão 03 — 2026-06-11 — [Wave 0 / W0-AUDIT] Auditoria read-only da Wave 0
+
+**Objetivo:** Auditoria independente e somente-leitura dos componentes W0-C01 e W0-C02 (escopo de `PROMPTS/W0-AUDIT-auditoria.md`) — inspecionar, verificar e relatar, **sem corrigir nada**.
+
+**Feito:**
+- Verificações executáveis contra **PostgreSQL 17.10 real** (binários portáteis, porta 5433; env sobrescrita — Supabase real intocado): ruff + ruff format ✅ · mypy strict ✅ · pytest offline (70 passed/6 skip, 98,81%) ✅ · pytest com `REQUIRE_DB_TESTS=1` (**76 passed, cobertura 100%**) ✅ · ciclo Alembic `upgrade→downgrade→upgrade` em banco limpo ✅ · keep-alive sucesso (`exit 0`) e falha controlada (`exit 1`, sem vazar credencial) ✅ · smoke test da API (`/health` 200, `/health/ready` 503 `degraded` sem R2, `/docs` 200, `X-Request-ID` propagado) ✅ · pnpm lint/build ✅ · varredura de segredos limpa ✅.
+- Auditoria multi-agente: 12 auditores por dimensão (§4.1–4.12 + 2 varreduras extras) × verificação adversarial cética de cada achado (48 agentes). 36 achados brutos → **29 únicos** após deduplicação.
+- **Relatório entregue:** `docs/audits/wave-0-audit.md` (matriz de conformidade C01 §5/C02 §5/DoD, 29 achados com ID estável `W0-A-001`…`W0-A-029`, lista priorizada de remediação, apêndice de evidências).
+
+**Veredito:** **Wave 0 apta a servir de base à Wave 1 — continuidade NÃO bloqueada.** Contagem: **0 Blocker · 0 High · 2 Medium · 16 Low · 11 Nit**. Os 2 Medium são handoffs operacionais já registrados no ADR-016 e ainda não executados: **W0-A-001** (cron do keep-alive armado na branch padrão **sem** o secret `KEEPALIVE_DATABASE_URL` → falha diária + Supabase real desprotegido, pausa possível ~2026-06-18) e **W0-A-002** (CI não dispara em push para `develop` — o HEAD da branch de integração nunca rodou no CI do GitHub).
+
+**Pendências / em aberto:**
+- [ ] Executar a **sessão de remediação da Wave 0** consumindo `docs/audits/wave-0-audit.md` (ordem sugerida no §5 do relatório; começar por W0-A-001/W0-A-002).
+
+**Próximo passo:**
+- **Sessão de remediação da Wave 0** consumindo `docs/audits/wave-0-audit.md`. (A Wave 1 / W1-C03 segue na fila após a remediação dos itens Medium.)
+
+**Definition of Done:** N/A (sessão de auditoria — protocolo leve do prompt W0-AUDIT §8: relatório salvo + esta entrada; `CHANGELOG.md`/`DECISIONS.md`/código intocados por regra).
+
+---
+
 ## Sessão 02 — 2026-06-11 — [Wave 0 / Componente C02] Cron Job de Keep-Alive
 
 **Objetivo:** Entregar o keep-alive que impede a pausa do Supabase no free tier (>7 dias sem requisições): rotina read-only de *ping*, workflow agendado, alerta de falha e docs — reutilizando a infra do C01 (escopo de `PROMPTS/W0-C02-keep-alive.md`).
