@@ -4,14 +4,15 @@ Envelope canônico de erro (todas as respostas de erro da API)::
 
     { "error": { "code": "<slug>", "message": "<texto seguro>", "request_id": "<id>" } }
 
-Decisões:
+Decisões (ADR-013, com a emenda da revisão adversarial):
 - Stack traces NUNCA chegam ao cliente; ficam no log estruturado (nível CRITICAL
   para erros não tratados), correlacionados pelo request_id.
-- O catch-all de exceções roda DENTRO do ``RequestIdMiddleware`` (não no handler
-  genérico do Starlette): o handler genérico executa fora do escopo do
-  ``ContextVar``, o que perderia a correlação exatamente no log mais importante.
-  O handler genérico continua registrado como rede de segurança de última
-  instância (ex.: exceção em middleware acima do nosso).
+- O catch-all de exceções roda no ``ErrorHandlingMiddleware`` (INTERNO ao
+  ``CORSMiddleware``), para que o envelope 500 saia COM os headers CORS — sem
+  eles um frontend cross-origin veria um erro de rede opaco e perderia o
+  request_id. O ``RequestIdMiddleware`` (mais externo) e o handler genérico do
+  Starlette permanecem como redes de segurança de última instância (ambos
+  delegam à mesma função). Ver ``app.py`` para a ordem dos middlewares.
 """
 
 import logging
@@ -38,8 +39,8 @@ def error_envelope(code: str, message: str, request_id: str | None) -> dict[str,
 def log_and_build_internal_error_response(request: Request, exc: Exception) -> JSONResponse:
     """Loga a exceção não tratada em CRITICAL e devolve o envelope 500 genérico.
 
-    Chamado pelo ``RequestIdMiddleware`` (caminho principal) e pelo handler
-    genérico (rede de segurança).
+    Chamado pelo ``ErrorHandlingMiddleware`` (caminho principal, interno ao CORS)
+    e pelas redes de segurança (``RequestIdMiddleware`` e o handler genérico).
     """
     request_id = request_id_var.get()
     logger.critical(

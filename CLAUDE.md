@@ -104,6 +104,7 @@ rastreio-provas-digitais/
 │   │   │   │   ├── inbound/http/ # Routers FastAPI, middlewares
 │   │   │   │   └── outbound/     # DB (SQLAlchemy), storage (R2/boto3), auth (PyJWT)
 │   │   │   ├── infrastructure/   # config, database, logging, app factory
+│   │   │   ├── tasks/            # Drivers de tarefas agendadas (keep_alive — W0-C02)
 │   │   │   └── main.py           # Composition root (injeção de dependências)
 │   │   ├── migrations/
 │   │   │   ├── versions/         # Migrations Alembic

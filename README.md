@@ -45,7 +45,7 @@ Detalhamento completo da arquitetura em [`CLAUDE.md §5`](./CLAUDE.md).
 - **Docker** (Postgres local para dev/testes — opcional: a suíte roda offline sem ele)
 - Contas: **Supabase** (projeto) e **Cloudflare R2** (bucket) — provisionamento em [`docs/setup-infra.md`](./docs/setup-infra.md)
 
-> A definição final de gerenciadores de pacote e plataformas de deploy é revisável — ver `DECISIONS.md` ADR-009/ADR-010.
+> As **plataformas de deploy** ainda são revisáveis (ADR-009, *Proposta*); os **gerenciadores de pacote** (`uv`/`pnpm`) já estão **confirmados** (ADR-010, *Aceita*). Ver `DECISIONS.md`.
 
 ---
 

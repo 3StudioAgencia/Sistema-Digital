@@ -81,8 +81,9 @@
 
 ## ADR-013 — Catch-all de exceções DENTRO do middleware de request-id (W0-C01)
 - **Contexto:** O handler genérico de `Exception` do Starlette roda no `ServerErrorMiddleware`, FORA do escopo do `ContextVar` de request_id — o log CRITICAL do erro não tratado sairia sem correlação (e o Starlette re-levanta a exceção após responder).
-- **Decisão:** O `RequestIdMiddleware` captura `Exception` em volta do `call_next` e delega a `log_and_build_internal_error_response()` (em `errors.py`): log CRITICAL **correlacionado** + envelope JSON 500 padronizado, sem stack trace ao cliente. O handler genérico permanece registrado como rede de segurança de última instância. Envelope canônico de erro: `{"error": {"code", "message", "request_id"}}`.
-- **Status:** Aceita (W0-C01).
+- **Decisão:** O catch-all delega a `log_and_build_internal_error_response()` (em `errors.py`): log CRITICAL **correlacionado** + envelope JSON 500 padronizado, sem stack trace ao cliente. Envelope canônico de erro: `{"error": {"code", "message", "request_id"}}`.
+- **Status:** Aceita (W0-C01) — **emendada** (ver abaixo).
+- **Emenda (revisão adversarial W0-C01, formalizada na remediação — W0-A-007):** o catch-all **principal** passou a ser um `ErrorHandlingMiddleware` dedicado, posicionado **interno ao `CORSMiddleware`**, para que o envelope 500 saia **com** os headers CORS (sem eles, um frontend cross-origin veria erro de rede opaco e perderia o `request_id`). O `RequestIdMiddleware` (mais externo, que popula o `ContextVar`) e o handler genérico do Starlette permanecem como **redes de segurança** — todos delegam à mesma função. Ordem dos middlewares, de dentro para fora: **ErrorHandling → CORS → RequestId** (ver `apps/api/src/adapters/inbound/http/app.py`). Esta emenda só corrige a documentação (a arquitetura em três camadas já estava no código desde o W0-C01).
 - **Consequências:** Toda resposta (inclusive 500) carrega `X-Request-ID`; access log uniforme. Handlers de `HTTPException`/`RequestValidationError` usam o mesmo envelope.
 
 ## ADR-014 — Fundação do frontend: Next 16 pinado, build hermético (W0-C01)
@@ -103,6 +104,13 @@
 - **Decisão:** **gitflow leve** — `main` = linha **estável**; `develop` = **integração** (branch **padrão** no GitHub, onde os componentes seguem). Commits em Conventional Commits com escopo por componente; quando houver fluxo de PR, os PRs apontam para `develop`. Push via **HTTPS + Git Credential Manager** (o ambiente de dev **não tem `gh`**; operações de repositório pelo Git/UI do GitHub).
 - **Status:** **Aceita** (W0-C02) — `main` e `develop` enviadas em `abc293c`.
 - **Consequências:** (1) a CI (`.github/workflows/ci.yml`) hoje dispara em `push` para `main` **e** em `pull_request` — pushes diretos em `develop` **NÃO** acionam a CI; decidir se `develop` entra nos gatilhos de push ou se o fluxo será sempre por PR. (2) O **workflow agendado do keep-alive roda a partir da branch padrão (`develop`)** — exige o secret `KEEPALIVE_DATABASE_URL` configurado, senão a execução diária falha (ADR-015). (3) O nome do repo no GitHub (`Sistema-Digital`) **difere** do slug canônico interno (`rastreio-provas-digitais`, CLAUDE.md §1).
+- **Resolução da consequência (1) (remediação W0 — W0-A-002):** `develop` foi adicionado aos gatilhos de `push` do `ci.yml` (`branches: [main, develop]`) — todo push na branch de integração passa pela CI. Mantém-se livre adotar também branch protection + PR no futuro.
+
+## ADR-017 — Lar das implementações de porta de DB: `adapters/outbound/db/` (remediação W0)
+- **Contexto:** O `SqlAlchemyUnitOfWork` (implementação da porta `application/ports/unit_of_work.py`) nasceu em `infrastructure/database.py` por instrução do prompt W0-C01. Isso criou **dois lares** para implementações de porta: o `StoragePort` é implementado em `adapters/outbound/storage/`, mas a porta de DB ficou em `infrastructure/`. A ambiguidade se materializaria na Wave 2, quando os repositórios SQLAlchemy concretos precisarem de um lar (W0-A-018).
+- **Decisão:** As **implementações de porta** de banco — `SqlAlchemyUnitOfWork` e os futuros repositórios concretos — passam a viver em **`apps/api/src/adapters/outbound/db/`**, espelhando `adapters/outbound/storage/`. O `infrastructure/database.py` mantém apenas a **infra de conexão** (factories de engine/sessão, `fetch_db_time`, `ping`) — wiring, não adapter. A direção de dependência já está correta (infra/adapter → `application.ports`, para dentro); muda só a colocação.
+- **Status:** **Aceita** — resolvida **documentalmente** na remediação da Wave 0. A movimentação física do `SqlAlchemyUnitOfWork` e a criação de `adapters/outbound/db/` acontecem **junto com o primeiro repositório concreto, na Wave 2 (C06)** — não se move código agora para não tocar a fundação fora de escopo.
+- **Consequências:** Convenção única para implementações de porta. A Wave 2 cria `adapters/outbound/db/` e move a UoW para lá no mesmo PR dos primeiros repositórios; o ponto de extensão de RLS (ADR-008) acompanha a UoW. O mapeamento do CLAUDE.md §5.1 ("DB (SQLAlchemy) → adapters/outbound/") passa a valer também para a UoW.
 
 ---
 
@@ -112,4 +120,5 @@
 - [ ] ADR-009 — confirmar plataformas de deploy com o responsável (CI/Dockerfile prontos e agnósticos).
 - [x] ADR-010 — confirmado: `uv` 0.11 + `pnpm` 11 no ambiente alvo (W0/C01).
 - [x] ADR-015 — keep-alive externo entregue e validado em execução real (W0/C02).
-- [ ] ADR-016 — decidir gatilhos de CI para `develop` (push direto vs PR) e cadastrar o secret `KEEPALIVE_DATABASE_URL` no GitHub.
+- [x] ADR-016 (parte CI) — **resolvido na remediação W0 (W0-A-002):** `develop` adicionado aos gatilhos de `push` do `ci.yml`. (Branch protection + PR continua opcional para o futuro.)
+- [ ] ADR-016 (parte secret) — **ação do responsável (W0-A-001):** cadastrar o secret `KEEPALIVE_DATABASE_URL` no GitHub (Settings → Secrets and variables → Actions) e validar via `workflow_dispatch` — sem ele o cron diário do keep-alive falha e o Supabase fica desprotegido contra a pausa de 7 dias.

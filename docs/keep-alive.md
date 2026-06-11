@@ -142,9 +142,10 @@ Em camadas, do baseline ao opcional:
        modo session** (`postgres.<ref>@aws-1-<região>.pooler.supabase.com:5432`)
        é a opção mais portável e suporta o `SELECT` one-shot (ADR-007, emenda).
 2. **Secret opcional (alerta):** `ALERT_WEBHOOK_URL` com a URL do webhook.
-3. **Habilitar o workflow.** Em repositórios novos os workflows agendados já
-   ficam ativos no push para `main`. Confirme em **Actions → Keep-Alive
-   (Supabase)**.
+3. **Habilitar o workflow.** Workflows agendados do GitHub executam a versão do
+   arquivo na **branch padrão** do repositório — aqui **`develop`** (ADR-016),
+   **não** `main`. Alterações de cadência (cron) só têm efeito quando feitas na
+   branch padrão. Confirme o estado em **Actions → Keep-Alive (Supabase)**.
 4. **Validar manualmente** (não esperar até as 06:00): **Actions → Keep-Alive
    (Supabase) → Run workflow** (`workflow_dispatch`). Veja o log JSON
    `status="ok"` e o run verde.
