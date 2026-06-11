@@ -9,8 +9,20 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # develop é a branch de integração padrão (ADR-016): todo push nela passa
+    # pela CI, fechando o gap "verde no CI" da DoD (W0-A-002).
+    branches: [main, develop]
   pull_request:
+
+# Least privilege: o CI só faz checkout/lint/teste/build (W0-A-010).
+permissions:
+  contents: read
+
+# Cancela runs supersedidos da mesma ref — relevante agora que develop entra
+# nos gatilhos de push; economiza minutos do free tier (W0-A-024).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   api:
@@ -42,10 +54,10 @@ jobs:
       # No CI, banco indisponível é FALHA (localmente os testes @db fazem skip)
       REQUIRE_DB_TESTS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Instalar uv (com cache do lockfile)
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
@@ -84,17 +96,17 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Instalar pnpm (versão do campo packageManager)
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           # defaults.run.working-directory não se aplica a steps `uses:` —
           # apontar o manifesto explicitamente (única fonte da versão do pnpm)
           package_json_file: apps/web/package.json
 
       - name: Instalar Node (com cache do pnpm)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -105,6 +117,11 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Formatação (Prettier)
+        # Paridade com o gate de formato do job api (ruff format --check):
+        # drift de Prettier também barra o CI (W0-A-011).
+        run: pnpm format:check
 
       - name: Build
         run: pnpm build
@@ -121,7 +138,7 @@ jobs:
 #     if: github.ref == 'refs/heads/main'
 #     runs-on: ubuntu-latest
 #     steps:
-#       - uses: actions/checkout@v4
+#       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 #       # Vercel: vincule o projeto (vercel link) e cadastre os secrets
 #       #   VERCEL_TOKEN · VERCEL_ORG_ID · VERCEL_PROJECT_ID
 #       # As variáveis NEXT_PUBLIC_* são configuradas no painel da Vercel.
@@ -132,10 +149,11 @@ jobs:
 #     if: github.ref == 'refs/heads/main'
 #     runs-on: ubuntu-latest
 #     steps:
-#       - uses: actions/checkout@v4
+#       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 #       # A API é um container portável (apps/api/Dockerfile) — qualquer host serve.
 #       # Exemplo Fly.io (secrets: FLY_API_TOKEN; app criada com `fly launch`):
-#       #   - uses: superfly/flyctl-actions/setup-flyctl@master
+#       #   - uses: superfly/flyctl-actions/setup-flyctl@<sha> # pinar por SHA
+#       #     (NÃO @master/@branch — supply chain; W0-A-008) ao ativar o deploy
 #       #   - run: flyctl deploy --remote-only -c apps/api/fly.toml
 #       #     env: { FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }} }
 #       # O passo de release do host DEVE rodar `alembic upgrade head` (e aplicar

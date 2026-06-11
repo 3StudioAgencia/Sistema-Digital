@@ -49,16 +49,18 @@ jobs:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Instalar uv (com cache do lockfile)
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
 
-      - name: Instalar dependências (pinadas pelo lockfile)
-        run: uv sync --frozen
+      - name: Instalar dependências mínimas (sem o grupo dev)
+        # O ping é só config/logging/database; o grupo dev (pytest/mypy/ruff/
+        # moto) não é usado neste job — --no-dev evita resolvê-lo (W0-A-009).
+        run: uv sync --frozen --no-dev
 
       - name: Keep-alive ping (read-only)
         env:
@@ -70,7 +72,9 @@ jobs:
           DATABASE_URL: ${{ secrets.KEEPALIVE_DATABASE_URL }}
           APP_ENV: production
           LOG_LEVEL: INFO
-        run: uv run python -m src.tasks.keep_alive
+        # --no-dev também aqui: sem ele, `uv run` re-sincronizaria o grupo dev
+        # antes de executar, anulando o --no-dev do passo de instalação (W0-A-009).
+        run: uv run --no-dev python -m src.tasks.keep_alive
 
       - name: Alerta de falha (opcional — só posta se o webhook existir)
         # Dispara apenas quando um passo anterior falhou. O secret NÃO pode ser
