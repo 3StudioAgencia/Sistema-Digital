@@ -8,6 +8,7 @@ boto3 é síncrono; quem chama a partir de código async usa threadpool — ver 
 nota de desenho em ``src/application/ports/storage.py``.
 """
 
+import logging
 from typing import Any, cast
 
 import boto3
@@ -16,6 +17,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from src.application.ports.storage import StorageError, StorageObjectNotFound, StoragePort
 from src.infrastructure.config import Settings
+
+logger = logging.getLogger("rastreio.storage.r2")
 
 # boto3 não publica stubs oficiais — o Any fica contido neste módulo (fronteira tipada)
 S3Client = Any
@@ -49,7 +52,18 @@ class R2Storage(StoragePort):
             aws_secret_access_key=settings.r2_secret_access_key.get_secret_value(),
             # R2 usa region "auto" e exige SigV4
             region_name="auto",
-            config=BotoConfig(signature_version="s3v4", retries={"max_attempts": 3}),
+            config=BotoConfig(
+                signature_version="s3v4",
+                # Timeouts explícitos alinhados ao orçamento do readiness (5s).
+                # Sem eles o botocore usa 60s+60s por tentativa e a thread do
+                # threadpool ficaria presa muito além do `wait_for` do health
+                # check (W0-A-004). max_attempts=1 mantém o tempo total da
+                # chamada perto do orçamento; a Wave 2 calibra a política de
+                # retry própria para upload/download quando eles existirem.
+                connect_timeout=5,
+                read_timeout=5,
+                retries={"max_attempts": 1},
+            ),
         )
         return cls(client=client, bucket=settings.r2_bucket)
 
@@ -89,6 +103,12 @@ class R2Storage(StoragePort):
     def health(self) -> bool:
         try:
             self._client.head_bucket(Bucket=self._bucket)
-        except (ClientError, BotoCoreError):
+        except (ClientError, BotoCoreError) as exc:
+            # Readiness reportará "down"; registre a causa (RNF-024) — só o tipo
+            # da exceção, nunca a mensagem do driver (pode conter endpoint/credencial).
+            logger.warning(
+                "health check do storage falhou",
+                extra={"event": "storage_health_failed", "error_type": type(exc).__name__},
+            )
             return False
         return True

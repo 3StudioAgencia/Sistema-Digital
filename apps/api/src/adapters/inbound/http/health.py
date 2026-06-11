@@ -12,6 +12,7 @@ o que permite aos testes substituí-las por fakes sem tocar em rede.
 """
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
@@ -21,6 +22,8 @@ from fastapi.responses import JSONResponse
 
 from src.application.ports.storage import StoragePort
 from src.infrastructure.config import APP_VERSION, Settings
+
+logger = logging.getLogger("rastreio.http.health")
 
 router = APIRouter(tags=["health"])
 
@@ -32,10 +35,26 @@ CheckResult = Literal["ok", "down"]
 DbPing = Callable[[], Awaitable[bool]]
 
 
+def _log_check_failure(dependency: str, exc: BaseException) -> None:
+    # Timeout/erro inesperado no check vira "down"; deixe rastro diagnóstico
+    # (RNF-024). Só o tipo da exceção — nunca str(exc). A causa de uma falha de
+    # conexão "normal" já é logada na própria dependência (ping/health); aqui
+    # cobrimos o estouro do orçamento (TimeoutError) e erros não previstos.
+    logger.warning(
+        "verificação de dependência no readiness falhou",
+        extra={
+            "event": "readiness_check_failed",
+            "dependency": dependency,
+            "error_type": type(exc).__name__,
+        },
+    )
+
+
 async def _check_database(ping: DbPing) -> CheckResult:
     try:
         ok = await asyncio.wait_for(ping(), timeout=_CHECK_TIMEOUT_SECONDS)
-    except Exception:
+    except Exception as exc:
+        _log_check_failure("database", exc)
         return "down"
     return "ok" if ok else "down"
 
@@ -46,7 +65,8 @@ async def _check_storage(storage: StoragePort) -> CheckResult:
         ok = await asyncio.wait_for(
             run_in_threadpool(storage.health), timeout=_CHECK_TIMEOUT_SECONDS
         )
-    except Exception:
+    except Exception as exc:
+        _log_check_failure("storage", exc)
         return "down"
     return "ok" if ok else "down"
 

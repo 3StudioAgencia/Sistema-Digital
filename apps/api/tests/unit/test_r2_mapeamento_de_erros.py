@@ -4,6 +4,7 @@ Usa um stub de cliente S3 que falha sob demanda — os caminhos de erro não
 dependem de rede nem do moto.
 """
 
+import logging
 from typing import Any
 
 import pytest
@@ -57,6 +58,17 @@ class TestErrosDeInfraestrutura:
 
     def test_health_vira_false_sem_levantar(self, storage_com: R2Storage) -> None:
         assert storage_com.health() is False
+
+    def test_health_falho_loga_warning_com_error_type(
+        self, storage_com: R2Storage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """W0-A-003: storage 'down' no readiness registra a causa (só o tipo)."""
+        with caplog.at_level(logging.WARNING, logger="rastreio.storage.r2"):
+            assert storage_com.health() is False
+
+        avisos = [r for r in caplog.records if r.name == "rastreio.storage.r2"]
+        assert avisos, "esperava um WARNING diagnóstico do health falho"
+        assert getattr(avisos[0], "error_type", None)
 
 
 @pytest.mark.parametrize("storage_com", [ERRO_NAO_ENCONTRADO], indirect=True)

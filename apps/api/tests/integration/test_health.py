@@ -3,7 +3,10 @@
 Roda offline — banco e storage são fakes injetados via app factory.
 """
 
+import logging
+
 import httpx
+import pytest
 from src.infrastructure.config import APP_VERSION, Settings
 
 from tests.conftest import FakeStorage, make_client, ping_down, ping_ok
@@ -60,26 +63,34 @@ class TestReadiness:
         assert body["checks"]["storage"] == "ok"
 
     async def test_ping_que_levanta_excecao_vira_down_sem_derrubar_a_app(
-        self, settings: Settings, fake_storage: FakeStorage
+        self, settings: Settings, fake_storage: FakeStorage, caplog: pytest.LogCaptureFixture
     ) -> None:
         async def ping_explosivo() -> bool:
             raise ConnectionError("conexão recusada")
 
-        async with make_client(settings, fake_storage, ping_explosivo) as client:
-            response = await client.get("/health/ready")
+        with caplog.at_level(logging.WARNING, logger="rastreio.http.health"):
+            async with make_client(settings, fake_storage, ping_explosivo) as client:
+                response = await client.get("/health/ready")
 
         assert response.status_code == 503
         assert response.json()["checks"]["database"] == "down"
+        # W0-A-003: a falha do check deixa rastro diagnóstico (RNF-024)
+        avisos = [r for r in caplog.records if r.name == "rastreio.http.health"]
+        assert avisos and getattr(avisos[0], "dependency", None) == "database"
+        assert getattr(avisos[0], "error_type", None) == "ConnectionError"
 
     async def test_storage_que_levanta_excecao_vira_down_sem_derrubar_a_app(
-        self, settings: Settings
+        self, settings: Settings, caplog: pytest.LogCaptureFixture
     ) -> None:
         class StorageExplosivo(FakeStorage):
             def health(self) -> bool:
                 raise ConnectionError("endpoint inacessível")
 
-        async with make_client(settings, StorageExplosivo(), ping_ok) as client:
-            response = await client.get("/health/ready")
+        with caplog.at_level(logging.WARNING, logger="rastreio.http.health"):
+            async with make_client(settings, StorageExplosivo(), ping_ok) as client:
+                response = await client.get("/health/ready")
 
         assert response.status_code == 503
         assert response.json()["checks"]["storage"] == "down"
+        avisos = [r for r in caplog.records if r.name == "rastreio.http.health"]
+        assert avisos and getattr(avisos[0], "dependency", None) == "storage"

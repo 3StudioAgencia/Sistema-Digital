@@ -15,6 +15,7 @@ configuração de runtime é segura também contra Postgres direto, apenas abre 
 do cache de statements.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any, cast
@@ -30,6 +31,8 @@ from sqlalchemy.pool import NullPool
 
 from src.application.ports.unit_of_work import UnitOfWork
 from src.infrastructure.config import Settings
+
+logger = logging.getLogger("rastreio.database")
 
 
 def create_runtime_engine(settings: Settings) -> AsyncEngine:
@@ -93,7 +96,15 @@ async def ping(engine: AsyncEngine) -> bool:
     """Ping read-only ao banco — usado pelo readiness check. Nunca levanta exceção."""
     try:
         await fetch_db_time(engine)
-    except Exception:
+    except Exception as exc:
+        # O readiness reportará "down"; deixe um rastro diagnóstico (RNF-024) em
+        # vez de descartar a causa em silêncio. Só o TIPO da exceção — nunca
+        # str(exc), que pode conter a connection string (mesmo padrão do
+        # keep-alive). O request_id corrente já correlaciona a linha.
+        logger.warning(
+            "ping ao banco falhou",
+            extra={"event": "db_ping_failed", "error_type": type(exc).__name__},
+        )
         return False
     return True
 

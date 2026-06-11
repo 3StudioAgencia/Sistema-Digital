@@ -83,3 +83,20 @@ class TestR2Especifico:
         )
         with pytest.raises(StorageError, match="R2 não configurado"):
             R2Storage.from_settings(s)
+
+    def test_from_settings_define_timeouts_explicitos(self) -> None:
+        """W0-A-004: o cliente boto3 do R2 nasce com connect/read timeout
+        alinhados ao orçamento de 5s do readiness (sem eles seriam 60s)."""
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            database_url="postgresql+asyncpg://u:p@h/db",
+            migrations_database_url="postgresql+asyncpg://u:p@h/db",
+            r2_endpoint_url="https://acc.r2.cloudflarestorage.com",
+            r2_access_key_id="key",
+            r2_secret_access_key="secret",
+            r2_bucket="artes",
+        )
+        storage = R2Storage.from_settings(s)
+        config = storage._client.meta.config
+        assert config.connect_timeout == 5
+        assert config.read_timeout == 5

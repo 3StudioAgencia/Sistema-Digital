@@ -6,7 +6,9 @@ tests/integration/test_database.py (@db).
 """
 
 import contextlib
+import logging
 
+import pytest
 from sqlalchemy.pool import NullPool
 from src.infrastructure.config import Settings
 from src.infrastructure.database import (
@@ -41,6 +43,23 @@ class TestEngineDeRuntime:
             assert await ping(engine) is False
         finally:
             await engine.dispose()
+
+    async def test_ping_falho_loga_warning_com_error_type_sem_vazar(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """W0-A-003: o readiness 'down' deixa rastro diagnóstico (RNF-024) —
+        tipo da exceção, nunca a connection string."""
+        engine = create_runtime_engine(_settings())
+        try:
+            with caplog.at_level(logging.WARNING, logger="rastreio.database"):
+                assert await ping(engine) is False
+        finally:
+            await engine.dispose()
+
+        avisos = [r for r in caplog.records if r.name == "rastreio.database"]
+        assert avisos, "esperava um WARNING diagnóstico do ping falho"
+        assert getattr(avisos[0], "error_type", None)  # tipo da exceção presente
+        assert "nopass" not in caplog.text  # credencial NÃO vaza no log
 
 
 class TestUnitOfWorkOffline:
