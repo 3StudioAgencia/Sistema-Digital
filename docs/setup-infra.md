@@ -122,6 +122,12 @@ EOF
 - Monitoramento (RNF-024): aponte o uptime monitor para `GET /health` e
   `GET /health/ready` do staging (ex.: UptimeRobot free, intervalo 5 min).
 
+> **Keep-alive do Supabase (W0-C02):** o free tier pausa o projeto após 7 dias
+> sem requisições. Um workflow agendado faz um *ping* read-only diário ao banco
+> para evitar a pausa. Para ligar em produção, cadastre o secret
+> `KEEPALIVE_DATABASE_URL` (a mesma connection string de
+> `MIGRATIONS_DATABASE_URL`) — guia completo em [`keep-alive.md`](./keep-alive.md).
+
 ## 7. Checklist de verificação (critérios de aceitação do C01)
 
 - [ ] `uv run alembic upgrade head` aplica em banco limpo; `downgrade base` desfaz;

@@ -228,6 +228,7 @@ uv run uvicorn src.main:app --reload        # dev server → http://localhost:80
 uv run alembic upgrade head                 # migrations (usa MIGRATIONS_DATABASE_URL)
 uv run pytest --cov                         # testes + cobertura (offline; @db pula sem Postgres)
 uv run ruff check . && uv run mypy          # lint + types (strict; mypy lê files do pyproject)
+uv run python -m src.tasks.keep_alive       # keep-alive: ping read-only ao banco (W0-C02; exit 0/≠0)
 
 # Frontend (apps/web)
 cd apps/web && pnpm install

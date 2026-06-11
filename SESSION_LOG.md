@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 02 — 2026-06-11 — [Wave 0 / Componente C02] Cron Job de Keep-Alive
+
+**Objetivo:** Entregar o keep-alive que impede a pausa do Supabase no free tier (>7 dias sem requisições): rotina read-only de *ping*, workflow agendado, alerta de falha e docs — reutilizando a infra do C01 (escopo de `PROMPTS/W0-C02-keep-alive.md`).
+
+**Feito:**
+- **Consolidação DRY:** extraída `fetch_db_time()` em `src/infrastructure/database.py` (núcleo único do *ping*, `SELECT now()`); `ping()` do readiness passou a envelopá-la (contrato `-> bool` intacto); novo `create_direct_engine()` para a conexão *one-shot* na direta/sessão (5432).
+- **Rotina** `src/tasks/keep_alive.py` (`uv run python -m src.tasks.keep_alive`): conexão curta via `MIGRATIONS_DATABASE_URL`, log JSON estruturado (`event`/`status`/`latency_ms`/`db_time`/`correlation_id`/`env`), exit 0/≠0, erro sem vazar credencial (só `error_type`).
+- **Workflow** `.github/workflows/keep-alive.yml`: `schedule 0 9 * * *` (06:00 BRT) + `workflow_dispatch`, `concurrency`, `timeout-minutes: 5`, `permissions: contents: read`, secret `KEEPALIVE_DATABASE_URL`, alerta opcional `if: failure()` + `ALERT_WEBHOOK_URL` (pulado sem o secret).
+- **Testes:** offline (`tests/unit/test_keep_alive.py` — campos do log, exit codes, prova de não-vazamento de senha) e `@db` (`tests/integration/test_keep_alive.py` — sucesso real). Fix de hermeticidade do `test_main.py` (`chdir(tmp_path)`) e *fixture* autouse `_isola_logging_global` em `conftest.py`.
+- **Docs:** `docs/keep-alive.md` (racional, cadência, ligar em produção, teste manual, alternativa Cloudflare Worker Cron) + link em `docs/setup-infra.md`.
+- **Validação em execução real:** *ping* read-only ao **Supabase real** → `exit 0`, `status="ok"`, `db_time` real, `latency_ms≈331ms`; falha com credencial inválida → `exit 1`, `status="error"`, sem vazar a senha.
+- Revisão adversarial multi-agente (6 dimensões × verificação cética) sobre o change set.
+
+**Decisões (ADRs):**
+- **ADR-015** (keep-alive externo; scheduler primário GitHub Actions; conexão direta para o *one-shot*; cadência diária; alerta nativo + webhook opcional; alternativa Cloudflare documentada). **Nota:** o prompt referenciava "ADR-012", mas 012–014 já existiam (W0-C01) → adotado o próximo livre, **015** (divergência registrada, `CLAUDE.md §2.1`).
+
+**Testes / cobertura:**
+- **70 passaram, 6 skip** (`@db`, sem Postgres local) offline; cobertura **98.81%** (linhas restantes são caminhos de sucesso `@db`, cobertos no CI). `ruff`, `ruff format` e `mypy --strict` verdes. Sem segredos versionados.
+
+**Pendências / em aberto:**
+- [ ] **Ligar em produção:** cadastrar o secret `KEEPALIVE_DATABASE_URL` (e opcional `ALERT_WEBHOOK_URL`) no repositório GitHub quando o remoto existir; validar via `workflow_dispatch`.
+- [ ] Push para o remoto `rastreio-provas-digitais` (workflow agendado só roda no GitHub).
+- [ ] (Herdada) Confirmar plataformas de deploy (ADR-009).
+
+**Próximo passo:**
+- **Wave 1 · W1-C03 · Tela de Login e Sessão** (primeiro componente da Wave 1; Wave 0 concluída).
+
+**Definition of Done:** ✅ atendida no subconjunto aplicável (testes ≥ piso, observabilidade/log estruturado, error handling com exit code + alerta, docs do módulo, sem segredos versionados, idempotência N/A — operação read-only sem escrita).
+
+---
+
 ## Sessão 01 — 2026-06-10 — [Wave 0 / Componente C01] Configuração de Infraestrutura
 
 **Objetivo:** Fundação completa do monorepo: backend FastAPI hexagonal, Alembic, storage R2, observabilidade, frontend Next.js, CI e docs de provisionamento (escopo do prompt `PROMPTS/W0-C01-infraestrutura.md`).

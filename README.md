@@ -83,6 +83,8 @@ cd apps/api
 uv run pytest --cov                       # unitários + integração (suíte roda offline;
                                           #   testes @db pulam sem Postgres local)
 uv run ruff check . && uv run mypy        # lint + tipos (strict)
+uv run python -m src.tasks.keep_alive     # keep-alive: ping read-only ao banco (W0-C02)
+                                          #   ver docs/keep-alive.md p/ ligar em produção
 
 # E2E (após as telas existirem)
 pnpm exec playwright test
@@ -107,7 +109,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 
 | Wave | Componentes | Status |
 | --- | --- | --- |
-| **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ⏳ | Em andamento |
+| **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login · 04 Usuários · 05 Matriz RBAC | ⬜ |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta · 07 Listagem · 08 Detalhe · 09 Config | ⬜ |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
