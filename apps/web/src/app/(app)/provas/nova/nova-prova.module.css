@@ -154,7 +154,8 @@
   background: var(--app-shell-bg);
   border-radius: var(--app-radius-pill);
   height: calc(56 * var(--u));
-  padding: 0;
+  /* Folga entre a pílula preta selecionada e o trilho cinza (referência do dono). */
+  padding: calc(5 * var(--u));
 }
 
 .segmentoItem {
