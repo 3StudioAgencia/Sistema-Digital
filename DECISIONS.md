@@ -210,6 +210,16 @@
 - **Status:** **Aceita** (W1-C05).
 - **Consequências:** A aceitação "Vendedor vê só as suas / Motorista só as Em Trânsito" a nível de dado é validada **no C06**, documentada em `docs/rbac.md §6`.
 
+## ADR-034 — Sessão de request fail-closed na RLS; role não-owner adiado ao C06 (remediação W1 / W1-A-001)
+
+- **Contexto:** A auditoria da Wave 1 (W1-A-001, Alto) mostrou que a camada inferior (RLS) depende **exclusivamente** do `SET LOCAL ROLE authenticated` da aplicação: o role de runtime é o *owner* (`postgres.<ref>`, **`BYPASSRLS`**) e `FORCE ROW LEVEL SECURITY` está OFF. Como `BYPASSRLS` não é anulado por `FORCE`, qualquer caminho de query que **esqueça** a propagação roda como owner e vaza entre escopos em silêncio (fail-**open**). Não havia exposição no estado entregue (todos os endpoints de `usuarios` passam pela propagação), mas o **C06** construiria a RLS de `provas` (dado sensível por vendedor) sobre o mesmo padrão.
+- **Decisão (DP do dono — "endurecer in-repo agora; role ao C06"):**
+  1. **Centralizar** a sessão de request num opener único — `abrir_sessao_rls(factory, claims)` (`infrastructure/database.py`) — que o `get_usuarios_service` e todo serviço por requisição futuro (C06+) reusam, em vez de abrir `factory()` e lembrar de propagar.
+  2. **Fail-closed:** as sessões de request vêm de `create_request_session_factory` (subclasse `_RlsSyncSession` + listener `after_begin`) que **levanta** se uma transação começar sem claims propagados — convertendo "esqueci de propagar → leitura silenciosa como owner" em **erro alto e cedo**. Sessões de **sistema** (seed/CLI/bootstrap via `create_session_factory`) seguem como owner **de propósito**.
+  3. **Role não-owner adiado ao C06:** trocar o runtime para um login `NOBYPASSRLS`/não-owner (modelo `authenticator`→`SET ROLE authenticated`) exige provisionar credenciais no Supabase (ação externa) **e** GRANTs em toda tabela de domínio — que só fazem sentido **junto** com a tabela `provas`. Entra no C06, validado contra o projeto real.
+- **Status:** **Aceita** (remediação W1). Endurecimentos correlatos da mesma sessão: **`iss` do JWT** validado config-gated (W1-A-013, derivado de `SUPABASE_URL`) e **`search_path = ''`** fixado nas 5 funções de segurança (migration `0006`, W1-A-004). **W1-A-006** (janela auth↔domínio) aceito como **dívida rastreada** (trade-off ADR-025; revisitar com outbox).
+- **Consequências:** O C06 herda uma fundação fail-closed (a perna de role fecha o achado por completo lá). `FORCE RLS` permanece inerte contra `BYPASSRLS` e **não** substitui a troca de role. Prova: `tests/integration/test_claims_propagation.py` (fail-closed + positivo + controle de sistema).
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)

@@ -32,6 +32,39 @@
 
 ---
 
+## Sessão 08 — 2026-06-12 — [Wave 1 / Remediação] Auditoria da Wave 1 → GO
+
+**Objetivo:** Resolver os achados de `docs/audits/AUDITORIA-WAVE-1.md` (escopo `PROMPTS/W1-REMEDIACAO-wave1.md`) — Críticos/Altos primeiro — re-verificar a Wave 1 inteira e atualizar o veredito para **GO** antes da Wave 2.
+
+**Decisões do dono (1 rodada):** W1-A-001 = endurecer in-repo agora (fail-closed) + adiar o role não-owner ao C06; W1-A-006 = aceitar como dívida rastreada; escopo = remediação in-repo completa (+ seam de captura); ações de dashboard (leaked-password + política de senha; aplicar migrations) com o dono — **hook já habilitado** por ele.
+
+**Feito (19 achados Resolvidos · 0 falso-positivo · grounding multi-agente antes de cada fix):**
+- **W1-A-001 (Alto):** `abrir_sessao_rls` + `create_request_session_factory` (`_RlsSyncSession` + guarda `after_begin`) → sessão de request **fail-closed** (sem claims → levanta, não lê como owner). Sistema/seed seguem owner de propósito. Role não-owner → C06. (ADR-034)
+- **W1-A-002 (Alto):** `middleware.test.ts` cobre o enforcement do proxy (não-admin→redirect+flash; admin→next; não-auth→sem getClaims).
+- **W1-A-003/005 (Méd):** 4 redirects → `HOME_PADRAO` (`/dashboard`); teste pós-login reescrito; E2E alinhado.
+- **W1-A-004 (Méd):** `SET search_path = ''` nas 5 funções (hook+helpers) + migration **`0006`** p/ o banco real; `test_migrations` head=0006.
+- **W1-A-007/008/009 (Méd):** `ruff format`/`prettier` reaplicados (gates verdes); **correção da narrativa:** o SESSION_LOG do C04/C05 dizia "format verde", mas o gate estava vermelho no HEAD auditado — reaplicado nesta sessão e agora **realmente verde** (api `ruff format --check` 77 ok; web `prettier --check` ok).
+- **W1-A-010/013/014/015/016/017/018/019/020/021/036:** issuer do JWT (config-gated); órfão `created_at` ausente converge; `(app)/error.tsx` + seam `reportClientError`; testes do bootstrap (0%→100%) e dos helpers de RLS; drifts de doc (README RLS, 0002, auth/usuarios/app-shell).
+
+**Decisões (ADRs):** **ADR-034** (sessão de request fail-closed; role não-owner adiado ao C06; + issuer/search_path; W1-A-006 = dívida).
+
+**Testes / cobertura (re-verificação §4, saída real):**
+- api: **255 verdes** (era 229), cobertura **95.12%** (piso 80); `ruff`/`ruff format --check`/`mypy --strict` limpos; ciclo Alembic upgrade→downgrade→upgrade limpo (head 0006).
+- web: **85 verdes** (era 76, 16 arquivos); `eslint`/`prettier --check`/`next build` limpos.
+- RLS positivo+negativo (fail-closed) + helpers default-deny; equivalência da Matriz intacta.
+
+**Pendências / em aberto:**
+- [ ] **Dono (dashboard):** habilitar **leaked-password protection** + **política de senha** (min 8, letras+dígitos) — W1-A-011/DP-3; e rodar `alembic upgrade head` no Supabase real (aplica `0006`).
+- [ ] **Dívida rastreada:** W1-A-006 (reordenar recheck RN-010 / outbox); **role não-owner `NOBYPASSRLS`** da RLS → **C06** (junto dos GRANTs de `provas`); W1-A-017 sink real de erros → C19/C20.
+- [ ] Itens herdados: `KEEPALIVE_DATABASE_URL` (W0-A-001), TTL do access token (DP-3 do C03), mover `SqlAlchemyUnitOfWork` p/ `adapters/outbound/db/` no C06 (W0-A-018).
+
+**Próximo passo:**
+- **W2-C06 · Cadastro de Prova com Seleção de Rota + Etiqueta** — abre a Wave 2 e aplica a RLS de `provas` sobre a fundação fail-closed deste sessão. *(O prompt de remediação citou "W2-C07", mas o roadmap do Backlog/CLAUDE.md §7 e o SESSION_LOG têm o **C06** como primeiro da Wave 2 — divergência registrada, CLAUDE.md §2.1.)*
+
+**Definition of Done:** ✅ Veredito **GO** — re-verificação inteira verde; cada achado Resolvido tem teste/commit; dívida remanescente rastreada e não-bloqueante; protocolo de encerramento executado.
+
+---
+
 ## Sessão 07 — 2026-06-12 — [Wave 1 / W1-C05] Controle de Acesso por Perfil (Matriz RBAC em duas camadas)
 
 **Objetivo:** Formalizar o RBAC por perfil em **duas camadas independentes** (proxy do App Router + RLS do PostgreSQL), com a Matriz §7 como fonte única, fechando a **Wave 1**.

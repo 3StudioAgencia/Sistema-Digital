@@ -267,4 +267,56 @@
 - **Read-only:** nenhum arquivo de código/migração/RLS/config/doc foi alterado; a única escrita foi este relatório. O Supabase real foi tocado **apenas** com `SELECT`/catálogo/advisors.
 - **Origem das evidências:** estática e `@db` no **Postgres local 5433**; estado de RLS/hook/roles no **Supabase real** (read-only). Itens que exigem o GoTrue/sessão viva estão na §5.
 - **Verificação adversarial:** cada um dos 39 achados brutos passou por um verificador cético; 1 foi refutado, 4 tiveram severidade ajustada (3 reduzidas, incluindo um Crítico→Médio em W1-A-003 e um Alto→Médio em W1-A-005).
-- **Remediação é decisão separada:** este relatório **propõe** correções; nenhuma foi aplicada.
+- **Remediação é decisão separada:** este relatório **propõe** correções; nenhuma foi aplicada. *(O desfecho de cada achado está na §9, acrescentada na sessão de remediação.)*
+
+---
+
+## 9. Remediação (sessão 2026-06-12) — desfecho por achado e VEREDITO atualizado
+
+> Sessão de remediação dirigida por este relatório (escopo: `PROMPTS/W1-REMEDIACAO-wave1.md`). Cada fix foi feito de forma cirúrgica, com teste provando o fechamento e re-verificação de que nada regrediu, em **commit semântico por achado** (`fix/test/docs/style(w1-audit): <ID>`). **Decisões do dono:** W1-A-001 = endurecer in-repo agora (fail-closed) + adiar o role não-owner ao C06; W1-A-006 = aceitar como dívida rastreada; escopo = remediação in-repo completa; ações de dashboard (leaked-password + política de senha; aplicar migrations no Supabase real) com o dono (hook **já habilitado**).
+
+### 9.1 Fragilidade da verificação (anti-regressão)
+- **Nenhum falso-positivo:** os 20 achados acionáveis foram **confirmados contra o código real** antes de qualquer correção (grounding multi-agente). Nada foi "corrigido no escuro".
+- **RLS positivo + negativo:** `test_request_sem_propagacao_falha_fechado` (sessão de request sem claims → **levanta**, não lê como owner) + `test_backend_com_propagacao_respeita_rls` (admin vê tudo, não-admin só a própria) + `test_sessao_de_sistema_roda_como_owner` (owner/seed segue bypassando de propósito). Sem super-restrição: os endpoints de `usuarios` e a suíte `@db` seguem verdes.
+
+### 9.2 Desfecho por achado
+
+| ID | Sev | Desfecho | Evidência (commit · teste) |
+|---|---|---|---|
+| **W1-A-001** | Alto | **Resolvido (parcial + dívida)** — fail-closed in-repo (`abrir_sessao_rls` + `create_request_session_factory` + guarda `after_begin`); **role não-owner adiado ao C06** (decisão do dono) | `2eeb430` · `test_claims_propagation.py` (fail-closed + positivo + controle) |
+| **W1-A-002** | Alto | **Resolvido** | `31c8efd` · `middleware.test.ts` (4 casos do enforcement) |
+| **W1-A-003** | Médio | **Resolvido** | `1291b15` · 4 redirects → `HOME_PADRAO`; `login-panel.test.tsx` |
+| **W1-A-004** | Médio | **Resolvido (in-repo; aplicar 0006 no Supabase = dono)** | `f559169`/`012121d` · `test_funcoes_de_seguranca_tem_search_path_fixo` + `test_migrations` |
+| **W1-A-005** | Médio | **Resolvido** (junto com 003) | `1291b15` · teste reescrito p/ `HOME_PADRAO` |
+| **W1-A-006** | Médio | **Adiado (dívida rastreada)** — trade-off ADR-025 consciente; revisitar com outbox | decisão do dono |
+| **W1-A-007** | Médio | **Resolvido** | `a54560e` · `ruff format --check` verde (77 arquivos) |
+| **W1-A-008** | Médio | **Resolvido** | `c896a9a` · `prettier --check` verde |
+| **W1-A-009** | Médio | **Resolvido** | esta §9 + entrada de SESSION_LOG corrigem a narrativa de "format verde" |
+| **W1-A-010** | Médio | **Resolvido** | `926889d` · README aponta `propagar_claims_rls`/`after_begin` |
+| **W1-A-011** | Médio | **Ação do dono** — habilitar leaked-password + política de senha no dashboard | dono fará |
+| **W1-A-012** | Médio | **Resolvido** (umbrella de 016/017) | `a266950` |
+| **W1-A-013** | Baixo | **Resolvido** | `f938719` · issuer validado config-gated; testes ES256+HS256 |
+| **W1-A-014** | Baixo | **Resolvido** | `12ff6e7` · `created_at` ausente converge; 2 testes |
+| **W1-A-015** | Baixo | **Resolvido** | `926889d` · docstring/comentário de 0002 atualizados |
+| **W1-A-016** | Baixo | **Resolvido** | `a266950` · `(app)/error.tsx` + teste |
+| **W1-A-017** | Baixo | **Resolvido (seam in-repo; sink real → C19/C20)** | `a266950` · `reportClientError` + teste |
+| **W1-A-018** | Baixo | **Resolvido** | `b8e55c0` · bootstrap_admin 0%→**100%** (idempotência/claims/unban + guards) |
+| **W1-A-019** | Baixo | **Resolvido** | `8ba018d` · `auth.md` reescrito p/ rota única + app shell |
+| **W1-A-020** | Baixo | **Resolvido** | `8ba018d` · `usuarios.md` → RLS definitiva 6-A |
+| **W1-A-021** | Baixo | **Resolvido** | `b8e55c0` · `test_rls_helpers.py` (app_setor/app_current_claims + default-deny) |
+| **W1-A-022** | Baixo | **Resolvido** (duplicata de 015) | `926889d` |
+| **W1-A-023..035, 037** | Obs | **Mantidos (por design / dívida menor)** — trade-offs documentados; sem ação | — |
+| **W1-A-036** | Obs | **Resolvido** | `8ba018d` · `app-shell.md` (sidebar filtrada) |
+
+**Contagem:** Resolvidos **19** (2 Altos, 7 Médios, 8 Baixos, 1 Obs, + 12/22 umbrella/duplicata) · Adiados **1** (W1-A-006) + a perna de role do W1-A-001 → C06 · Ações do dono **1** (W1-A-011) + dashboard/migrations · **Falso-positivo: 0**.
+
+### 9.3 Re-verificação final (saída real)
+- **Backend:** `ruff check` ✅ · `ruff format --check` ✅ (77) · `mypy --strict` ✅ (45) · `pytest --cov` ✅ **255 passed**, cobertura **95.12%** (piso 80) · ciclo Alembic `upgrade→downgrade→upgrade` limpo (head **0006**).
+- **Frontend:** `eslint` ✅ · `prettier --check` ✅ · `vitest` ✅ **85 passed** (16 arquivos) · `next build` ✅.
+- **prefers-reduced-motion:** o novo boundary não anima (N/A); fundação de motion intacta. **Idempotência** (bootstrap) testada. **Sem erro de console/log crítico.**
+- Δ testes: api **229→255** (+26) · web **76→85** (+9).
+
+### 9.4 VEREDITO atualizado — **GO** para a Wave 2
+Os **2 Altos foram endereçados** (W1-A-001 fail-closed in-repo, com a perna de role conscientemente adiada ao C06 onde entra junto dos GRANTs de `provas`; W1-A-002 coberto). Todos os Médios/Baixos in-repo foram resolvidos; a dívida remanescente (**W1-A-006** aceito; **role não-owner** no C06; **W1-A-011** e aplicar migrations = dono) **não bloqueia** a Wave 2. A régua "qualquer Crítico = NO-GO" segue não acionada (0 Críticos).
+
+**Próximo passo: W2-C06 · Cadastro de Prova + Rota + Etiqueta** — abre a Wave 2 e aplica a RLS de `provas` **sobre a fundação fail-closed** (`abrir_sessao_rls` + helpers) entregue aqui. *(Divergência registrada — CLAUDE.md §2.1: o prompt de remediação citou "W2-C07 · Listagem/Filtros", mas o roadmap do Backlog/CLAUDE.md §7 e o SESSION_LOG têm o **C06** como primeiro componente da Wave 2; prevalece o roadmap.)*
