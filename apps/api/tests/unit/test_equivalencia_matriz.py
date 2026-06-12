@@ -18,13 +18,7 @@ from src.domain.rbac import RECURSOS_ADMIN, RECURSOS_UNIVERSAIS, Recurso, autori
 from src.domain.usuarios import Localizacao, Setor, Usuario
 
 # apps/api/tests/unit/<este> → parents[3] = apps/ ; daí web/src/lib/...
-_CELLS = (
-    Path(__file__).resolve().parents[3]
-    / "web"
-    / "src"
-    / "lib"
-    / "access-matrix.cells.json"
-)
+_CELLS = Path(__file__).resolve().parents[3] / "web" / "src" / "lib" / "access-matrix.cells.json"
 
 
 def _celulas() -> dict[str, str]:

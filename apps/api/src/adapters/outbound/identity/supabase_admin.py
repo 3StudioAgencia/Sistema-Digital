@@ -75,9 +75,7 @@ class SupabaseAdminIdentityProvider(IdentityProviderPort):
         await self._client.aclose()
 
     # ------------------------------------------------------------------ porta
-    async def create_user(
-        self, email: str, senha: str, app_metadata: Mapping[str, object]
-    ) -> str:
+    async def create_user(self, email: str, senha: str, app_metadata: Mapping[str, object]) -> str:
         resp = await self._request(
             "POST",
             "/admin/users",
@@ -110,9 +108,7 @@ class SupabaseAdminIdentityProvider(IdentityProviderPort):
             ok=(200,),
         )
 
-    async def update_app_metadata(
-        self, user_id: str, app_metadata: Mapping[str, object]
-    ) -> None:
+    async def update_app_metadata(self, user_id: str, app_metadata: Mapping[str, object]) -> None:
         await self._request(
             "PUT",
             f"/admin/users/{user_id}",
@@ -123,9 +119,7 @@ class SupabaseAdminIdentityProvider(IdentityProviderPort):
     async def revoke_sessions(self, user_id: str) -> None:
         # Best-effort declarado na porta: 404 = endpoint indisponível na versão
         # do GoTrue → o ban segura o fluxo e os tokens expiram pelo TTL.
-        resp = await self._request(
-            "POST", f"/admin/users/{user_id}/logout", ok=(200, 204, 404)
-        )
+        resp = await self._request("POST", f"/admin/users/{user_id}/logout", ok=(200, 204, 404))
         if resp.status_code == 404:
             logger.info(
                 "logout administrativo indisponível nesta versão do GoTrue",
@@ -233,9 +227,7 @@ class UnconfiguredIdentityProvider(IdentityProviderPort):
     de derrubar o boot.
     """
 
-    async def create_user(
-        self, email: str, senha: str, app_metadata: Mapping[str, object]
-    ) -> str:
+    async def create_user(self, email: str, senha: str, app_metadata: Mapping[str, object]) -> str:
         raise IdentityProviderNaoConfigurado()
 
     async def delete_user(self, user_id: str) -> None:
@@ -244,9 +236,7 @@ class UnconfiguredIdentityProvider(IdentityProviderPort):
     async def set_banned(self, user_id: str, banned: bool) -> None:
         raise IdentityProviderNaoConfigurado()
 
-    async def update_app_metadata(
-        self, user_id: str, app_metadata: Mapping[str, object]
-    ) -> None:
+    async def update_app_metadata(self, user_id: str, app_metadata: Mapping[str, object]) -> None:
         raise IdentityProviderNaoConfigurado()
 
     async def revoke_sessions(self, user_id: str) -> None:

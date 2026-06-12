@@ -124,9 +124,7 @@ async def listar(
     service: Annotated[UsuariosService, Depends(get_usuarios_service)],
     busca: Annotated[str | None, Query(max_length=200)] = None,
     setor: Setor | None = None,
-    status_filtro: Annotated[
-        Literal["ativo", "inativo"] | None, Query(alias="status")
-    ] = None,
+    status_filtro: Annotated[Literal["ativo", "inativo"] | None, Query(alias="status")] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAXIMO)] = PAGE_SIZE_PADRAO,
 ) -> PaginaUsuariosOut:

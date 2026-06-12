@@ -104,9 +104,7 @@ class FakeIdentityProvider(IdentityProviderPort):
         }
         return uid
 
-    async def create_user(
-        self, email: str, senha: str, app_metadata: Mapping[str, object]
-    ) -> str:
+    async def create_user(self, email: str, senha: str, app_metadata: Mapping[str, object]) -> str:
         self.calls.append(("create_user", email))
         if self.fail_create is not None:
             raise self.fail_create
@@ -127,9 +125,7 @@ class FakeIdentityProvider(IdentityProviderPort):
         if user_id in self.users:
             self.users[user_id]["banned"] = banned
 
-    async def update_app_metadata(
-        self, user_id: str, app_metadata: Mapping[str, object]
-    ) -> None:
+    async def update_app_metadata(self, user_id: str, app_metadata: Mapping[str, object]) -> None:
         self.calls.append(("update_app_metadata", user_id))
         if self.fail_update_metadata is not None:
             raise self.fail_update_metadata

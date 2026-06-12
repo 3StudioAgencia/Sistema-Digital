@@ -113,9 +113,7 @@ async def test_nao_admin_le_apenas_a_propria_linha(cenario: dict[str, Any], seto
 async def test_query_direta_fora_do_escopo_retorna_zero(cenario: dict[str, Any]) -> None:
     """Um autenticado SEM linha (sub fantasma) e nao-admin: 0 registros."""
     fantasma = str(uuid.uuid4())
-    visiveis = await _ids_visiveis(
-        cenario["engine"], sub=fantasma, setor="vendedor", admin=False
-    )
+    visiveis = await _ids_visiveis(cenario["engine"], sub=fantasma, setor="vendedor", admin=False)
     assert visiveis == set()
 
 

@@ -27,9 +27,7 @@ class IdentityProviderNaoConfigurado(IdentityProviderError):
     """Chave secreta ausente — operações de gestão indisponíveis (503)."""
 
     def __init__(self) -> None:
-        super().__init__(
-            "Provedor de identidade não configurado (SUPABASE_SECRET_KEY ausente)."
-        )
+        super().__init__("Provedor de identidade não configurado (SUPABASE_SECRET_KEY ausente).")
 
 
 class EmailJaExisteNoProvedorError(IdentityProviderError):
@@ -60,9 +58,7 @@ class IdentityProviderPort(ABC):
     """
 
     @abstractmethod
-    async def create_user(
-        self, email: str, senha: str, app_metadata: Mapping[str, object]
-    ) -> str:
+    async def create_user(self, email: str, senha: str, app_metadata: Mapping[str, object]) -> str:
         """Cria o usuário de autenticação (e-mail já confirmado) e devolve o UUID.
 
         Levanta ``EmailJaExisteNoProvedorError`` se o e-mail já tiver conta.

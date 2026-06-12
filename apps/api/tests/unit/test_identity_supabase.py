@@ -95,9 +95,7 @@ async def test_delete_user_404_e_idempotente() -> None:
     await provider.aclose()
 
 
-@pytest.mark.parametrize(
-    ("banned", "esperado"), [(True, "876000h"), (False, "none")]
-)
+@pytest.mark.parametrize(("banned", "esperado"), [(True, "876000h"), (False, "none")])
 async def test_set_banned_payload(banned: bool, esperado: str) -> None:
     capturado: dict[str, Any] = {}
 

@@ -203,9 +203,7 @@ async def test_criar_usuario_caminho_feliz(ctx: Any) -> None:
     client, identity, factory = ctx
     await _seed_admin(factory)
 
-    resp = await client.post(
-        "/usuarios", json=_payload_criacao(), headers=_auth_admin()
-    )
+    resp = await client.post("/usuarios", json=_payload_criacao(), headers=_auth_admin())
 
     assert resp.status_code == 201
     body = resp.json()
@@ -259,9 +257,7 @@ async def test_criar_vendedor_sem_localizacao_422(ctx: Any) -> None:
 async def test_criar_email_duplicado_409(ctx: Any) -> None:
     client, _, factory = ctx
     await _seed_admin(factory)
-    primeiro = await client.post(
-        "/usuarios", json=_payload_criacao(), headers=_auth_admin()
-    )
+    primeiro = await client.post("/usuarios", json=_payload_criacao(), headers=_auth_admin())
     assert primeiro.status_code == 201
     segundo = await client.post(
         "/usuarios", json=_payload_criacao(nome="Outro"), headers=_auth_admin()
@@ -285,9 +281,7 @@ async def test_criar_falha_no_banco_compensa_no_provedor(ctx: Any) -> None:
         email="outro@x.y",
     )
 
-    resp = await client.post(
-        "/usuarios", json=_payload_criacao(), headers=_auth_admin()
-    )
+    resp = await client.post("/usuarios", json=_payload_criacao(), headers=_auth_admin())
 
     assert resp.status_code == 500
     body = resp.json()
@@ -325,16 +319,12 @@ async def test_listagem_paginada_e_ordenada(ctx: Any) -> None:
     client, _, factory = ctx
     await _seed_listagem(factory)
 
-    resp = await client.get(
-        "/usuarios", params={"page": 1, "page_size": 2}, headers=_auth_admin()
-    )
+    resp = await client.get("/usuarios", params={"page": 1, "page_size": 2}, headers=_auth_admin())
     body = resp.json()
     assert body["total"] == 5  # 4 + admin
     assert [u["nome"] for u in body["items"]] == ["Ana Lima", "Bruno Reis"]
 
-    resp2 = await client.get(
-        "/usuarios", params={"page": 2, "page_size": 2}, headers=_auth_admin()
-    )
+    resp2 = await client.get("/usuarios", params={"page": 2, "page_size": 2}, headers=_auth_admin())
     assert [u["nome"] for u in resp2.json()["items"]] == ["Carla Souza", "Diego Cruz"]
 
 
@@ -342,14 +332,10 @@ async def test_busca_por_nome_ou_email(ctx: Any) -> None:
     client, _, factory = ctx
     await _seed_listagem(factory)
 
-    por_nome = await client.get(
-        "/usuarios", params={"busca": "souza"}, headers=_auth_admin()
-    )
+    por_nome = await client.get("/usuarios", params={"busca": "souza"}, headers=_auth_admin())
     assert [u["nome"] for u in por_nome.json()["items"]] == ["Carla Souza"]
 
-    por_email = await client.get(
-        "/usuarios", params={"busca": "bruno@"}, headers=_auth_admin()
-    )
+    por_email = await client.get("/usuarios", params={"busca": "bruno@"}, headers=_auth_admin())
     assert [u["nome"] for u in por_email.json()["items"]] == ["Bruno Reis"]
 
 
@@ -364,14 +350,10 @@ async def test_filtros_setor_e_status(ctx: Any) -> None:
     client, _, factory = ctx
     await _seed_listagem(factory)
 
-    vendedores = await client.get(
-        "/usuarios", params={"setor": "vendedor"}, headers=_auth_admin()
-    )
+    vendedores = await client.get("/usuarios", params={"setor": "vendedor"}, headers=_auth_admin())
     assert {u["nome"] for u in vendedores.json()["items"]} == {"Ana Lima", "Diego Cruz"}
 
-    inativos = await client.get(
-        "/usuarios", params={"status": "inativo"}, headers=_auth_admin()
-    )
+    inativos = await client.get("/usuarios", params={"status": "inativo"}, headers=_auth_admin())
     assert [u["nome"] for u in inativos.json()["items"]] == ["Carla Souza"]
 
     combinado = await client.get(
@@ -438,9 +420,7 @@ async def test_desativar_e_reativar(ctx: Any) -> None:
     assert repete.json()["ativo"] is False
 
     # histórico preservado: a linha segue lá (US-015)
-    lista = await client.get(
-        "/usuarios", params={"status": "inativo"}, headers=_auth_admin()
-    )
+    lista = await client.get("/usuarios", params={"status": "inativo"}, headers=_auth_admin())
     assert any(u["id"] == alvo for u in lista.json()["items"])
 
     reativa = await client.post(f"/usuarios/{alvo}/reativar", headers=_auth_admin())
@@ -463,9 +443,7 @@ async def test_desativar_outro_admin_passa_pelo_lock_transacional(ctx: Any) -> N
     await _seed_admin(factory)
     outro = "33333333-3333-3333-3333-333333333333"
     identity.seed("bia@x.y")
-    await _seed_usuario(
-        factory, usuario_id=outro, nome="Bia", email="bia@x.y", administrador=True
-    )
+    await _seed_usuario(factory, usuario_id=outro, nome="Bia", email="bia@x.y", administrador=True)
 
     resp = await client.post(f"/usuarios/{outro}/desativar", headers=_auth_admin())
     assert resp.status_code == 200

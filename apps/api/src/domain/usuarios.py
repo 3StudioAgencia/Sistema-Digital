@@ -149,9 +149,7 @@ def validar_localizacao(setor: Setor, localizacao: Localizacao | None) -> None:
     if setor is Setor.VENDEDOR and localizacao is None:
         raise LocalizacaoInvalidaError("Vendedor exige localização (Matriz ou Filial) — RN-009.")
     if setor is not Setor.VENDEDOR and localizacao is not None:
-        raise LocalizacaoInvalidaError(
-            "Localização só se aplica ao setor Vendedor (RN-009)."
-        )
+        raise LocalizacaoInvalidaError("Localização só se aplica ao setor Vendedor (RN-009).")
 
 
 __all__ = [
