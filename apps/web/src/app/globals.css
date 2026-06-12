@@ -48,6 +48,7 @@
   --app-card-radius: 30px; /* card da tabela */
   --app-radius-pill: 999px;
   --app-field-hover: #c9c9c9; /* derivado: hover/foco das opções do dropdown */
+  --app-modal-field-hover: #2f2f2f; /* derivado: hover das opções no dropdown escuro */
 
   /* Unidade de ESCALA do design (Figma desenhado num quadro de 1080px de
      altura): 1 "pixel de design" = calc(N * var(--u)). Em viewport 1080 →

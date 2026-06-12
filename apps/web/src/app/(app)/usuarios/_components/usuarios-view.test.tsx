@@ -162,9 +162,11 @@ describe("UsuariosView (W1-C04)", () => {
 
     await user.clear(senha);
     await user.type(senha, "senha-forte-1");
-    await user.selectOptions(within(dialog).getByLabelText("Setor"), "vendedor");
+    await user.click(within(dialog).getByRole("button", { name: "Setor" }));
+    await user.click(await within(dialog).findByRole("option", { name: "Vendedor" }));
     // RN-009: Vendedor exige localização — o campo condicional aparece
-    await user.selectOptions(within(dialog).getByLabelText(/localização/i), "matriz");
+    await user.click(within(dialog).getByRole("button", { name: /localização/i }));
+    await user.click(await within(dialog).findByRole("option", { name: "Matriz" }));
     expect(cadastrar).toBeEnabled();
 
     await user.click(cadastrar);
@@ -192,7 +194,8 @@ describe("UsuariosView (W1-C04)", () => {
     await user.type(within(dialog).getByLabelText("Nome:"), "X");
     await user.type(within(dialog).getByLabelText("E-mail:"), "dup@x.y");
     await user.type(within(dialog).getByLabelText(/senha/i), "senha-forte-1");
-    await user.selectOptions(within(dialog).getByLabelText("Setor"), "clicheria");
+    await user.click(within(dialog).getByRole("button", { name: "Setor" }));
+    await user.click(await within(dialog).findByRole("option", { name: "Clicheria" }));
     await user.click(within(dialog).getByRole("button", { name: "Cadastrar" }));
 
     expect(

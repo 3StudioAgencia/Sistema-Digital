@@ -13,7 +13,6 @@
  * E-mail não é editável (identidade do Supabase Auth) e senha só existe na
  * criação — decisão documentada em docs/usuarios.md.
  */
-import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
@@ -26,6 +25,7 @@ import {
 } from "@/lib/api/usuarios";
 import { emailValido, senhaValida } from "@/lib/validacao";
 import { MotionModal } from "@/components/ui/modal/MotionModal";
+import { Dropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 
 import styles from "../usuarios.module.css";
@@ -244,56 +244,55 @@ function FormInterno({
         )}
 
         <div className={styles.modalCampo}>
-          <label htmlFor={`${tituloId}-setor`} className={styles.modalLabel}>
+          <span id={`${tituloId}-setor-label`} className={styles.modalLabel}>
             Setor
-          </label>
-          <div className={styles.modalSelectWrap}>
-            <select
-              id={`${tituloId}-setor`}
+          </span>
+          <div className={styles.modalDropdown}>
+            <Dropdown<"" | Setor>
+              variante="escuro"
+              abrirPara="cima"
+              labelledBy={`${tituloId}-setor-label`}
               value={campos.setor}
-              onChange={(event) => {
-                const setor = event.target.value as "" | Setor;
+              onChange={(setor) => {
                 setCampos((atual) => ({
                   ...atual,
                   setor,
                   localizacao: setor === "vendedor" ? atual.localizacao : "",
                 }));
                 setErroServidor(null);
+                marcarTocado("setor");
               }}
-              onBlur={() => marcarTocado("setor")}
-              className={styles.modalSelect}
-            >
-              <option value="" disabled hidden />
-              <option value="studio">3Studio</option>
-              <option value="vendedor">Vendedor</option>
-              <option value="motorista">Motorista</option>
-              <option value="clicheria">Clicheria</option>
-            </select>
-            <ChevronDown size={22} className={styles.modalChevron} aria-hidden />
+              opcoes={[
+                { value: "studio", label: "3Studio" },
+                { value: "vendedor", label: "Vendedor" },
+                { value: "motorista", label: "Motorista" },
+                { value: "clicheria", label: "Clicheria" },
+              ]}
+            />
           </div>
           {mostrarErro("setor") && <p className={styles.modalErro}>{mostrarErro("setor")}</p>}
         </div>
 
         {campos.setor === "vendedor" && (
           <div className={styles.modalCampo}>
-            <label htmlFor={`${tituloId}-localizacao`} className={styles.modalLabel}>
+            <span id={`${tituloId}-localizacao-label`} className={styles.modalLabel}>
               Localização (Matriz ou Filial):
-            </label>
-            <div className={styles.modalSelectWrap}>
-              <select
-                id={`${tituloId}-localizacao`}
+            </span>
+            <div className={styles.modalDropdown}>
+              <Dropdown<"" | Localizacao>
+                variante="escuro"
+                abrirPara="cima"
+                labelledBy={`${tituloId}-localizacao-label`}
                 value={campos.localizacao}
-                onChange={(event) =>
-                  atualizar("localizacao", event.target.value as "" | Localizacao)
-                }
-                onBlur={() => marcarTocado("localizacao")}
-                className={styles.modalSelect}
-              >
-                <option value="" disabled hidden />
-                <option value="matriz">Matriz</option>
-                <option value="filial">Filial</option>
-              </select>
-              <ChevronDown size={22} className={styles.modalChevron} aria-hidden />
+                onChange={(localizacao) => {
+                  atualizar("localizacao", localizacao);
+                  marcarTocado("localizacao");
+                }}
+                opcoes={[
+                  { value: "matriz", label: "Matriz" },
+                  { value: "filial", label: "Filial" },
+                ]}
+              />
             </div>
             {mostrarErro("localizacao") && (
               <p className={styles.modalErro}>{mostrarErro("localizacao")}</p>

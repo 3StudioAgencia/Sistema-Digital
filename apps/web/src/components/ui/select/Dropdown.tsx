@@ -23,7 +23,17 @@ type DropdownProps<T extends string> = {
   value: T;
   opcoes: OpcaoDropdown<T>[];
   onChange: (value: T) => void;
-  ariaLabel: string;
+  /** Nome acessível direto (filtros)… */
+  ariaLabel?: string;
+  /** …ou via id de um rótulo visível (campos do modal). */
+  labelledBy?: string;
+  /** Texto do gatilho quando nenhum valor casa (campo ainda vazio). */
+  placeholder?: string;
+  /** "claro" = filtros sobre o shell; "escuro" = campos do modal. */
+  variante?: "claro" | "escuro";
+  /** Direção do painel. "cima" evita o recorte pelo overflow do modal quando
+      o campo está na metade de baixo dele. */
+  abrirPara?: "baixo" | "cima";
 };
 
 export function Dropdown<T extends string>({
@@ -31,6 +41,10 @@ export function Dropdown<T extends string>({
   opcoes,
   onChange,
   ariaLabel,
+  labelledBy,
+  placeholder = "",
+  variante = "claro",
+  abrirPara = "baixo",
 }: DropdownProps<T>) {
   const reduced = useReducedMotion();
   const [aberto, setAberto] = useState(false);
@@ -39,7 +53,7 @@ export function Dropdown<T extends string>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const opcaoRefs = useRef<(HTMLLIElement | null)[]>([]);
 
-  const atual = opcoes.find((o) => o.value === value) ?? opcoes[0];
+  const atual = opcoes.find((o) => o.value === value);
 
   function abrir() {
     setFoco(
@@ -114,7 +128,12 @@ export function Dropdown<T extends string>({
   const duracao = reduced ? DURATION.instant : DURATION.short;
 
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    <div
+      className={`${styles.wrap} ${variante === "escuro" ? styles.escuro : ""} ${
+        abrirPara === "cima" ? styles.paraCima : ""
+      }`}
+      ref={wrapRef}
+    >
       <button
         type="button"
         ref={triggerRef}
@@ -122,6 +141,7 @@ export function Dropdown<T extends string>({
         aria-haspopup="listbox"
         aria-expanded={aberto}
         aria-label={ariaLabel}
+        aria-labelledby={labelledBy}
         onClick={() => (aberto ? fechar() : abrir())}
         onKeyDown={(event) => {
           if (!aberto && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -130,7 +150,7 @@ export function Dropdown<T extends string>({
           }
         }}
       >
-        <span className={styles.rotulo}>{atual?.label}</span>
+        <span className={styles.rotulo}>{atual?.label ?? placeholder}</span>
         <ChevronDown
           className={`${styles.chevron} ${aberto ? styles.chevronAberto : ""}`}
           aria-hidden
@@ -142,6 +162,7 @@ export function Dropdown<T extends string>({
           <motion.ul
             role="listbox"
             aria-label={ariaLabel}
+            aria-labelledby={labelledBy}
             className={styles.painel}
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}

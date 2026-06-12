@@ -89,7 +89,7 @@
   align-items: center;
   height: calc(46 * var(--u)); /* pitch exato do design */
   color: var(--auth-text);
-  font-size: calc(21 * var(--u));
+  font-size: calc(19 * var(--u));
   text-decoration: none;
   font-weight: 300;
 }
@@ -111,8 +111,8 @@
 
 .indicador {
   display: block;
-  width: 4px;
-  height: calc(26 * var(--u));
+  width: 3px;
+  height: calc(30 * var(--u));
   border-radius: 2px;
   background: var(--app-accent);
 }
@@ -121,7 +121,7 @@
   flex: none;
   width: calc(26 * var(--u));
   height: calc(26 * var(--u));
-  margin-right: calc(12 * var(--u));
+  margin-right: calc(16 * var(--u));
 }
 
 .rodape {
@@ -134,8 +134,8 @@
 
 .avatar {
   flex: none;
-  width: calc(57 * var(--u));
-  height: calc(57 * var(--u));
+  width: calc(52 * var(--u));
+  height: calc(52 * var(--u));
   border-radius: 50%;
   background: var(--app-avatar);
   color: var(--app-ink);
@@ -173,7 +173,7 @@
   font: inherit;
   font-size: calc(12 * var(--u));
   cursor: pointer;
-  padding: 12px;
+  padding: 20px;
 }
 
 /* Touch (drawer mobile/tablet): alvos ≥ 44px (RNF-013) — o --u do drawer já é

@@ -388,17 +388,19 @@
 
 /* -------------------------------------------------- modal (Novo usuário) */
 .modalPainel {
-  padding: calc(52 * var(--u, 1px)) calc(60 * var(--u, 1px)) calc(48 * var(--u, 1px));
+  padding: calc(52 * var(--um, var(--u, 1px))) calc(60 * var(--um, var(--u, 1px)))
+    calc(48 * var(--um, var(--u, 1px)));
 }
 
 .modalPainelConfirmacao {
-  width: min(calc(560 * var(--u, 1px)), 100%);
-  padding: calc(44 * var(--u, 1px)) calc(48 * var(--u, 1px)) calc(40 * var(--u, 1px));
-  border-radius: calc(32 * var(--u, 1px));
+  width: min(calc(560 * var(--um, var(--u, 1px))), 100%);
+  padding: calc(44 * var(--um, var(--u, 1px))) calc(48 * var(--um, var(--u, 1px)))
+    calc(40 * var(--um, var(--u, 1px)));
+  border-radius: calc(32 * var(--um, var(--u, 1px)));
 }
 
 .modalTitulo {
-  font-size: calc(48 * var(--u, 1px));
+  font-size: calc(48 * var(--um, var(--u, 1px)));
   line-height: 1.15;
   font-weight: 400;
   color: var(--auth-text);
@@ -406,14 +408,14 @@
 
 .modalSeparador {
   /* no design o separador excede a largura dos campos em 18px de cada lado */
-  margin: calc(42 * var(--u, 1px)) -18px 0;
+  margin: calc(42 * var(--um, var(--u, 1px))) -18px 0;
   border: 0;
   border-top: 1px solid var(--auth-text);
 }
 
 .modalTexto {
-  margin-top: calc(28 * var(--u, 1px));
-  font-size: calc(18 * var(--u, 1px));
+  margin-top: calc(28 * var(--um, var(--u, 1px)));
+  font-size: calc(18 * var(--um, var(--u, 1px)));
   line-height: 1.5;
   color: var(--auth-text-muted);
 }
@@ -423,27 +425,32 @@
 }
 
 .modalCampo {
-  margin-top: calc(28 * var(--u, 1px));
+  margin-top: calc(28 * var(--um, var(--u, 1px)));
 }
 
 .modalLabel {
   display: block;
-  font-size: calc(22 * var(--u, 1px));
+  font-size: calc(22 * var(--um, var(--u, 1px)));
   color: var(--auth-text);
 }
 
-.modalInput,
-.modalSelect {
-  margin-top: calc(14 * var(--u, 1px));
+.modalInput {
+  margin-top: calc(14 * var(--um, var(--u, 1px)));
   width: 100%;
-  height: calc(56 * var(--u, 1px));
+  height: calc(56 * var(--um, var(--u, 1px)));
   border: 0;
   border-radius: var(--app-radius-pill);
   background: var(--app-modal-field);
   color: var(--auth-text);
   font: inherit;
-  font-size: calc(18 * var(--u, 1px));
-  padding: 0 calc(30 * var(--u, 1px));
+  font-size: calc(18 * var(--um, var(--u, 1px)));
+  padding: 0 calc(30 * var(--um, var(--u, 1px)));
+}
+
+/* Slot do Dropdown (variante escura) — mesmo footprint dos inputs do modal. */
+.modalDropdown {
+  margin-top: calc(14 * var(--um, var(--u, 1px)));
+  height: calc(56 * var(--um, var(--u, 1px)));
 }
 
 .modalInput::placeholder {
@@ -455,42 +462,25 @@
   cursor: not-allowed;
 }
 
-.modalSelectWrap {
-  position: relative;
-}
-
-.modalSelect {
-  appearance: none;
-  cursor: pointer;
-}
-
-.modalChevron {
-  position: absolute;
-  right: 24px;
-  bottom: calc(17 * var(--u, 1px));
-  color: var(--auth-text-muted);
-  pointer-events: none;
-}
-
 .modalNota {
   margin-top: 8px;
-  font-size: calc(14 * var(--u, 1px));
+  font-size: calc(14 * var(--um, var(--u, 1px)));
   color: var(--auth-text-muted);
 }
 
 .modalErro {
   margin-top: 8px;
-  font-size: calc(14 * var(--u, 1px));
+  font-size: calc(14 * var(--um, var(--u, 1px)));
   color: var(--auth-error);
 }
 
 /* Checkbox custom 30×30 com check branco sobre amarelo (medido no design) */
 .modalCheckboxLinha {
-  margin-top: calc(32 * var(--u, 1px));
+  margin-top: calc(32 * var(--um, var(--u, 1px)));
   display: flex;
   align-items: center;
-  gap: calc(14 * var(--u, 1px));
-  font-size: calc(22 * var(--u, 1px));
+  gap: calc(14 * var(--um, var(--u, 1px)));
+  font-size: calc(22 * var(--um, var(--u, 1px)));
   color: var(--auth-text);
   cursor: pointer;
   min-height: 44px;
@@ -499,15 +489,15 @@
 .modalCheckbox {
   position: absolute;
   opacity: 0;
-  width: calc(30 * var(--u, 1px));
-  height: calc(30 * var(--u, 1px));
+  width: calc(30 * var(--um, var(--u, 1px)));
+  height: calc(30 * var(--um, var(--u, 1px)));
   cursor: pointer;
 }
 
 .modalCheckboxCaixa {
   flex: none;
-  width: calc(30 * var(--u, 1px));
-  height: calc(30 * var(--u, 1px));
+  width: calc(30 * var(--um, var(--u, 1px)));
+  height: calc(30 * var(--um, var(--u, 1px)));
   border-radius: 8px;
   background: var(--app-modal-field);
   border: 1px solid var(--app-text-gray);
@@ -536,31 +526,31 @@
 }
 
 .modalAcoes {
-  margin-top: calc(36 * var(--u, 1px));
+  margin-top: calc(36 * var(--um, var(--u, 1px)));
   display: flex;
-  gap: calc(19 * var(--u, 1px));
+  gap: calc(19 * var(--um, var(--u, 1px)));
 }
 
 .botaoCancelar {
   flex: 1;
-  height: calc(56 * var(--u, 1px));
+  height: calc(56 * var(--um, var(--u, 1px)));
   border: 1px solid var(--auth-text-muted);
   border-radius: var(--app-radius-pill);
   background: var(--app-modal-field);
   color: var(--auth-text-muted);
   font: inherit;
-  font-size: calc(22 * var(--u, 1px));
+  font-size: calc(22 * var(--um, var(--u, 1px)));
   cursor: pointer;
 }
 
 .botaoConfirmar,
 .botaoConfirmarPerigo {
   flex: 1;
-  height: calc(56 * var(--u, 1px));
+  height: calc(56 * var(--um, var(--u, 1px)));
   border: 0;
   border-radius: var(--app-radius-pill);
   font: inherit;
-  font-size: calc(22 * var(--u, 1px));
+  font-size: calc(22 * var(--um, var(--u, 1px)));
   cursor: pointer;
   color: var(--app-ink);
 }

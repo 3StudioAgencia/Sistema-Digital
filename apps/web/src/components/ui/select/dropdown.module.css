@@ -61,6 +61,13 @@
   overflow-y: auto;
 }
 
+/* Painel abrindo para CIMA (campos na metade de baixo do modal). */
+.paraCima .painel {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom center;
+}
+
 .opcao {
   min-height: 44px; /* touch target (RNF-013) */
   display: flex;
@@ -80,4 +87,36 @@
 
 .opcaoAtiva {
   font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- variante
+   ESCURA (campos do modal): mesmo comportamento, pele do formulário preto —
+   pill #1f1f1f, texto claro alinhado à esquerda, painel escuro. Os tamanhos
+   usam --um (escala do modal) com fallback na escala global. */
+.escuro .trigger {
+  justify-content: flex-start;
+  background: var(--app-modal-field);
+  color: var(--auth-text);
+  font-size: calc(18 * var(--um, var(--u, 1px)));
+  padding: 0 56px 0 calc(30 * var(--um, var(--u, 1px)));
+}
+
+.escuro .chevron {
+  color: var(--auth-text-muted);
+}
+
+.escuro .painel {
+  background: var(--app-modal-field);
+  border-radius: calc(22 * var(--um, var(--u, 1px)));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.escuro .opcao {
+  color: var(--auth-text);
+  font-size: calc(16 * var(--um, var(--u, 1px)));
+}
+
+.escuro .opcao:hover,
+.escuro .opcao:focus-visible {
+  background: var(--app-modal-field-hover);
 }
