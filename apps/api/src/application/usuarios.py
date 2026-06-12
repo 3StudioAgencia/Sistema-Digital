@@ -169,9 +169,7 @@ class UsuariosService:
         )
         return usuario
 
-    async def _criar_identidade(
-        self, email: str, senha: str, metadata: dict[str, object]
-    ) -> str:
+    async def _criar_identidade(self, email: str, senha: str, metadata: dict[str, object]) -> str:
         try:
             return await self._identity.create_user(email, senha, metadata)
         except EmailJaExisteNoProvedorError:
@@ -190,9 +188,14 @@ class UsuariosService:
         identidade = await self._identity.find_user_by_email(email)
         if identidade is None or not identidade.provisionado_por_nos:
             return False
+        # Guarda de idade: aplica-se só quando a idade é CONHECIDA. ``created_at``
+        # ausente (raro — o GoTrue sempre popula) é "idade desconhecida", NÃO
+        # "jovem demais": tratá-lo como jovem prenderia o retry em 409 para sempre
+        # (W1-A-014). A marca (acima) e a checagem de linha de domínio (abaixo)
+        # seguem protegendo contra sequestrar uma criação concorrente viva.
         if (
-            identidade.created_at is None
-            or datetime.now(UTC) - identidade.created_at < ORFAO_IDADE_MINIMA
+            identidade.created_at is not None
+            and datetime.now(UTC) - identidade.created_at < ORFAO_IDADE_MINIMA
         ):
             return False  # jovem demais — não arriscar sequestrar criação viva
         if await self._repo.get(identidade.id) is not None:
@@ -242,9 +245,7 @@ class UsuariosService:
         # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
         await self._uow.rollback()
 
-        precisa_sync = (
-            novo.setor is not alvo.setor or novo.administrador != alvo.administrador
-        )
+        precisa_sync = novo.setor is not alvo.setor or novo.administrador != alvo.administrador
         if precisa_sync:
             await self._identity.update_app_metadata(
                 alvo.id, montar_app_metadata(novo.setor, novo.administrador)
@@ -313,9 +314,7 @@ class UsuariosService:
             if ator.id == alvo.id:
                 raise AutoDesativacaoError()
             # Fast-fail (UX); a checagem decisiva é refeita sob lock na transação.
-            if alvo.administrador and await self._repo.count_admins_ativos(
-                excluir_id=alvo.id
-            ) == 0:
+            if alvo.administrador and await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
                 raise UltimoAdminError()
 
         # Libera a conexão da leitura antes do IO externo (idle-in-transaction).

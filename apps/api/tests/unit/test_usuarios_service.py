@@ -84,9 +84,7 @@ class FakeUsuariosRepository(UsuariosRepositoryPort):
         if self.count_admins_sequencia:
             return self.count_admins_sequencia.pop(0)
         return sum(
-            1
-            for u in self.por_id.values()
-            if u.administrador and u.ativo and u.id != excluir_id
+            1 for u in self.por_id.values() if u.administrador and u.ativo and u.id != excluir_id
         )
 
     async def travar_gestao_de_admins(self) -> None:
@@ -165,8 +163,7 @@ async def test_criar_senha_fraca_nao_toca_provedor() -> None:
     assert identity.calls == []
 
 
-async def test_criar_vendedor_sem_localizacao_rejeitado(
-) -> None:
+async def test_criar_vendedor_sem_localizacao_rejeitado() -> None:
     service, _, identity, _ = _montar()
     with pytest.raises(LocalizacaoInvalidaError):
         await service.criar(_cmd(localizacao=None))
@@ -219,9 +216,7 @@ async def test_criar_compensacao_falha_propaga_erro_original() -> None:
 
 async def test_criar_adota_orfao_marcado_e_recria() -> None:
     service, repo, identity, _ = _montar()
-    orfao_id = identity.seed(
-        "mario@estudio.com.br", {"provisionado_por": MARCA_PROVISIONAMENTO}
-    )
+    orfao_id = identity.seed("mario@estudio.com.br", {"provisionado_por": MARCA_PROVISIONAMENTO})
 
     usuario = await service.criar(_cmd())
 
@@ -256,13 +251,51 @@ async def test_criar_orfao_jovem_nao_e_adotado() -> None:
     assert jovem in identity.users  # intocada — retry futuro adota quando envelhecer
 
 
+async def test_criar_adota_orfao_com_created_at_ausente() -> None:
+    """W1-A-014: ``created_at`` ausente é IDADE DESCONHECIDA, não 'jovem demais' —
+    o órfão marcado (sem linha de domínio) é adotado e o retry converge, em vez de
+    ficar preso em 409 para sempre."""
+    service, repo, identity, _ = _montar()
+    orfao_id = identity.seed("mario@estudio.com.br", {"provisionado_por": MARCA_PROVISIONAMENTO})
+    identity.users[orfao_id]["created_at"] = None  # GoTrue sem created_at parseável
+
+    usuario = await service.criar(_cmd())
+
+    assert usuario.id != orfao_id  # recriado do zero
+    assert orfao_id not in identity.users  # órfão removido
+    assert repo.por_id[usuario.id] == usuario
+
+
+async def test_criar_nao_adota_created_at_none_com_linha_de_dominio() -> None:
+    """``created_at`` ausente NÃO afrouxa a proteção: havendo linha de domínio a
+    conta é legítima — não é adotada e o auth user fica intacto."""
+    service, repo, identity, _ = _montar()
+    conta_id = identity.seed("mario@estudio.com.br", {"provisionado_por": MARCA_PROVISIONAMENTO})
+    identity.users[conta_id]["created_at"] = None
+    repo.por_id[conta_id] = Usuario(
+        id=conta_id,
+        nome="Mario",
+        email="mario@estudio.com.br",
+        setor=Setor.VENDEDOR,
+        localizacao=Localizacao.MATRIZ,
+    )
+
+    with pytest.raises(EmailJaCadastradoError):
+        await service.criar(_cmd())
+    assert conta_id in identity.users  # intocada (conta legítima)
+    assert ("delete_user", conta_id) not in identity.calls
+
+
 # ---------------------------------------------------------------------------
 # Editar — RN-009/RN-010 e sincronização de claims
 # ---------------------------------------------------------------------------
 async def test_editar_nome() -> None:
     service, repo, identity, _ = _montar()
     vendedor = Usuario(
-        id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id="v1",
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.FILIAL,
     )
     repo.por_id[vendedor.id] = vendedor
@@ -278,7 +311,10 @@ async def test_editar_setor_sincroniza_app_metadata() -> None:
     service, repo, identity, _ = _montar()
     identity.seed("ana@x.y")  # id "...0001" — não importa o vínculo aqui
     vendedor = Usuario(
-        id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id="v1",
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.FILIAL,
     )
     repo.por_id[vendedor.id] = vendedor
@@ -322,7 +358,10 @@ async def test_editar_remover_ultimo_admin_ativo_negado() -> None:
 async def test_editar_update_falha_reverte_metadata() -> None:
     service, repo, identity, _ = _montar()
     repo.por_id["v1"] = Usuario(
-        id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id="v1",
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.FILIAL,
     )
     repo.fail_update = RuntimeError("banco caiu")
@@ -338,7 +377,10 @@ async def test_editar_update_falha_reverte_metadata() -> None:
 async def test_editar_sem_mudanca_e_noop_idempotente() -> None:
     service, repo, identity, uow = _montar()
     repo.por_id["v1"] = Usuario(
-        id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id="v1",
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.FILIAL,
     )
 
@@ -362,7 +404,10 @@ async def test_desativar_bane_revoga_e_persiste() -> None:
     service, repo, identity, uow = _montar()
     alvo_id = identity.seed("ana@x.y")
     repo.por_id[alvo_id] = Usuario(
-        id=alvo_id, nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id=alvo_id,
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.MATRIZ,
     )
 
@@ -398,8 +443,12 @@ async def test_desativar_ultimo_admin_ativo_negado() -> None:
 async def test_desativar_ja_inativo_e_idempotente_e_converge_o_ban() -> None:
     service, repo, identity, uow = _montar()
     repo.por_id["v1"] = Usuario(
-        id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
-        localizacao=Localizacao.MATRIZ, ativo=False,
+        id="v1",
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
+        localizacao=Localizacao.MATRIZ,
+        ativo=False,
     )
 
     resultado = await service.alterar_status(ADMIN, "v1", ativo=False)
@@ -415,7 +464,10 @@ async def test_desativar_update_falha_reverte_ban() -> None:
     service, repo, identity, _ = _montar()
     alvo_id = identity.seed("ana@x.y")
     repo.por_id[alvo_id] = Usuario(
-        id=alvo_id, nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id=alvo_id,
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.MATRIZ,
     )
     repo.fail_update = RuntimeError("banco caiu")
@@ -433,7 +485,10 @@ async def test_desativar_segue_quando_revogacao_indisponivel() -> None:
     service, repo, identity, _ = _montar()
     alvo_id = identity.seed("ana@x.y")
     repo.por_id[alvo_id] = Usuario(
-        id=alvo_id, nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
+        id=alvo_id,
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
         localizacao=Localizacao.MATRIZ,
     )
     identity.fail_revoke = IdentityProviderError("logout indisponível")
@@ -448,8 +503,12 @@ async def test_reativar_desbane_sem_revogar() -> None:
     alvo_id = identity.seed("ana@x.y")
     identity.users[alvo_id]["banned"] = True
     repo.por_id[alvo_id] = Usuario(
-        id=alvo_id, nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
-        localizacao=Localizacao.MATRIZ, ativo=False,
+        id=alvo_id,
+        nome="Ana",
+        email="ana@x.y",
+        setor=Setor.VENDEDOR,
+        localizacao=Localizacao.MATRIZ,
+        ativo=False,
     )
 
     resultado = await service.alterar_status(ADMIN, alvo_id, ativo=True)
