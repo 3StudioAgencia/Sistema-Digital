@@ -69,13 +69,25 @@ describe("access-matrix · podeAcessarRota", () => {
     for (const rota of ["/dashboard", "/escanear", "/provas", "/provas/X", "/informacoes"]) {
       expect(podeAcessarRota(VENDEDOR, rota)).toBe(true);
     }
-    for (const rota of ["/usuarios", "/provas/nova", "/relatorios", "/configuracoes", "/auditoria"]) {
+    for (const rota of [
+      "/usuarios",
+      "/provas/nova",
+      "/relatorios",
+      "/configuracoes",
+      "/auditoria",
+    ]) {
       expect(podeAcessarRota(VENDEDOR, rota)).toBe(false);
     }
   });
 
   it("admin acessa qualquer rota da Matriz", () => {
-    for (const rota of ["/dashboard", "/provas/nova", "/usuarios", "/relatorios", "/configuracoes"]) {
+    for (const rota of [
+      "/dashboard",
+      "/provas/nova",
+      "/usuarios",
+      "/relatorios",
+      "/configuracoes",
+    ]) {
       expect(podeAcessarRota(ADMIN, rota)).toBe(true);
     }
   });

@@ -31,9 +31,7 @@ export function RbacFlash() {
 /** Lê o flash uma única vez (limpa o cookie). True se estava presente. */
 function consumirFlash(): boolean {
   if (typeof document === "undefined") return false;
-  const presente = document.cookie
-    .split("; ")
-    .some((c) => c.startsWith(`${FLASH_ACESSO_NEGADO}=`));
+  const presente = document.cookie.split("; ").some((c) => c.startsWith(`${FLASH_ACESSO_NEGADO}=`));
   if (presente) {
     document.cookie = `${FLASH_ACESSO_NEGADO}=; path=/; max-age=0`;
   }

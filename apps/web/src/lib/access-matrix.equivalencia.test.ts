@@ -8,7 +8,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { type Perfil, type Recurso, RECURSOS_ADMIN, RECURSOS_UNIVERSAIS, can } from "./access-matrix";
+import {
+  type Perfil,
+  type Recurso,
+  RECURSOS_ADMIN,
+  RECURSOS_UNIVERSAIS,
+  can,
+} from "./access-matrix";
 import cells from "./access-matrix.cells.json";
 
 const ADMIN: Perfil = { setor: "studio", administrador: true };
