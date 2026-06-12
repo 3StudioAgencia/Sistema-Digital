@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * - desktop (>=768px): split com a imagem-herói (formato custom) + formulário;
  * - mobile: boas-vindas primeiro e o formulário ao clicar em "Entrar" (mesmo /login).
  *
- * Já autenticado → /inicio. O notice de inatividade chega por ?expirado=1 (DP-3).
+ * Já autenticado → app shell (/usuarios). O notice de inatividade chega por ?expirado=1 (DP-3).
  */
 export default async function LoginPage({
   searchParams,
@@ -22,7 +22,7 @@ export default async function LoginPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/inicio");
+  if (user) redirect("/usuarios");
 
   const sp = await searchParams;
   return <AuthFlow expired={sp.expirado === "1"} />;

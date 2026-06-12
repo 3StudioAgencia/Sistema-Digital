@@ -95,9 +95,9 @@ test.describe("Login e sessão (W1-C03)", () => {
 // Caminho feliz AUTENTICADO ponta-a-ponta: requer sessão REAL (a checagem
 // getUser do servidor não é interceptável por route mock), API rodando e um
 // usuário semeado. Por isso fica atrás de E2E_LIVE=1 (passo em docs/auth.md).
-// A lógica de sucesso (redirect → /inicio) já é coberta pelo teste de componente
-// de LoginPanel.
-test("caminho feliz: login válido entra e revela a identidade verificada", async ({ page }) => {
+// A lógica de sucesso (redirect → app shell) já é coberta pelo teste de
+// componente de LoginPanel.
+test("caminho feliz: login válido entra no app shell (W1-C04)", async ({ page }) => {
   test.skip(!process.env.E2E_LIVE, "requer E2E_LIVE=1 + usuário semeado + API rodando");
   const email = process.env.E2E_EMAIL ?? "";
   const senha = process.env.E2E_PASSWORD ?? "";
@@ -105,8 +105,8 @@ test("caminho feliz: login válido entra e revela a identidade verificada", asyn
   await page.getByLabel("E-mail:").fill(email);
   await page.getByLabel("Senha:").fill(senha);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page).toHaveURL(/\/inicio$/);
-  await expect(page.getByText(/você está autenticado/i)).toBeVisible();
-  // AuthProof busca o backend /auth/me e mostra sub/email/role:
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page).toHaveURL(/\/usuarios$/);
+  // Shell de pé: sidebar com navegação + página de usuários dentro dele.
+  await expect(page.getByRole("navigation", { name: "Navegação principal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Gerenciador de usuários" })).toBeVisible();
 });

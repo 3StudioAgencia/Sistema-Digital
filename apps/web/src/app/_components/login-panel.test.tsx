@@ -42,7 +42,7 @@ describe("LoginPanel", () => {
     expect(screen.getByText(/sess[aã]o expirou por inatividade/i)).toBeInTheDocument();
   });
 
-  it("login válido chama signInWithPassword e redireciona para /inicio", async () => {
+  it("login válido chama signInWithPassword e redireciona para o app shell", async () => {
     const user = userEvent.setup();
     mocks.signInWithPassword.mockResolvedValue({ error: null });
     render(<LoginPanel expired={false} />);
@@ -55,7 +55,7 @@ describe("LoginPanel", () => {
       email: "vendedor@3studio.test",
       password: "minhaSenhaForte",
     });
-    expect(mocks.push).toHaveBeenCalledWith("/inicio");
+    expect(mocks.push).toHaveBeenCalledWith("/usuarios");
   });
 
   it("login inválido mostra mensagem GENÉRICA, sem revelar o campo nem o detalhe do provedor", async () => {

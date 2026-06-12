@@ -1,0 +1,37 @@
+/* MotionModal (W1-C04) — overlay + painel, fiéis ao design do Figma:
+   scrim preto a 76% (medido), painel preto raio 40, campos como no login. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-overlay);
+  padding: 16px;
+}
+
+.panel {
+  background: var(--app-modal-bg);
+  border-radius: var(--app-shell-radius);
+  width: min(744px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  outline: none;
+  color: var(--auth-text);
+}
+
+/* Mobile (DP-7): folha em tela cheia, raio menor, ocupa o viewport. */
+@media (max-width: 767px) {
+  .overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .panel {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}

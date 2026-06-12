@@ -1,0 +1,618 @@
+/* Gerenciador de usuários (W1-C04) — medidas extraídas do export 1920×1080:
+   título 64px, controles 56-61px pill, card raio 8 com bordas #979797,
+   colunas centralizadas (frações medidas), linhas com pitch 56px, botões de
+   linha 29px (Editar preto / Desativar #ff5959). */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(24px, 8vh, 96px) 28px 24px;
+}
+
+/* -------------------------------------------------- cabeçalho da página */
+.cabecalhoPagina {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+}
+
+.titulo {
+  font-size: clamp(32px, 3.3vw, 64px);
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.botaoNovo {
+  flex: none;
+  height: var(--app-control-h);
+  padding: 0 44px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.botaoNovo:hover {
+  opacity: 0.9;
+}
+
+/* -------------------------------------------------- busca + filtros */
+.filtros {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(180px, 14.6vw, 280px) clamp(150px, 14.6vw, 280px);
+  gap: 15px;
+  margin-top: clamp(28px, 7.5vh, 84px);
+  flex: none;
+}
+
+.campoBusca {
+  position: relative;
+  height: 60px;
+}
+
+.iconeBusca {
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--app-text-gray);
+  pointer-events: none;
+}
+
+.inputBusca {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-field);
+  color: var(--app-text-gray);
+  font: inherit;
+  font-size: 20px;
+  padding: 0 24px 0 62px;
+}
+
+.inputBusca::placeholder {
+  color: var(--app-text-gray);
+}
+
+.campoSelect {
+  position: relative;
+  height: 60px;
+}
+
+.select {
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-field);
+  color: var(--app-text-gray);
+  font: inherit;
+  font-size: 20px;
+  padding: 0 56px 0 28px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.chevron {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--app-text-gray);
+  pointer-events: none;
+}
+
+/* -------------------------------------------------- tabela (desktop) */
+.card {
+  margin-top: 30px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+/* Frações de coluna MEDIDAS no design (Nome·Email·Setor·Localização·Status·
+   Perfil·Ações). */
+.grade {
+  display: grid;
+  grid-template-columns: 165fr 332fr 146fr 184fr 126fr 122fr 284fr;
+  align-items: center;
+}
+
+.cabecalhoTabela {
+  flex: none;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.linhaCabecalho {
+  height: clamp(56px, 9vh, 97px);
+  border-bottom: 1px solid var(--app-divider);
+}
+
+.linhaCabecalho .celula {
+  font-size: 19px;
+  color: var(--app-text-gray);
+}
+
+.corpoTabela {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: 8px;
+}
+
+/* Scrollbar fina como no design (#b7b7b7, ~6px) */
+.corpoTabela::-webkit-scrollbar,
+.cabecalhoTabela::-webkit-scrollbar {
+  width: 6px;
+}
+
+.corpoTabela::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar);
+  border-radius: 3px;
+}
+
+.corpoTabela::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .corpoTabela {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar) transparent;
+  }
+}
+
+.linha {
+  min-height: 56px;
+}
+
+.celula {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px 10px;
+  font-size: 16px;
+  color: var(--app-text-gray);
+  border-right: 1px solid var(--app-divider);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grade > .celula:last-child {
+  border-right: 0;
+}
+
+.celulaAcoes {
+  gap: 11px;
+  white-space: normal;
+}
+
+/* Botões de linha — pills 29px (medido) */
+.botaoEditar,
+.botaoDesativar,
+.botaoReativar {
+  height: var(--app-control-h-sm);
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 22px;
+  transition: opacity 0.15s ease;
+}
+
+.botaoEditar {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+.botaoDesativar {
+  background: var(--app-danger);
+  color: var(--app-ink);
+}
+
+/* "Reativar" não existe no mock (que mostra só linhas com Desativar);
+   usa o amarelo de ação primária da plataforma — decisão documentada. */
+.botaoReativar {
+  background: var(--app-accent);
+  color: var(--app-ink);
+}
+
+.botaoEditar:hover,
+.botaoDesativar:hover,
+.botaoReativar:hover {
+  opacity: 0.85;
+}
+
+.estadoVazio {
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 18px;
+  color: var(--app-text-gray);
+}
+
+.tentarNovamente {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.carregandoMais {
+  padding: 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--app-text-gray);
+}
+
+/* Skeleton de carga: só opacity (GPU) */
+.skeletons {
+  display: block;
+}
+
+.skeleton {
+  height: 56px;
+  animation: pulso 1.2s ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* -------------------------------------------------- cards (mobile) */
+.cartoes {
+  display: none;
+  list-style: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.cartao {
+  border: 1px solid var(--app-divider);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.cartaoNome {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--app-ink);
+}
+
+.cartaoEmail {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--app-text-gray);
+  word-break: break-all;
+}
+
+.cartaoMeta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--app-text-gray);
+}
+
+.cartaoAcoes {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.cartaoAcoes .botaoEditar,
+.cartaoAcoes .botaoDesativar,
+.cartaoAcoes .botaoReativar {
+  flex: 1;
+  min-height: 44px; /* touch targets (RNF-013) */
+}
+
+.cartaoCarregarMais {
+  display: flex;
+}
+
+.botaoCarregarMais {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-radius-pill);
+  background: none;
+  color: var(--app-text-gray);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* -------------------------------------------------- modal (Novo usuário) */
+.modalPainel {
+  padding: 52px 60px 48px;
+}
+
+.modalPainelConfirmacao {
+  width: min(560px, 100%);
+  padding: 44px 48px 40px;
+  border-radius: 32px;
+}
+
+.modalTitulo {
+  font-size: clamp(32px, 2.5vw, 48px);
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.modalSeparador {
+  /* no design o separador excede a largura dos campos em 18px de cada lado */
+  margin: clamp(24px, 2.2vw, 42px) -18px 0;
+  border: 0;
+  border-top: 1px solid var(--auth-text);
+}
+
+.modalTexto {
+  margin-top: 28px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--auth-text-muted);
+}
+
+.modalTexto strong {
+  color: var(--auth-text);
+}
+
+.modalCampo {
+  margin-top: 28px;
+}
+
+.modalLabel {
+  display: block;
+  font-size: 22px;
+  color: var(--auth-text);
+}
+
+.modalInput,
+.modalSelect {
+  margin-top: 14px;
+  width: 100%;
+  height: var(--app-control-h);
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-modal-field);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: 18px;
+  padding: 0 30px;
+}
+
+.modalInput::placeholder {
+  color: var(--auth-text-muted);
+}
+
+.modalInput:disabled {
+  color: var(--auth-text-muted);
+  cursor: not-allowed;
+}
+
+.modalSelectWrap {
+  position: relative;
+}
+
+.modalSelect {
+  appearance: none;
+  cursor: pointer;
+}
+
+.modalChevron {
+  position: absolute;
+  right: 24px;
+  bottom: 17px;
+  color: var(--auth-text-muted);
+  pointer-events: none;
+}
+
+.modalNota {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--auth-text-muted);
+}
+
+.modalErro {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--auth-error);
+}
+
+/* Checkbox custom 30×30 com check branco sobre amarelo (medido no design) */
+.modalCheckboxLinha {
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 22px;
+  color: var(--auth-text);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.modalCheckbox {
+  position: absolute;
+  opacity: 0;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.modalCheckboxCaixa {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--app-modal-field);
+  border: 1px solid var(--app-text-gray);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modalCheckbox:checked + .modalCheckboxCaixa {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+.modalCheckbox:checked + .modalCheckboxCaixa::after {
+  content: "";
+  width: 8px;
+  height: 14px;
+  border: solid var(--auth-text);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.modalCheckbox:focus-visible + .modalCheckboxCaixa {
+  outline: 2px solid var(--auth-text);
+  outline-offset: 2px;
+}
+
+.modalAcoes {
+  margin-top: 36px;
+  display: flex;
+  gap: 19px;
+}
+
+.botaoCancelar {
+  flex: 1;
+  height: var(--app-control-h);
+  border: 1px solid var(--auth-text-muted);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-modal-field);
+  color: var(--auth-text-muted);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.botaoConfirmar,
+.botaoConfirmarPerigo {
+  flex: 1;
+  height: var(--app-control-h);
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--app-ink);
+}
+
+.botaoConfirmar {
+  background: var(--app-accent);
+}
+
+.botaoConfirmarPerigo {
+  background: var(--app-danger);
+}
+
+.botaoConfirmar:disabled,
+.botaoConfirmarPerigo:disabled,
+.botaoCancelar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* -------------------------------------------------- responsivo (DP-7) */
+@media (max-width: 1100px) {
+  .filtros {
+    grid-template-columns: 1fr;
+  }
+
+  .titulo {
+    font-size: clamp(28px, 4.5vw, 44px);
+  }
+
+  .botaoNovo {
+    font-size: 18px;
+    padding: 0 28px;
+  }
+}
+
+@media (max-width: 767px) {
+  .pagina {
+    padding: 20px 16px 24px;
+  }
+
+  .cabecalhoPagina {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .botaoNovo {
+    min-height: 48px;
+  }
+
+  .filtros {
+    margin-top: 20px;
+    gap: 10px;
+  }
+
+  .campoBusca,
+  .campoSelect {
+    height: 52px;
+  }
+
+  .inputBusca,
+  .select {
+    font-size: 16px;
+  }
+
+  .card {
+    display: none; /* tabela → cards (DP-7) */
+  }
+
+  .cartoes {
+    display: flex;
+  }
+
+  .modalPainel,
+  .modalPainelConfirmacao {
+    padding: 32px 20px 28px;
+  }
+
+  .modalLabel,
+  .modalCheckboxLinha {
+    font-size: 18px;
+  }
+
+  .modalAcoes {
+    flex-direction: column-reverse;
+  }
+
+  .botaoCancelar,
+  .botaoConfirmar,
+  .botaoConfirmarPerigo {
+    font-size: 18px;
+  }
+}

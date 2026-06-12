@@ -1,0 +1,15 @@
+.wrap {
+  padding: clamp(32px, 8vh, 96px) clamp(20px, 1.6vw, 32px);
+}
+
+.titulo {
+  font-size: clamp(32px, 3.3vw, 64px);
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.texto {
+  margin-top: 24px;
+  font-size: 18px;
+  color: var(--app-text-gray);
+}

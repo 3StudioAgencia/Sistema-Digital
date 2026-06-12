@@ -24,6 +24,30 @@
   --auth-radius-pill: 50px;
   --auth-control-h: 56px;
 
+  /* App shell + gestão de usuários (W1-C04) — valores extraídos por amostragem
+     de pixel dos exports PNG 1:1 do Figma (cores exatas; PNG é lossless).
+     Fonte: "Gerenciamento de usuários - admin (3).png" e "- Modal (1).png". */
+  --app-sidebar-bg: #000000;
+  --app-sidebar-field: #181818;
+  --app-sidebar-muted: #868686;
+  --app-shell-bg: #eaeaea;
+  --app-shell-radius: 40px;
+  --app-accent: var(--auth-accent); /* #ffcb5c — mesmo amarelo do login */
+  --app-danger: #ff5959; /* botão "Desativar" */
+  --app-ink: #000000;
+  --app-text-gray: #575757; /* texto de tabela/controles claros */
+  --app-field: #d7d7d7; /* busca e filtros do conteúdo */
+  --app-divider: #979797; /* bordas/divisores da tabela */
+  --app-scrollbar: #b7b7b7;
+  --app-avatar: #d9d9d9;
+  --app-overlay: rgba(0, 0, 0, 0.76); /* scrim do modal (medido: alpha .763) */
+  --app-modal-bg: #000000;
+  --app-modal-field: var(--auth-field); /* #1f1f1f */
+  --app-control-h: 56px; /* botões/inputs grandes (pill) */
+  --app-control-h-sm: 29px; /* botões de linha da tabela (Editar/Desativar) */
+  --app-card-radius: 8px; /* card da tabela */
+  --app-radius-pill: 999px;
+
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;

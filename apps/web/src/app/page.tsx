@@ -6,17 +6,16 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 /**
- * Raiz — porta de entrada (W1-C03 / DP-4, DP-7).
+ * Raiz — porta de entrada (W1-C03 / W1-C04).
  *
- * Autenticado → /inicio. Não autenticado → /login (que é adaptativo: no mobile
- * mostra as boas-vindas primeiro e revela o formulário ao clicar em "Entrar";
- * no desktop, o split). A proteção usa getUser() (valida no servidor de auth),
- * nunca getSession() (§3.2).
+ * Autenticado → app shell (/usuarios — única página real; a "página inicial
+ * do perfil" chega no C05). Não autenticado → /login. A proteção usa getUser()
+ * (valida no servidor de auth), nunca getSession() (§3.2).
  */
 export default async function Home() {
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  redirect(user ? "/inicio" : "/login");
+  redirect(user ? "/usuarios" : "/login");
 }

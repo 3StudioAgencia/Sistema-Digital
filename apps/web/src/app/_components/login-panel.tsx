@@ -73,7 +73,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         setLoading(false);
         return;
       }
-      router.push("/inicio");
+      router.push("/usuarios");
       router.refresh();
     } catch {
       setError("Não foi possível entrar agora. Tente novamente em instantes.");
