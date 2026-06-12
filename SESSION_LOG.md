@@ -32,6 +32,36 @@
 
 ---
 
+## Sessão 07 — 2026-06-12 — [Wave 1 / W1-C05] Controle de Acesso por Perfil (Matriz RBAC em duas camadas)
+
+**Objetivo:** Formalizar o RBAC por perfil em **duas camadas independentes** (proxy do App Router + RLS do PostgreSQL), com a Matriz §7 como fonte única, fechando a **Wave 1**.
+
+**Feito:**
+- **Hook de claims** (migration `0004`): `public.custom_access_token_hook` eleva `setor`/`user_id`/`administrador` do `app_metadata` ao topo do JWT (posição lida pela RLS), `SECURITY INVOKER`, grants restritos ao `supabase_auth_admin`.
+- **RLS definitiva de `usuarios`** (migration `0005` + espelhos em `migrations/rls/`): grants a `authenticated` + policies `self`/`admin` (opção 6-A), **helpers** `app_current_claims/app_setor/app_is_admin/app_current_user_id` (reuso no C06), `_roles.sql` (stand-ins locais). Removido `usuarios_baseline_restritiva.sql`.
+- **Propagação de claims (ADR-008)**: `propagar_claims_rls` (listener `after_begin` + `SET LOCAL ROLE authenticated`) ligado em `get_usuarios_service`; guard generalizado em `requer_acesso(Recurso)` + `domain/rbac.py`.
+- **Camada superior (web)**: `lib/access-matrix.ts` (+ `access-matrix.cells.json`), enforcement no `proxy.ts` (claims via `getClaims()`, redirect + flash), `RbacFlash` (toast), **sidebar filtrada** por perfil.
+- **Harness de equivalência** travando `access-matrix.ts` (web) e `rbac.py` (api) à Matriz canônica; **`docs/rbac.md`**.
+
+**Decisões (ADRs):**
+- ADR-029 (hook lê `app_metadata` do evento — opção B), ADR-030 (duas camadas + equivalência/PR único), ADR-031 (propagação `after_begin` + helpers portáteis — finaliza **ADR-008**), ADR-032 (RLS de `usuarios` 6-A), ADR-033 (fronteira C05↔C06). **DP-1…DP-7 confirmados** pelo dono ("segue com as recomendações"): Matriz ortogonal (Vendedor-Admin vê páginas admin), hook opção B, redirect→`/dashboard`+cookie, RLS 6-A.
+
+**Testes / cobertura:**
+- api: **228 verdes, cobertura 90%** (hook por perfil; RLS de `usuarios` sob `SET ROLE authenticated`; propagação ADR-008 + controle negativo; equivalência da Matriz; ciclo upgrade/downgrade das `0004/0005`). `ruff`/`mypy` limpos.
+- web: **76 verdes** (access-matrix por célula, equivalência, sidebar por perfil, `RbacFlash`); `lint`/`build` limpos.
+- Cobertura de células: **100% das de PÁGINA** (proxy/`can` ⇔ `autorizar`); **dado de `usuarios`** via RLS (admin todas; não-admin 0 alheias). 
+
+**Pendências / em aberto:**
+- [ ] **RLS de linha de `provas` (Vendedor as próprias / Motorista as "Em Trânsito") é do C06** (DP-3) — usando os helpers desta sessão; o harness é estendido lá.
+- [ ] **Habilitar o hook no dashboard** do Supabase (Auth → Hooks → `public.custom_access_token_hook`) — passo de projeto (não-código). Aplicar `0004/0005` no projeto real via `alembic upgrade head`.
+
+**Próximo passo:**
+- **W2-C06 · Cadastro de Prova com Seleção de Rota + Etiqueta** (abre a Wave 2; aplica a RLS de `provas` sobre os helpers do C05).
+
+**Definition of Done:** ✅ atendida (testes ≥ piso incl. acesso não autorizado por perfil + equivalência; RLS versionada em `/migrations/rls/`; migrations `upgrade`/`downgrade` em ambiente limpo; sem erro de console/log crítico; docs do módulo; sem segredos versionados; idempotência preservada). Itens de animação reusam o sistema do C04.
+
+---
+
 ## Sessão 06 — 2026-06-12 — [Wave 1 / W1-C04] Cadastro e Gestão de Usuários + App Shell
 
 **Objetivo:** CRUD de usuários (RF-018, RF-020, US-015) com provisionamento via Supabase Auth Admin API, **primeira tabela/migration de domínio** (`usuarios`) e o **app shell** (sidebar + área de conteúdo) que hospeda toda a plataforma autenticada.

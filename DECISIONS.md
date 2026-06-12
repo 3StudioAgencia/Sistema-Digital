@@ -52,8 +52,8 @@
 ## ADR-008 — Como o backend honra a RLS por requisição
 - **Contexto:** Os exemplos de RLS do DAT §7.2 usam `auth.jwt()`. Conexões com a *service role* **ignoram** RLS por padrão. Um backend próprio precisa propagar os claims do usuário ao Postgres para que `auth.jwt()`/escopo funcionem como camada inferior real.
 - **Decisão (proposta):** Por requisição autenticada, o backend define os claims na sessão do banco com `SET LOCAL request.jwt.claims = '<json>'` (e papel `authenticated`) dentro da transação, de modo que as policies baseadas em `auth.jwt()` resolvam corretamente; **nunca** operar o fluxo do usuário com credenciais que façam *bypass* de RLS.
-- **Status:** **Proposta** — desenhar/validar na Wave 1 / C05. Apenas registrada agora para não ser esquecida.
-- **Consequências:** Define o padrão de Unit of Work/sessão por request. Impacta o adapter de banco (a ser previsto, sem implementar a lógica de RLS, na C01).
+- **Status:** **Aceita** — **finalizada no W1-C05 (ver ADR-031)**: a propagação é feita por listener `after_begin` (cobre leituras auto-begin), `set_config('request.jwt.claims', …, true)` + `SET LOCAL ROLE authenticated`, com helpers de RLS portáteis.
+- **Consequências:** Define o padrão de Unit of Work/sessão por request. Implementado em `infrastructure/database.py` (`propagar_claims_rls`), ligado em `get_usuarios_service`.
 
 ## ADR-009 — Alvos de deploy (revisável)
 - **Contexto:** Backlog C01 exige pipeline de deploy (web + api) e staging acessível com health check, dentro do free tier. Plataformas não foram especificadas pelo cliente.
@@ -180,11 +180,41 @@
 - **Status:** **Aceita** (W1-C04) — DP-8 confirmada.
 - **Consequências:** O C19 **generaliza e documenta** (`<PageTransition>`, `<AnimatedCounter>`, `<AnimatedTimeline>`, promoção do Toaster a global definitivo) **sem reescrever** estes componentes; futuros modais (confirmações, C06+) reutilizam o `MotionModal`.
 
+## ADR-029 — Custom Access Token Hook lê `app_metadata` do evento (W1-C05 / DP-2)
+- **Contexto:** A RLS lê `auth.jwt() ->> 'setor'`/`'user_id'`/`'administrador'` (nível superior), mas o Supabase só injeta esses dados aninhados em `app_metadata`. É preciso elevá-los — e decidir a FONTE: ler a tabela `usuarios` (autoritativo, com grant ao `supabase_auth_admin`) ou o `app_metadata` já presente no evento.
+- **Decisão:** Migration `0004` cria `public.custom_access_token_hook(event jsonb)` que **eleva ao topo** `user_id`(=`sub`), `setor` e `administrador` **a partir do `app_metadata` que já vem no `event.claims`** (opção B). O C04 mantém `app_metadata` sincronizado (ADR-025/027), então o hook **não lê tabela** → rápido, `SECURITY INVOKER`, **nunca quebra a auth** por RLS/lock e **dispensa** grant de leitura ao `supabase_auth_admin`. Default `administrador=false`; preserva claims obrigatórios. **Grants:** `execute` só a `supabase_auth_admin` + `usage` no schema; revogado de `authenticated`/`anon`/`public` (condicional às roles). Habilitar é passo de dashboard/`config.toml` (documentado em `docs/rbac.md`).
+- **Status:** **Aceita** (W1-C05).
+- **Consequências:** Os claims no JWT espelham a posição que a RLS e o `getClaims()` do proxy leem. Conta sem `app_metadata` emite token com menor privilégio (sem `setor`, `administrador=false`). Se um dia houver edição de perfil fora do backend, `app_metadata` precisa continuar sincronizado (hoje garantido pelo serviço).
+
+## ADR-030 — RBAC em duas camadas: o proxy espelha a RLS, travados por equivalência (W1-C05 / DP-3, DP-4, DP-7)
+- **Contexto:** A Matriz §7 é fonte única, mas vive em duas representações (proxy + RLS) que podem divergir — o maior risco do componente.
+- **Decisão:** **Camada superior** = `proxy.ts`→`updateSession` lê claims via **`getClaims()` (local)** após o refresh e decide pela **`lib/access-matrix.ts`**; acesso negado → **302 para `/dashboard`** (home ● a todos) + cookie efêmero `rbac_negado` que o `RbacFlash` converte em **toast** (DP-4). A UI consome a mesma Matriz (sidebar filtrada; `can()` p/ gating). **Matriz canônica** em `access-matrix.cells.json`; **harness de equivalência** trava `access-matrix.ts` (web) e `domain/rbac.py` (api) ao mesmo arquivo (DP-7). **Regra do PR único:** toda mudança na Matriz cobre o JSON + as duas implementações + as migrations de RLS, no mesmo PR.
+- **Status:** **Aceita** (W1-C05).
+- **Consequências:** Divergência entre camadas vira falha de teste. `getClaims()` local evita bater no auth server por request (a validação de sessão segue no `getUser()` do refresh, C03).
+
+## ADR-031 — Propagação de claims à RLS por `after_begin` + helpers SQL portáteis (W1-C05, finaliza ADR-008)
+- **Contexto:** ADR-008 previa `SET LOCAL request.jwt.claims` no `UnitOfWork.begin()`, mas leituras dos repositórios **auto-iniciam** transações sem passar por `begin()` — o claim não valeria nelas.
+- **Decisão:** `propagar_claims_rls(session, claims)` (em `infrastructure/database.py`) anexa um listener **`after_begin`**: em **toda** transação executa `set_config('request.jwt.claims', …, true)` + **`SET LOCAL ROLE authenticated`**. Ligado por requisição em `get_usuarios_service` com os claims do JWT verificado. Helpers de RLS (`migrations/rls/_helpers.sql`: `app_current_claims/app_setor/app_is_admin/app_current_user_id`) leem `request.jwt.claims` — **portáteis** (não dependem do schema `auth`, ausente no Postgres local); `_roles.sql` cria stand-ins de `anon`/`authenticated` quando ausentes (no-op no Supabase). A autorização de recurso vira a dependência reutilizável `requer_acesso(Recurso)` (generaliza o guard do C04).
+- **Status:** **Aceita** (W1-C05) — encerra ADR-008.
+- **Consequências:** Consultas servidas pelo FastAPI respeitam a RLS (sem propagação a conexão owner faria bypass — coberto por teste de controle). Por transação (`SET LOCAL`) → seguro com o pooler em modo transação (ADR-007). O C06 reusa os mesmos helpers para `provas`.
+
+## ADR-032 — RLS definitiva de `usuarios`: grant a `authenticated` + policies por perfil (W1-C05 / DP-6, opção 6-A)
+- **Contexto:** O C04 deixou `usuarios` com REVOKE total de `authenticated` (dado só via owner+guard). Para a propagação (ADR-031) honrar a RLS, `authenticated` precisa de privilégios + policies — ou o backend não enxergaria nada sob `SET ROLE authenticated`.
+- **Decisão:** **Opção 6-A (canônica DAT §7.2):** migration `0005` **substitui** a postura restritiva — `GRANT SELECT/INSERT/UPDATE/DELETE` a `authenticated` + policies `usuarios_select_self` (cada um lê a própria linha → `/me`) e `usuarios_{select,insert,update,delete}_admin` (flag `administrador`). `anon` segue sem acesso. O `usuarios_baseline_restritiva.sql` é **removido** (superado); o guard `requer_acesso` permanece como camada explícita extra.
+- **Status:** **Aceita** (W1-C05) — substitui a postura provisória do ADR-027.
+- **Consequências:** Defesa em profundidade real sobre `usuarios` já em produção (query direta fora do escopo → 0 registros). Relaxa o REVOKE do C04: abre um caminho PostgREST direto, **porém protegido pela RLS** (cada um só a própria linha; admin todas). Convenção "acesso via backend" segue valendo por design.
+
+## ADR-033 — Fronteira C05↔C06: a RLS de linha de `provas` é do C06 (W1-C05 / DP-3)
+- **Contexto:** `provas` só existe no C06. O escopo de dado das células ◐ (Vendedor as próprias, Motorista as "Em Trânsito") não pode ter RLS agora.
+- **Decisão:** O C05 entrega a **fundação reutilizável** (hook, claims, `access-matrix`, proxy, RLS de `usuarios`, helpers SQL, propagação, harness). O **C06** cria `provas` e aplica `provas_select_*.sql` **sobre os helpers** (`app_setor()`/`app_current_user_id()`), estendendo o harness a essas células. Não se pré-autoram os `.sql` de `provas` agora (evita arquivo morto antes da tabela).
+- **Status:** **Aceita** (W1-C05).
+- **Consequências:** A aceitação "Vendedor vê só as suas / Motorista só as Em Trânsito" a nível de dado é validada **no C06**, documentada em `docs/rbac.md §6`.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
 - [x] ADR-007 — validado: pooler/NullPool + caches off, suíte contra PostgreSQL 17.10 real (W0/C01).
-- [ ] ADR-008 — desenhar propagação de claims/RLS por request (W1/C05). Ponto de extensão pronto em `SqlAlchemyUnitOfWork.begin()`.
+- [x] ADR-008 — propagação de claims/RLS por request **entregue** (W1/C05): listener `after_begin` + `SET LOCAL ROLE authenticated` em `propagar_claims_rls` (ADR-031).
 - [ ] ADR-009 — confirmar plataformas de deploy com o responsável (CI/Dockerfile prontos e agnósticos).
 - [x] ADR-010 — confirmado: `uv` 0.11 + `pnpm` 11 no ambiente alvo (W0/C01).
 - [x] ADR-015 — keep-alive externo entregue e validado em execução real (W0/C02).
