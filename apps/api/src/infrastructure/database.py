@@ -15,12 +15,13 @@ configuração de runtime é segura também contra Postgres direto, apenas abre 
 do cache de statements.
 """
 
+import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -109,14 +110,45 @@ async def ping(engine: AsyncEngine) -> bool:
     return True
 
 
+def propagar_claims_rls(session: AsyncSession, claims: Mapping[str, Any]) -> None:
+    """Propaga os claims do JWT verificado para CADA transação da sessão (ADR-008).
+
+    Anexa um listener ``after_begin``: no início de toda transação — leitura OU
+    escrita, **inclusive as auto-begin** dos repositórios — executa
+    ``set_config('request.jwt.claims', <json>, true)`` + ``SET LOCAL ROLE
+    authenticated``. Assim, as policies de RLS (que leem ``app_current_claims()``,
+    o mesmo conteúdo que ``auth.jwt()`` expõe no Supabase) valem também para as
+    consultas servidas pelo FastAPI — sem esta propagação, a conexão *owner*
+    faria *bypass* da RLS.
+
+    Por transação (``SET LOCAL`` / ``is_local=true``): seguro com o pooler em modo
+    transação (ADR-007), em que cada transação pode cair numa conexão diferente.
+    O listener é ligado à sessão concreta (uma por requisição), nunca à fábrica —
+    sessões de seed/CLI que rodam como *owner* permanecem fora da RLS de propósito.
+
+    Ordem deliberada: claims ANTES da troca de role (o ``set_config`` corre como
+    owner; o GUC local sobrevive à troca de role e é lido pelas policies).
+    """
+    claims_json = json.dumps(dict(claims))
+
+    @event.listens_for(session.sync_session, "after_begin")
+    def _aplicar(_sess: Any, _trans: Any, connection: Any) -> None:
+        connection.execute(
+            text("SELECT set_config('request.jwt.claims', :c, true)"),
+            {"c": claims_json},
+        )
+        connection.execute(text("SET LOCAL ROLE authenticated"))
+
+
 class SqlAlchemyUnitOfWork(UnitOfWork):
     """Unit of Work por requisição sobre uma ``AsyncSession``.
 
-    PONTO DE EXTENSÃO (ADR-008 — Wave 1/C05, NÃO implementar agora):
-    a propagação de claims para a RLS acontecerá em ``begin()``, executando
-    ``SET LOCAL request.jwt.claims = :claims`` (e ``SET LOCAL ROLE``) dentro da
-    transação recém-aberta, antes de qualquer query do caso de uso. A assinatura
-    ``begin(claims=...)`` absorve isso sem mudança estrutural nos casos de uso.
+    A propagação de claims para a RLS (ADR-008) é feita por
+    ``propagar_claims_rls`` (listener ``after_begin`` da sessão), e NÃO aqui:
+    repositórios fazem leituras que auto-iniciam transações sem passar pelo
+    ``begin()``, então o hook de propagação precisa ser por-transação, não
+    por-``begin()``. A UoW segue responsável apenas pela fronteira atômica
+    (RNF-017).
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -128,7 +160,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         return self._session
 
     async def begin(self) -> None:
-        """Abre a transação. (Futuro: recebe claims e executa SET LOCAL — ADR-008.)"""
+        """Abre a transação explícita do caso de uso (escrita)."""
         if not self._session.in_transaction():
             await self._session.begin()
 

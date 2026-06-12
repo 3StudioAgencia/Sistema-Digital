@@ -11,6 +11,8 @@ import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import type { Perfil } from "@/lib/access-matrix";
+import { podeAcessarRota } from "@/lib/access-matrix";
 import type { Usuario } from "@/lib/api/usuarios";
 import { SETOR_LABELS } from "@/lib/api/usuarios";
 import { DURATION } from "@/lib/motion/tokens";
@@ -42,6 +44,16 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
   const ativo = hrefAtivo(pathname);
   const nome = primeiroNome(usuario, emailSessao);
   const subtitulo = usuario ? SETOR_LABELS[usuario.setor] : "3Studio";
+
+  // Visibilidade por perfil (W1-C05): a mesma Matriz que o proxy usa filtra o
+  // menu — itens de páginas não autorizadas nem aparecem (espelho da camada
+  // superior; o acesso direto por URL ainda é barrado pelo proxy + RLS).
+  const perfil: Perfil = {
+    setor: usuario?.setor ?? null,
+    administrador: usuario?.administrador ?? false,
+  };
+  const principais = NAV_PRINCIPAL.filter((item) => podeAcessarRota(perfil, item.href));
+  const secundarias = NAV_SECUNDARIA.filter((item) => podeAcessarRota(perfil, item.href));
 
   async function sair() {
     const supabase = getSupabaseBrowserClient();
@@ -111,9 +123,9 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
       </div>
 
       <nav className={styles.nav} aria-label="Navegação principal">
-        <ul className={styles.navLista}>{NAV_PRINCIPAL.map(renderItem)}</ul>
+        <ul className={styles.navLista}>{principais.map(renderItem)}</ul>
         <ul className={`${styles.navLista} ${styles.navSecundaria}`}>
-          {NAV_SECUNDARIA.map(renderItem)}
+          {secundarias.map(renderItem)}
         </ul>
       </nav>
 

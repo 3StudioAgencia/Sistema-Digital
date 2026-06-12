@@ -1,0 +1,15 @@
+{
+  "doc": "FONTE ÚNICA da Matriz de Acesso §7 a nível de PÁGINA/AÇÃO (W1-C05). 'todos' = qualquer autenticado (●/◐ na Matriz); 'admin' = exclusivo do flag administrador (○ para os demais perfis — modelo ortogonal ADR-023). Espelhado por access-matrix.ts (web) e domain/rbac.py (api), ambos TRAVADOS a este arquivo pelos testes de equivalência (access-matrix.equivalencia.test.ts e tests/unit/test_equivalencia_matriz.py). Mudar a Matriz exige PR único cobrindo este arquivo, as DUAS implementações E as migrations de RLS (DAT §7.3 / CLAUDE.md §5.4).",
+  "celulas": {
+    "dashboard": "todos",
+    "escanear": "todos",
+    "provas": "todos",
+    "criar_prova": "admin",
+    "cadastro_usuarios": "admin",
+    "relatorios": "admin",
+    "configuracoes": "admin",
+    "log_auditoria": "admin",
+    "reiniciar_ciclo": "admin",
+    "cancelar_prova": "admin"
+  }
+}

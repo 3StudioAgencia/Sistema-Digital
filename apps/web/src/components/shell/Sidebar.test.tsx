@@ -34,6 +34,18 @@ const MONICA: Usuario = {
   updated_at: null,
 };
 
+const ANA_VENDEDORA: Usuario = {
+  id: "u2",
+  nome: "Ana Lima",
+  email: "ana@x.y",
+  setor: "vendedor",
+  localizacao: "matriz",
+  administrador: false,
+  ativo: true,
+  created_at: null,
+  updated_at: null,
+};
+
 beforeEach(() => {
   mocks.pathname.value = "/usuarios";
   mocks.replace.mockClear();
@@ -62,6 +74,23 @@ describe("Sidebar (app shell — W1-C04)", () => {
       "Configurações",
       "Informações",
     ]);
+  });
+
+  it("filtra o menu por perfil: não-admin não vê páginas exclusivas de 3Studio (W1-C05)", () => {
+    mocks.pathname.value = "/dashboard";
+    render(<Sidebar usuario={ANA_VENDEDORA} emailSessao="ana@x.y" />);
+
+    const nav = screen.getByRole("navigation", { name: "Navegação principal" });
+    const rotulos = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    // Só universais (Dashboard/Provas/Escanear) + neutra (Informações).
+    expect(rotulos).toEqual(["Dashboard", "Provas", "Escanear", "Informações"]);
+    // Exclusivos de admin ausentes:
+    expect(within(nav).queryByText("Nova prova")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Usuários")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Relatórios")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Configurações")).not.toBeInTheDocument();
   });
 
   it("marca o item ativo conforme a rota (aria-current)", () => {
