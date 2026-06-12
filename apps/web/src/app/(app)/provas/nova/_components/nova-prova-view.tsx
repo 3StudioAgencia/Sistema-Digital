@@ -244,7 +244,7 @@ export function NovaProvaView() {
   // ------------------------------------------------------------- formulário
   return (
     <section className={styles.pagina}>
-      <form onSubmit={aoEnviar} noValidate>
+      <form onSubmit={aoEnviar} noValidate className={styles.formulario}>
         <header className={styles.cabecalho}>
           <h1 className={styles.titulo}>Nova prova Digital</h1>
           <button type="submit" className={styles.botaoCriar} disabled={enviando}>
@@ -414,7 +414,7 @@ export function NovaProvaView() {
             )}
           </div>
 
-          <div className={styles.campo}>
+          <div className={`${styles.campo} ${styles.campoArte}`}>
             <motion.div
               className={styles.dropzone}
               data-arrastando={dragAtivo || undefined}
