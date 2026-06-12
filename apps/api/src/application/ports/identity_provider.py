@@ -11,6 +11,7 @@ Os casos de uso falam apenas com esta abstração; o adapter concreto
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 
 # Marca gravada no app_metadata de todo usuário criado POR ESTA API. Permite
 # distinguir órfãos de provisionamento (nossos, recuperáveis) de contas criadas
@@ -42,6 +43,9 @@ class IdentidadeAuth:
     id: str
     email: str
     app_metadata: Mapping[str, object] = field(default_factory=dict)
+    # Idade da conta no provedor — usada pela adoção de órfãos para NUNCA
+    # tocar uma criação concorrente em andamento (revisão W1-C04).
+    created_at: datetime | None = None
 
     @property
     def provisionado_por_nos(self) -> bool:

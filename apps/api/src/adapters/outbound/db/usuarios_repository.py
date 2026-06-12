@@ -5,6 +5,7 @@ NUNCA faz commit — a fronteira transacional é do caso de uso (RNF-017).
 """
 
 from sqlalchemy import ColumnElement, Select, func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.outbound.db.models import UsuarioRow
@@ -13,7 +14,8 @@ from src.application.ports.usuarios_repository import (
     PaginaUsuarios,
     UsuariosRepositoryPort,
 )
-from src.domain.usuarios import Usuario
+from src.application.usuarios import EmailJaCadastradoError
+from src.domain.usuarios import ConflitoDeConcorrenciaError, Usuario
 
 
 def _para_dominio(row: UsuarioRow) -> Usuario:
@@ -61,26 +63,51 @@ class SqlAlchemyUsuariosRepository(UsuariosRepositoryPort):
         self._session.add(row)
         # eager_defaults do mapper traz created_at/updated_at no RETURNING do
         # próprio INSERT — sem SELECT extra (RNF-020).
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            # Corrida de criação (duas requisições passaram pela pré-checagem):
+            # a violação do índice único de e-mail é REGRA DE NEGÓCIO (409),
+            # não erro interno — o serviço compensa o auth user e propaga.
+            if "uq_usuarios_email_lower" in str(exc.orig):
+                raise EmailJaCadastradoError() from exc
+            raise
         usuario.created_at = row.created_at
         usuario.updated_at = row.updated_at
 
     async def update(self, usuario: Usuario) -> None:
+        # Lock OTIMISTA: o UPDATE só aplica se a linha ainda está na versão
+        # (updated_at) lida pelo caso de uso — escrita concorrente perdida vira
+        # 409 explícito em vez de ressuscitar campos obsoletos (revisão W1-C04).
         stmt = (
             update(UsuarioRow)
-            .where(UsuarioRow.id == usuario.id)
+            .where(
+                UsuarioRow.id == usuario.id,
+                UsuarioRow.updated_at == usuario.updated_at,
+            )
             .values(
                 nome=usuario.nome,
                 setor=usuario.setor,
                 localizacao=usuario.localizacao,
                 administrador=usuario.administrador,
                 ativo=usuario.ativo,
-                updated_at=text("now()"),
+                updated_at=text("clock_timestamp()"),
             )
             .returning(UsuarioRow.updated_at)
         )
         result = await self._session.execute(stmt)
-        usuario.updated_at = result.scalar_one()
+        novo_updated_at = result.scalar_one_or_none()
+        if novo_updated_at is None:
+            raise ConflitoDeConcorrenciaError()
+        usuario.updated_at = novo_updated_at
+
+    async def travar_gestao_de_admins(self) -> None:
+        # Advisory lock TRANSACIONAL (liberado no commit/rollback): serializa
+        # demoções/desativações de admin para a recontagem da RN-010 ser
+        # confiável (fecha o TOCTOU de duas operações concorrentes).
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext('usuarios_gestao_admins'))")
+        )
 
     async def listar(self, filtros: FiltrosUsuarios) -> PaginaUsuarios:
         condicoes = self._condicoes(filtros)

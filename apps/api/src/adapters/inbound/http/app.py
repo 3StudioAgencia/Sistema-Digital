@@ -47,9 +47,11 @@ def create_app(
     app = FastAPI(
         title=APP_NAME,
         version=APP_VERSION,
-        # OpenAPI exposto em /docs (critério §5.7). Em produção pode ser
-        # restringido via RBAC na Wave 1 — decisão registrada, não um TODO órfão.
-        docs_url="/docs",
+        # OpenAPI exposto em /docs fora de produção (critério §5.7 do W0). Em
+        # produção fica DESLIGADO: a superfície da API de gestão de usuários
+        # não é enumerável por anônimos (revisão W1-C04); o RBAC fino é C05.
+        docs_url="/docs" if settings.app_env != "production" else None,
+        openapi_url="/openapi.json" if settings.app_env != "production" else None,
         redoc_url=None,
         lifespan=lifespan,
     )

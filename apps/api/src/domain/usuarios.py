@@ -86,6 +86,18 @@ class UltimoAdminError(ErroDeDominio):
         super().__init__("Operação negada: este é o último administrador ativo do sistema.")
 
 
+class ConflitoDeConcorrenciaError(ErroDeDominio):
+    """Escrita concorrente detectada (lock otimista). Mapeada a 409."""
+
+    codigo = "conflito_concorrencia"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "O usuário foi alterado por outra operação enquanto você editava. "
+            "Recarregue e tente novamente."
+        )
+
+
 @dataclass
 class Usuario:
     """Usuário de domínio — vinculado 1:1 ao usuário do Supabase Auth (ADR-024).
@@ -146,6 +158,7 @@ __all__ = [
     "SENHA_TAMANHO_MINIMO",
     "AutoDesativacaoError",
     "AutoRemocaoDeAdminError",
+    "ConflitoDeConcorrenciaError",
     "ErroDeDominio",
     "Localizacao",
     "LocalizacaoInvalidaError",

@@ -162,7 +162,9 @@ def build_jwt_verifier(settings: Settings) -> JwtVerifier:
     ``SUPABASE_JWT_SECRET`` opcional habilita o fallback HS256.
     """
     jwks_url = settings.effective_jwks_url
-    jwks_client = PyJWKClient(jwks_url) if jwks_url else None
+    # timeout curto: sob outage do Supabase, a busca do JWKS não pode segurar
+    # threads do pool por 30s (default do urllib) — falha rápido em 401.
+    jwks_client = PyJWKClient(jwks_url, timeout=5) if jwks_url else None
     secret = (
         settings.supabase_jwt_secret.get_secret_value()
         if settings.supabase_jwt_secret is not None

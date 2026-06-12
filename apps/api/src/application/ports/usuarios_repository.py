@@ -68,6 +68,16 @@ class UsuariosRepositoryPort(ABC):
     async def count_admins_ativos(self, excluir_id: str | None = None) -> int:
         """Quantos administradores ATIVOS existem (salvaguarda do último admin)."""
 
+    @abstractmethod
+    async def travar_gestao_de_admins(self) -> None:
+        """Serializa operações que podem reduzir o nº de admins ativos.
+
+        Deve ser chamada DENTRO da transação corrente, antes de recontar e
+        gravar — fecha a corrida check-then-act da RN-010 (duas demoções
+        concorrentes zerando os admins). Implementação SQL: advisory lock
+        transacional; liberado automaticamente no commit/rollback.
+        """
+
 
 __all__ = [
     "PAGE_SIZE_MAXIMO",

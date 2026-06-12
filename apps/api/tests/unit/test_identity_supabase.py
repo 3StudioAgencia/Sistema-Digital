@@ -138,7 +138,14 @@ async def test_find_user_by_email_pagina_ate_achar() -> None:
         if page == 1:
             users = [{"id": f"u{i}", "email": f"u{i}@x.y", "app_metadata": {}} for i in range(100)]
         else:
-            users = [{"id": "alvo", "email": "ACHA@x.y", "app_metadata": {"k": 1}}]
+            users = [
+                {
+                    "id": "alvo",
+                    "email": "ACHA@x.y",
+                    "app_metadata": {"k": 1},
+                    "created_at": "2026-06-01T12:00:00Z",
+                }
+            ]
         return httpx.Response(200, json={"users": users})
 
     provider = _provider(handler)
@@ -146,6 +153,8 @@ async def test_find_user_by_email_pagina_ate_achar() -> None:
     assert achado is not None
     assert achado.id == "alvo"
     assert achado.app_metadata == {"k": 1}
+    assert achado.created_at is not None
+    assert achado.created_at.isoformat() == "2026-06-01T12:00:00+00:00"
     await provider.aclose()
 
 

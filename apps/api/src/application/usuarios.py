@@ -16,6 +16,7 @@ Estratégia contra falha parcial (RNF-015/RNF-017):
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from src.application.ports.identity_provider import (
     MARCA_PROVISIONAMENTO,
@@ -43,6 +44,13 @@ from src.domain.usuarios import (
 )
 
 logger = logging.getLogger("rastreio.usuarios")
+
+# Idade mínima para uma conta de auth marcada ser tratada como ÓRFÃ adotável.
+# Protege contra a corrida de duas criações concorrentes do mesmo e-mail: uma
+# conta recém-criada pode ser uma criação EM ANDAMENTO (INSERT ainda não
+# commitado é invisível ao get()) — adotá-la deletaria um auth user vivo
+# (revisão adversarial W1-C04). Órfãos reais persistem e passam no retry.
+ORFAO_IDADE_MINIMA = timedelta(minutes=15)
 
 
 class EmailJaCadastradoError(ErroDeDominio):
@@ -127,6 +135,11 @@ class UsuariosService:
         if await self._repo.get_by_email(email) is not None:
             raise EmailJaCadastradoError()
 
+        # Fecha a transação de leitura da pré-checagem ANTES das idas HTTP ao
+        # provedor — a conexão não fica idle-in-transaction atravessando IO
+        # externo (free tier do pooler é pequeno; revisão W1-C04).
+        await self._uow.rollback()
+
         metadata = montar_app_metadata(cmd.setor, cmd.administrador)
         auth_id = await self._criar_identidade(email, cmd.senha, metadata)
         usuario = Usuario(
@@ -170,11 +183,18 @@ class UsuariosService:
         """Remove uma conta de auth ÓRFÃ (criada por nós, sem linha de domínio).
 
         Contas sem a nossa marca (criadas pelo dashboard) NUNCA são tocadas —
-        o conflito vira 409 e a decisão fica com o administrador.
+        o conflito vira 409 e a decisão fica com o administrador. Contas
+        JOVENS (< ORFAO_IDADE_MINIMA) também não: podem ser uma criação
+        concorrente em andamento cujo INSERT ainda não é visível.
         """
         identidade = await self._identity.find_user_by_email(email)
         if identidade is None or not identidade.provisionado_por_nos:
             return False
+        if (
+            identidade.created_at is None
+            or datetime.now(UTC) - identidade.created_at < ORFAO_IDADE_MINIMA
+        ):
+            return False  # jovem demais — não arriscar sequestrar criação viva
         if await self._repo.get(identidade.id) is not None:
             return False  # conta completa e legítima
         await self._identity.delete_user(identidade.id)
@@ -211,11 +231,16 @@ class UsuariosService:
         if novo == alvo:
             return alvo  # nada a fazer — idempotente (RNF-015)
         validar_localizacao(novo.setor, novo.localizacao)
-        if alvo.administrador and not novo.administrador:
+        rebaixa_admin = alvo.administrador and not novo.administrador
+        if rebaixa_admin:
             if ator.id == alvo.id:
                 raise AutoRemocaoDeAdminError()
+            # Fast-fail (UX); a checagem DECISIVA é refeita sob lock na transação.
             if alvo.ativo and await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
                 raise UltimoAdminError()
+
+        # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
+        await self._uow.rollback()
 
         precisa_sync = (
             novo.setor is not alvo.setor or novo.administrador != alvo.administrador
@@ -226,6 +251,12 @@ class UsuariosService:
             )
         try:
             async with self._uow:
+                if rebaixa_admin and alvo.ativo:
+                    # Recheck ATÔMICO da RN-010: serializa com outras demoções/
+                    # desativações e reconta dentro da MESMA transação do UPDATE.
+                    await self._repo.travar_gestao_de_admins()
+                    if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
+                        raise UltimoAdminError()
                 await self._repo.update(novo)
                 await self._uow.commit()
         except Exception:
@@ -273,15 +304,22 @@ class UsuariosService:
         if alvo is None:
             raise UsuarioNaoEncontradoError()
         if alvo.ativo == ativo:
-            return alvo  # repetição converge sem efeito colateral (RNF-015)
+            # Repetição converge (RNF-015) e REPARA divergência auth↔domínio:
+            # re-espelha o ban no provedor (estado canônico = usuarios.ativo).
+            await self._convergir_ban(alvo)
+            return alvo
 
         if not ativo:
             if ator.id == alvo.id:
                 raise AutoDesativacaoError()
+            # Fast-fail (UX); a checagem decisiva é refeita sob lock na transação.
             if alvo.administrador and await self._repo.count_admins_ativos(
                 excluir_id=alvo.id
             ) == 0:
                 raise UltimoAdminError()
+
+        # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
+        await self._uow.rollback()
 
         # Provedor PRIMEIRO (fail-closed): se o banco falhar depois, o pior
         # estado é "parece ativo mas não loga" — nunca o inverso.
@@ -292,6 +330,11 @@ class UsuariosService:
         novo = alvo.com(ativo=ativo)
         try:
             async with self._uow:
+                if not ativo and alvo.administrador:
+                    # Recheck ATÔMICO da RN-010 (mesma razão do editar).
+                    await self._repo.travar_gestao_de_admins()
+                    if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
+                        raise UltimoAdminError()
                 await self._repo.update(novo)
                 await self._uow.commit()
         except Exception:
@@ -302,6 +345,18 @@ class UsuariosService:
             extra={"event": "usuario_status_alterado", "usuario_id": novo.id, "ativo": ativo},
         )
         return novo
+
+    async def _convergir_ban(self, alvo: Usuario) -> None:
+        """Best-effort: realinha o ban do provedor ao estado de domínio no
+        caminho idempotente — caminho de REPARO caso uma corrida antiga tenha
+        deixado auth e domínio divergentes."""
+        try:
+            await self._identity.set_banned(alvo.id, banned=not alvo.ativo)
+        except IdentityProviderError:
+            logger.warning(
+                "convergência de ban indisponível no provedor",
+                extra={"event": "convergencia_ban_falhou", "usuario_id": alvo.id},
+            )
 
     async def _revogar_sessoes(self, usuario_id: str) -> None:
         """Best-effort: o ban já bloqueia novos tokens/refresh; a revogação só

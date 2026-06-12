@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0002", (
-        "head deve registrar a revisão 0002 (usuarios — W1-C04)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0003", (
+        "head deve registrar a revisão 0003 (lockdown alembic_version — W1-C04)"
     )
     assert _scalar(
         database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'"

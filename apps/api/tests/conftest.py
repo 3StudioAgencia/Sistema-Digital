@@ -7,6 +7,7 @@ Princípios (prompt W0-C01 §6):
 """
 
 import asyncio
+import datetime as dt
 import logging
 import os
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -81,11 +82,26 @@ class FakeIdentityProvider(IdentityProviderPort):
         self.fail_revoke: Exception | None = None
         self._seq = 0
 
-    def seed(self, email: str, app_metadata: dict[str, object] | None = None) -> str:
-        """Pré-existência de conta no auth (ex.: órfão ou conta de dashboard)."""
+    def seed(
+        self,
+        email: str,
+        app_metadata: dict[str, object] | None = None,
+        *,
+        criada_ha: dt.timedelta = dt.timedelta(hours=1),
+    ) -> str:
+        """Pré-existência de conta no auth (ex.: órfão ou conta de dashboard).
+
+        ``criada_ha`` controla a IDADE da conta — a adoção de órfãos só toca
+        contas mais velhas que ``ORFAO_IDADE_MINIMA`` (default: 1h = adotável).
+        """
         self._seq += 1
         uid = f"00000000-0000-0000-0000-{self._seq:012d}"
-        self.users[uid] = {"email": email, "app_metadata": app_metadata or {}, "banned": False}
+        self.users[uid] = {
+            "email": email,
+            "app_metadata": app_metadata or {},
+            "banned": False,
+            "created_at": dt.datetime.now(tz=dt.UTC) - criada_ha,
+        }
         return uid
 
     async def create_user(
@@ -96,7 +112,7 @@ class FakeIdentityProvider(IdentityProviderPort):
             raise self.fail_create
         if any(u["email"] == email for u in self.users.values()):
             raise EmailJaExisteNoProvedorError("email_exists")
-        return self.seed(email, dict(app_metadata))
+        return self.seed(email, dict(app_metadata), criada_ha=dt.timedelta(0))
 
     async def delete_user(self, user_id: str) -> None:
         self.calls.append(("delete_user", user_id))
@@ -134,7 +150,11 @@ class FakeIdentityProvider(IdentityProviderPort):
             if str(dados["email"]).lower() == alvo:
                 metadata = dados["app_metadata"]
                 assert isinstance(metadata, dict)
-                return IdentidadeAuth(id=uid, email=alvo, app_metadata=metadata)
+                created_at = dados.get("created_at")
+                assert created_at is None or isinstance(created_at, dt.datetime)
+                return IdentidadeAuth(
+                    id=uid, email=alvo, app_metadata=metadata, created_at=created_at
+                )
         return None
 
 

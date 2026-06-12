@@ -445,3 +445,67 @@ async def test_auto_desativacao_422(ctx: Any) -> None:
     resp = await client.post(f"/usuarios/{ADMIN_ID}/desativar", headers=_auth(ADMIN_ID))
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "auto_desativacao"
+
+
+async def test_desativar_outro_admin_passa_pelo_lock_transacional(ctx: Any) -> None:
+    """Com DOIS admins ativos, desativar o outro exercita o caminho completo:
+    advisory lock + recheck + UPDATE com lock otimista, contra Postgres real."""
+    client, identity, factory = ctx
+    await _seed_admin(factory)
+    outro = "33333333-3333-3333-3333-333333333333"
+    identity.seed("bia@x.y")
+    await _seed_usuario(
+        factory, usuario_id=outro, nome="Bia", email="bia@x.y", administrador=True
+    )
+
+    resp = await client.post(f"/usuarios/{outro}/desativar", headers=_auth(ADMIN_ID))
+    assert resp.status_code == 200
+    assert resp.json()["ativo"] is False
+
+
+# ---------------------------------------------------------------------------
+# Repositório (regressões da revisão adversarial W1-C04)
+# ---------------------------------------------------------------------------
+async def test_update_com_snapshot_obsoleto_levanta_conflito(ctx: Any) -> None:
+    """Lock otimista: UPDATE baseado num updated_at antigo → 409, nunca
+    sobrescrita silenciosa de uma escrita concorrente."""
+    from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
+    from src.domain.usuarios import ConflitoDeConcorrenciaError
+
+    _, _, factory = ctx
+    await _seed_admin(factory)
+    async with factory() as session:
+        repo = SqlAlchemyUsuariosRepository(session)
+        usuario = await repo.get(ADMIN_ID)
+        assert usuario is not None
+        # 1ª escrita avança o updated_at
+        await repo.update(usuario.com(nome="Mônica A"))
+        await session.commit()
+
+    async with factory() as session:
+        repo = SqlAlchemyUsuariosRepository(session)
+        # snapshot OBSOLETO (updated_at anterior à 1ª escrita)
+        with pytest.raises(ConflitoDeConcorrenciaError):
+            await repo.update(usuario.com(nome="Mônica B"))
+
+
+async def test_insert_email_duplicado_no_banco_vira_regra_de_negocio(ctx: Any) -> None:
+    """A violação do índice único de e-mail (corrida que passa pela
+    pré-checagem) é traduzida para EmailJaCadastradoError (409), não 500."""
+    from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
+    from src.application.usuarios import EmailJaCadastradoError
+    from src.domain.usuarios import Setor as SetorDom
+    from src.domain.usuarios import Usuario as UsuarioDom
+
+    _, _, factory = ctx
+    await _seed_admin(factory)
+    async with factory() as session:
+        repo = SqlAlchemyUsuariosRepository(session)
+        duplicado = UsuarioDom(
+            id=str(uuid.uuid4()),
+            nome="Clone",
+            email="MONICA@3studio.test",  # case diferente — índice é lower(email)
+            setor=SetorDom.STUDIO,
+        )
+        with pytest.raises(EmailJaCadastradoError):
+            await repo.add(duplicado)

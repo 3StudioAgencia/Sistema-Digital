@@ -17,6 +17,7 @@ Endpoints GoTrue usados (REST estável):
 
 import logging
 from collections.abc import Mapping
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
 
@@ -44,6 +45,16 @@ _BUSCA_POR_EMAIL_MAX_PAGINAS = 20
 _BUSCA_POR_EMAIL_POR_PAGINA = 100
 
 _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+
+def _parse_created_at(valor: object) -> datetime | None:
+    """``created_at`` ISO do GoTrue → datetime aware (idade p/ adoção de órfão)."""
+    if not isinstance(valor, str) or not valor:
+        return None
+    try:
+        return datetime.fromisoformat(valor.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 class SupabaseAdminIdentityProvider(IdentityProviderPort):
@@ -138,6 +149,7 @@ class SupabaseAdminIdentityProvider(IdentityProviderPort):
                         id=str(u.get("id", "")),
                         email=alvo,
                         app_metadata=metadata if isinstance(metadata, dict) else {},
+                        created_at=_parse_created_at(u.get("created_at")),
                     )
             if len(usuarios) < _BUSCA_POR_EMAIL_POR_PAGINA:
                 return None

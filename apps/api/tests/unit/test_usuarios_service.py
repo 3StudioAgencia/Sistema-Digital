@@ -48,6 +48,10 @@ class FakeUsuariosRepository(UsuariosRepositoryPort):
         self.por_id: dict[str, Usuario] = {}
         self.fail_add: Exception | None = None
         self.fail_update: Exception | None = None
+        self.travas = 0
+        # Sequência opcional de retornos do count (simula corrida entre o
+        # fast-fail e o recheck transacional); esgotada → contagem real.
+        self.count_admins_sequencia: list[int] = []
 
     async def get(self, usuario_id: str) -> Usuario | None:
         return self.por_id.get(usuario_id)
@@ -77,11 +81,16 @@ class FakeUsuariosRepository(UsuariosRepositoryPort):
         )
 
     async def count_admins_ativos(self, excluir_id: str | None = None) -> int:
+        if self.count_admins_sequencia:
+            return self.count_admins_sequencia.pop(0)
         return sum(
             1
             for u in self.por_id.values()
             if u.administrador and u.ativo and u.id != excluir_id
         )
+
+    async def travar_gestao_de_admins(self) -> None:
+        self.travas += 1
 
 
 class FakeUnitOfWork(UnitOfWork):
@@ -230,6 +239,23 @@ async def test_criar_conta_de_dashboard_nao_e_adotada() -> None:
     assert preexistente in identity.users  # intocada
 
 
+async def test_criar_orfao_jovem_nao_e_adotado() -> None:
+    """Conta marcada mas RECENTE pode ser uma criação concorrente em andamento
+    (INSERT ainda invisível) — a adoção não pode deletá-la (revisão W1-C04)."""
+    import datetime as dt
+
+    service, _, identity, _ = _montar()
+    jovem = identity.seed(
+        "mario@estudio.com.br",
+        {"provisionado_por": MARCA_PROVISIONAMENTO},
+        criada_ha=dt.timedelta(seconds=30),
+    )
+
+    with pytest.raises(EmailJaCadastradoError):
+        await service.criar(_cmd())
+    assert jovem in identity.users  # intocada — retry futuro adota quando envelhecer
+
+
 # ---------------------------------------------------------------------------
 # Editar — RN-009/RN-010 e sincronização de claims
 # ---------------------------------------------------------------------------
@@ -369,7 +395,7 @@ async def test_desativar_ultimo_admin_ativo_negado() -> None:
         await service.alterar_status(ator_externo, "a2", ativo=False)
 
 
-async def test_desativar_ja_inativo_e_idempotente() -> None:
+async def test_desativar_ja_inativo_e_idempotente_e_converge_o_ban() -> None:
     service, repo, identity, uow = _montar()
     repo.por_id["v1"] = Usuario(
         id="v1", nome="Ana", email="ana@x.y", setor=Setor.VENDEDOR,
@@ -379,7 +405,9 @@ async def test_desativar_ja_inativo_e_idempotente() -> None:
     resultado = await service.alterar_status(ADMIN, "v1", ativo=False)
 
     assert resultado.ativo is False
-    assert identity.calls == []
+    # nada gravado no banco, mas o ban é re-espelhado no provedor (reparo de
+    # divergência auth↔domínio — revisão W1-C04)
+    assert identity.calls == [("set_banned", "v1:True")]
     assert uow.commits == 0
 
 
@@ -429,6 +457,47 @@ async def test_reativar_desbane_sem_revogar() -> None:
     assert resultado.ativo is True
     assert identity.users[alvo_id]["banned"] is False
     assert all(c[0] != "revoke_sessions" for c in identity.calls)
+
+
+async def test_recheck_transacional_do_ultimo_admin_no_desativar() -> None:
+    """TOCTOU fechado (revisão W1-C04): o fast-fail passa, mas a recontagem sob
+    lock dentro da transação detecta que outra operação concorrente removeu o
+    penúltimo admin — a desativação é negada e o ban revertido."""
+    service, repo, identity, uow = _montar()
+    alvo_id = identity.seed("bia@x.y")
+    repo.por_id[alvo_id] = Usuario(
+        id=alvo_id, nome="Bia", email="bia@x.y", setor=Setor.STUDIO, administrador=True
+    )
+    # 1ª contagem (fast-fail): 1 admin restante → passa; 2ª (recheck na tx): 0.
+    repo.count_admins_sequencia = [1, 0]
+
+    with pytest.raises(UltimoAdminError):
+        await service.alterar_status(ADMIN, alvo_id, ativo=False)
+
+    assert repo.travas == 1  # lock de gestão de admins foi tomado
+    assert identity.users[alvo_id]["banned"] is False  # ban revertido
+    assert repo.por_id[alvo_id].ativo is True
+    assert uow.commits == 0
+
+
+async def test_recheck_transacional_do_ultimo_admin_no_editar() -> None:
+    service, repo, identity, _ = _montar()
+    alvo_id = identity.seed("bia@x.y")
+    repo.por_id[alvo_id] = Usuario(
+        id=alvo_id, nome="Bia", email="bia@x.y", setor=Setor.STUDIO, administrador=True
+    )
+    repo.count_admins_sequencia = [1, 0]
+
+    with pytest.raises(UltimoAdminError):
+        await service.editar(ADMIN, alvo_id, EditarUsuario(administrador=False))
+
+    assert repo.travas == 1
+    # metadata sincronizada e depois REVERTIDA (o rebaixamento não aconteceu)
+    assert [c for c in identity.calls if c[0] == "update_app_metadata"] == [
+        ("update_app_metadata", alvo_id),
+        ("update_app_metadata", alvo_id),
+    ]
+    assert repo.por_id[alvo_id].administrador is True
 
 
 # ---------------------------------------------------------------------------

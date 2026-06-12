@@ -67,10 +67,10 @@ async def bootstrap_admin(
             )
             raise RuntimeError(msg)
 
-        await identity.update_app_metadata(
-            identidade.id, montar_app_metadata(setor, administrador=True)
-        )
-
+        # ORDEM IMPORTA (revisão W1-C04): a linha de domínio nasce ANTES de a
+        # conta receber a marca de provisionamento no app_metadata. Se a marca
+        # viesse primeiro e o INSERT falhasse, a conta do primeiro admin viraria
+        # candidata à adoção de órfão (delete) numa criação concorrente.
         session_factory = create_session_factory(engine)
         async with session_factory() as session:
             stmt = pg_insert(UsuarioRow).values(
@@ -94,6 +94,13 @@ async def bootstrap_admin(
             )
             await session.execute(stmt)
             await session.commit()
+
+        await identity.update_app_metadata(
+            identidade.id, montar_app_metadata(setor, administrador=True)
+        )
+        # O bootstrap deixa o admin UTILIZÁVEL: se a conta estava banida (ex.:
+        # desativada no passado), desfaz o ban — coerente com ativo=true.
+        await identity.set_banned(identidade.id, banned=False)
         return identidade.id
     finally:
         await identity.aclose()
