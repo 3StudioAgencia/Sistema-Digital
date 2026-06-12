@@ -45,7 +45,14 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
 
   async function sair() {
     const supabase = getSupabaseBrowserClient();
-    await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) await supabase.auth.signOut(); // uma retentativa
+    } catch {
+      // Rede falhou: navega mesmo assim — se a sessão persistir, o /login
+      // (getUser no servidor) devolve o usuário ao shell, mostrando o estado
+      // VERDADEIRO em vez de um "logout" silenciosamente falso (revisão W1-C04).
+    }
     router.replace("/login");
     router.refresh();
   }

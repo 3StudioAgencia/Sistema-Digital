@@ -34,7 +34,7 @@ import styles from "../usuarios.module.css";
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
 
-type Resultado = { chave: string; itens: Usuario[]; total: number };
+type Resultado = { chave: string; itens: Usuario[]; total: number; pagina: number };
 type Falha = { chave: string; tipo: "erro" | "acesso_negado" };
 
 export function UsuariosView() {
@@ -50,6 +50,9 @@ export function UsuariosView() {
   const [falha, setFalha] = useState<Falha | null>(null);
   const [tentativa, setTentativa] = useState(0); // “tentar novamente” / pós-criação
   const [carregandoMais, setCarregandoMais] = useState(false);
+  // Falha de paginação TRAVA o auto-carregamento (a sentinela visível
+  // re-dispararia para sempre — revisão W1-C04); o retry vira botão manual.
+  const [falhaPaginacaoEm, setFalhaPaginacaoEm] = useState<string | null>(null);
 
   const [modalForm, setModalForm] = useState<EstadoForm | null>(null);
   const [confirmacao, setConfirmacao] = useState<{ usuario: Usuario; acao: AcaoStatus } | null>(
@@ -58,7 +61,6 @@ export function UsuariosView() {
 
   const corpoRef = useRef<HTMLDivElement | null>(null);
   const sentinelaRef = useRef<HTMLDivElement | null>(null);
-  const paginaRef = useRef(1);
 
   const chaveFiltros = `${buscaAplicada}|${setor}|${statusFiltro}`;
 
@@ -76,9 +78,14 @@ export function UsuariosView() {
       controller.signal,
     )
       .then((pagina) => {
-        paginaRef.current = 1;
-        setResultado({ chave: chaveFiltros, itens: pagina.items, total: pagina.total });
+        setResultado({
+          chave: chaveFiltros,
+          itens: pagina.items,
+          total: pagina.total,
+          pagina: 1,
+        });
         setFalha(null);
+        setFalhaPaginacaoEm(null);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -96,30 +103,41 @@ export function UsuariosView() {
   const itens = pronto?.itens ?? [];
   const total = pronto?.total ?? 0;
 
-  const carregarMais = useCallback(async () => {
-    if (carregandoMais || pronto === null || pronto.itens.length >= pronto.total) return;
-    setCarregandoMais(true);
-    try {
-      const proxima = paginaRef.current + 1;
-      const pagina = await listarUsuarios({
-        busca: buscaAplicada,
-        setor,
-        status: statusFiltro,
-        page: proxima,
-        pageSize: PAGE_SIZE,
-      });
-      paginaRef.current = proxima;
-      setResultado((atual) =>
-        atual && atual.chave === chaveFiltros
-          ? { ...atual, itens: [...atual.itens, ...pagina.items], total: pagina.total }
-          : atual,
-      );
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "Falha ao carregar mais usuários.");
-    } finally {
-      setCarregandoMais(false);
-    }
-  }, [buscaAplicada, carregandoMais, chaveFiltros, pronto, setor, statusFiltro, toast]);
+  const carregarMais = useCallback(
+    async (manual = false) => {
+      if (carregandoMais || pronto === null || pronto.itens.length >= pronto.total) return;
+      if (!manual && falhaPaginacaoEm === chaveFiltros) return; // sem auto-retry em loop
+      setCarregandoMais(true);
+      try {
+        const proxima = pronto.pagina + 1;
+        const pagina = await listarUsuarios({
+          busca: buscaAplicada,
+          setor,
+          status: statusFiltro,
+          page: proxima,
+          pageSize: PAGE_SIZE,
+        });
+        // Tudo guardado pela CHAVE: resposta atrasada de filtros antigos não
+        // contamina a lista nem o número da página corrente.
+        setResultado((atual) =>
+          atual && atual.chave === chaveFiltros
+            ? {
+                ...atual,
+                itens: [...atual.itens, ...pagina.items],
+                total: pagina.total,
+                pagina: proxima,
+              }
+            : atual,
+        );
+        setFalhaPaginacaoEm(null);
+      } catch {
+        setFalhaPaginacaoEm(chaveFiltros);
+      } finally {
+        setCarregandoMais(false);
+      }
+    },
+    [buscaAplicada, carregandoMais, chaveFiltros, falhaPaginacaoEm, pronto, setor, statusFiltro],
+  );
 
   // Scroll infinito: sentinela observada DENTRO da área rolável da tabela.
   useEffect(() => {
@@ -135,10 +153,34 @@ export function UsuariosView() {
     return () => observer.disconnect();
   }, [carregarMais]);
 
+  function aindaCasaComFiltros(usuario: Usuario): boolean {
+    if (statusFiltro && (statusFiltro === "ativo") !== usuario.ativo) return false;
+    if (setor && usuario.setor !== setor) return false;
+    if (buscaAplicada) {
+      const termo = buscaAplicada.toLowerCase();
+      if (
+        !usuario.nome.toLowerCase().includes(termo) &&
+        !usuario.email.toLowerCase().includes(termo)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function substituirItem(usuario: Usuario) {
+    // Item mutado que deixou de satisfazer o filtro server-side SAI da lista
+    // (em vez de exibir "Inativo" numa lista de Ativos — revisão W1-C04).
+    const mantem = aindaCasaComFiltros(usuario);
     setResultado((atual) =>
       atual
-        ? { ...atual, itens: atual.itens.map((u) => (u.id === usuario.id ? usuario : u)) }
+        ? {
+            ...atual,
+            itens: mantem
+              ? atual.itens.map((u) => (u.id === usuario.id ? usuario : u))
+              : atual.itens.filter((u) => u.id !== usuario.id),
+            total: mantem ? atual.total : Math.max(0, atual.total - 1),
+          }
         : atual,
     );
   }
@@ -345,18 +387,44 @@ export function UsuariosView() {
             </div>
             <div role="rowgroup" className={styles.corpoTabela} ref={corpoRef}>
               {carregando ? (
+                // aria-hidden: skeletons ficam fora da árvore de acessibilidade
+                // (rowgroup só expõe filhos row — revisão W1-C04)
                 <div className={styles.skeletons} aria-hidden>
                   {Array.from({ length: 6 }, (_, i) => (
                     <div key={i} className={`${styles.linha} ${styles.grade} ${styles.skeleton}`} />
                   ))}
                 </div>
               ) : itens.length === 0 ? (
-                <p className={styles.estadoVazio}>Nenhum usuário encontrado.</p>
+                <div role="row" className={styles.grade}>
+                  <span role="cell" className={`${styles.celula} ${styles.celulaVazia}`}>
+                    Nenhum usuário encontrado.
+                  </span>
+                </div>
               ) : (
                 linhas
               )}
               <div ref={sentinelaRef} aria-hidden />
-              {carregandoMais && <p className={styles.carregandoMais}>Carregando…</p>}
+              {carregandoMais && (
+                <div role="row" className={styles.grade}>
+                  <span role="cell" className={`${styles.celula} ${styles.celulaVazia}`}>
+                    Carregando…
+                  </span>
+                </div>
+              )}
+              {falhaPaginacaoEm === chaveFiltros && !carregandoMais && (
+                <div role="row" className={styles.grade}>
+                  <span role="cell" className={`${styles.celula} ${styles.celulaVazia}`}>
+                    Falha ao carregar mais usuários.{" "}
+                    <button
+                      type="button"
+                      className={styles.tentarNovamente}
+                      onClick={() => void carregarMais(true)}
+                    >
+                      Tentar novamente
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -374,7 +442,7 @@ export function UsuariosView() {
                 <button
                   type="button"
                   className={styles.botaoCarregarMais}
-                  onClick={() => void carregarMais()}
+                  onClick={() => void carregarMais(true)}
                   disabled={carregandoMais}
                 >
                   {carregandoMais ? "Carregando…" : "Carregar mais"}

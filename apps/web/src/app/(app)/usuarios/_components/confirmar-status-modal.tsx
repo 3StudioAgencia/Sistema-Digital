@@ -52,7 +52,11 @@ export function ConfirmarStatusModal({ confirmacao, onFechar, onConfirmado }: Pr
   return (
     <MotionModal
       open={confirmacao !== null}
-      onClose={onFechar}
+      onClose={() => {
+        // ESC/overlay não fecham no meio da chamada — o resultado (sucesso ou
+        // erro de regra) precisa chegar visível ao usuário (revisão W1-C04).
+        if (!enviando) onFechar();
+      }}
       labelledBy={tituloId}
       panelClassName={styles.modalPainelConfirmacao}
     >

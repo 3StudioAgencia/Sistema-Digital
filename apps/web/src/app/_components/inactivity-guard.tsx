@@ -25,7 +25,13 @@ export function InactivityGuard({ timeoutMs = THIRTY_MINUTES_MS }: { timeoutMs?:
   useEffect(() => {
     async function expire() {
       const supabase = getSupabaseBrowserClient();
-      await supabase.auth.signOut();
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) await supabase.auth.signOut(); // uma retentativa
+      } catch {
+        // Rede falhou no expirar: navega mesmo assim — se a sessão persistir,
+        // o /login devolve ao shell (estado verdadeiro) e o timer recomeça.
+      }
       router.replace("/login?expirado=1");
       router.refresh();
     }

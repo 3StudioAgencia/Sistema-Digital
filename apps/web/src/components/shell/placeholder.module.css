@@ -1,15 +1,16 @@
 .wrap {
-  padding: clamp(32px, 8vh, 96px) clamp(20px, 1.6vw, 32px);
+  padding: calc(108 * var(--u, 1px)) clamp(20px, 1.6vw, 32px);
 }
 
 .titulo {
-  font-size: clamp(32px, 3.3vw, 64px);
+  font-size: calc(64 * var(--u, 1px));
+  line-height: 1.1;
   font-weight: 400;
   color: var(--app-ink);
 }
 
 .texto {
-  margin-top: 24px;
-  font-size: 18px;
+  margin-top: calc(24 * var(--u, 1px));
+  font-size: calc(18 * var(--u, 1px));
   color: var(--app-text-gray);
 }

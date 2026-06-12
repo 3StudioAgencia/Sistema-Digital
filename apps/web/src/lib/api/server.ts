@@ -10,7 +10,11 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 import type { Usuario } from "./usuarios";
 
-const TIMEOUT_MS = 5_000;
+// Curto de propósito: este fetch roda NO SERVIDOR antes do primeiro byte do
+// shell — com a API fora, o TTFB de toda página autenticada ficaria preso até
+// aqui (revisão W1-C04). 2s cobre o caso normal; na falha, o shell degrada
+// para o fallback de e-mail.
+const TIMEOUT_MS = 2_000;
 
 export async function fetchUsuarioAtual(): Promise<Usuario | null> {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;

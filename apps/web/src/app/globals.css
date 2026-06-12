@@ -48,10 +48,24 @@
   --app-card-radius: 8px; /* card da tabela */
   --app-radius-pill: 999px;
 
+  /* Espelho CSS dos tokens de motion (lib/motion/tokens.ts — DAT §5.1): os
+     ÚNICOS literais de duração/easing permitidos em CSS. Componentes usam as
+     variáveis; o bloco @media abaixo zera tudo sob prefers-reduced-motion. */
+  --motion-micro: 150ms; /* = DURATION.micro */
+  --motion-pulse: 1200ms; /* pulso de skeleton/loading */
+  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* = EASING.standard */
+
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-micro: 0ms;
+    --motion-pulse: 0ms;
+  }
 }
 
 * {

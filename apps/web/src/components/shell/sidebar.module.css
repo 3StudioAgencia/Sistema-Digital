@@ -1,24 +1,31 @@
-/* Sidebar do app shell (W1-C04) — medidas extraídas do export 1920×1080:
-   conteúdo a partir de x=66, itens com pitch ~42px, ícones 22-23px, barra
-   ativa 3×18 amarela. Larguras fluidas com clamp para telas menores. */
+/* Sidebar do app shell (W1-C04) — medidas EXATAS do export 1920×1080 do Figma,
+   expressas em "pixels de design" via var(--u) (definida no .layout do shell:
+   1px em viewport 1080; proporcional em janelas menores).
+
+   Mapa vertical do design (y absoluto @1080): wordmark 132–158 · saudação
+   238–263 · busca 302–355 (h53) · 1º item da nav 420–462 (pitch 42) · grupo
+   secundário +30 · rodapé com avatar terminando em 969 (111 do fundo). */
 
 .sidebar {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: clamp(32px, 8.5vh, 92px) clamp(20px, 2vw, 40px) clamp(24px, 4vh, 44px)
-    clamp(32px, 3.4vw, 66px);
+  padding: calc(132 * var(--u)) clamp(20px, 2vw, 40px) calc(111 * var(--u)) clamp(32px, 3.4vw, 66px);
   color: var(--auth-text);
   overflow-y: auto;
 }
 
 .wordmark {
   display: block;
+  width: calc(122 * var(--u));
+  height: auto;
+  flex: none;
 }
 
 .saudacao {
-  margin-top: clamp(36px, 7.5vh, 80px);
-  font-size: clamp(24px, 1.7vw, 32px);
+  margin-top: calc(75 * var(--u));
+  font-size: calc(32 * var(--u));
+  line-height: 1.15;
   font-weight: 600;
   color: var(--auth-text);
 }
@@ -26,16 +33,19 @@
 /* Campo de busca — pill escura (#181818), inerte até a busca global existir. */
 .busca {
   position: relative;
-  margin-top: clamp(24px, 3.7vh, 40px);
-  height: 53px;
+  margin-top: calc(34 * var(--u));
+  height: calc(53 * var(--u));
   max-width: 335px;
+  flex: none;
 }
 
 .buscaIcone {
   position: absolute;
-  left: 22px;
+  left: calc(22 * var(--u));
   top: 50%;
   transform: translateY(-50%);
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
   color: var(--app-sidebar-muted);
   pointer-events: none;
 }
@@ -48,8 +58,8 @@
   background: var(--app-sidebar-field);
   color: var(--auth-text);
   font: inherit;
-  font-size: 17px;
-  padding: 0 20px 0 56px;
+  font-size: calc(17 * var(--u));
+  padding: 0 calc(20 * var(--u)) 0 calc(56 * var(--u));
 }
 
 .buscaInput::placeholder {
@@ -61,7 +71,7 @@
 }
 
 .nav {
-  margin-top: clamp(40px, 7vh, 76px);
+  margin-top: calc(64 * var(--u));
 }
 
 .navLista {
@@ -71,15 +81,15 @@
 }
 
 .navSecundaria {
-  margin-top: 28px;
+  margin-top: calc(30 * var(--u));
 }
 
 .navItem {
   display: flex;
   align-items: center;
-  min-height: 44px; /* touch target (RNF-013); pitch ~42px do design */
+  height: calc(42 * var(--u)); /* pitch exato do design */
   color: var(--auth-text);
-  font-size: 20px;
+  font-size: calc(20 * var(--u));
   text-decoration: none;
 }
 
@@ -94,42 +104,44 @@
 /* Slot fixo do indicador: ícones ficam alinhados com ou sem a barra ativa. */
 .indicadorSlot {
   display: inline-flex;
-  width: 12px;
+  width: calc(12 * var(--u));
   flex: none;
 }
 
 .indicador {
   display: block;
   width: 3px;
-  height: 18px;
+  height: calc(18 * var(--u));
   border-radius: 2px;
   background: var(--app-accent);
 }
 
 .navIcone {
   flex: none;
-  margin-right: 12px;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  margin-right: calc(12 * var(--u));
 }
 
 .rodape {
   margin-top: auto;
-  padding-top: 32px;
+  padding-top: calc(24 * var(--u));
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: calc(16 * var(--u));
 }
 
 .avatar {
   flex: none;
-  width: 56px;
-  height: 56px;
+  width: calc(57 * var(--u));
+  height: calc(57 * var(--u));
   border-radius: 50%;
   background: var(--app-avatar);
   color: var(--app-ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: calc(22 * var(--u));
   font-weight: 600;
 }
 
@@ -140,7 +152,7 @@
 }
 
 .rodapeNome {
-  font-size: 18px;
+  font-size: calc(18 * var(--u));
   color: var(--auth-text);
   white-space: nowrap;
   overflow: hidden;
@@ -148,7 +160,7 @@
 }
 
 .rodapeSub {
-  font-size: 13px;
+  font-size: calc(13 * var(--u));
   color: var(--app-sidebar-muted);
 }
 
@@ -158,8 +170,19 @@
   background: none;
   color: var(--app-accent);
   font: inherit;
-  font-size: 13px;
+  font-size: calc(12 * var(--u));
   cursor: pointer;
-  padding: 12px; /* área de toque ≥ 44px na prática */
-  min-height: 44px;
+  padding: 12px;
+}
+
+/* Touch (drawer mobile/tablet): alvos ≥ 44px (RNF-013) — o --u do drawer já é
+   1px; aqui garantimos a altura mínima dos itens interativos. */
+@media (pointer: coarse) {
+  .navItem {
+    min-height: 44px;
+  }
+
+  .sair {
+    min-height: 44px;
+  }
 }

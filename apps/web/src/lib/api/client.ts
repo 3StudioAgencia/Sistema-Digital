@@ -47,6 +47,12 @@ export async function apiFetch<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
 
+  // O timeout vale SEMPRE — um signal externo (abort de filtro trocado) é
+  // COMBINADO com ele, não o substitui (revisão W1-C04: API pendurada não pode
+  // deixar skeleton infinito).
+  const timeout = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -54,7 +60,7 @@ export async function apiFetch<T>(
       headers,
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
-      signal: init.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      signal,
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;

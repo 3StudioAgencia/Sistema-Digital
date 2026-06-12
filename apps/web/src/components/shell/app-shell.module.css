@@ -2,6 +2,13 @@
    raio 40 e margem 16/18 nas bordas; sidebar ~495px @1920 (fluida via clamp). */
 
 .layout {
+  /* Unidade de ESCALA do design: o Figma foi desenhado num quadro de 1080px de
+     altura. 1 "pixel de design" = calc(1 * var(--u)). Em viewport 1080 → 1px
+     exato (fiel ao Figma); em janelas menores (browser chrome) tudo encolhe
+     PROPORCIONALMENTE — fontes, alturas e espaçamentos juntos — com piso de
+     0.78 para nunca ficar ilegível. */
+  --u: clamp(0.78px, calc(100vh / 1080), 1px);
+
   display: flex;
   height: 100dvh;
   background: var(--app-sidebar-bg);
@@ -54,6 +61,9 @@
 }
 
 .drawer {
+  /* Drawer mobile: tamanhos cheios (touch) — não escala com a altura. */
+  --u: 1px;
+
   position: absolute;
   inset: 0 auto 0 0;
   width: min(320px, 86vw);

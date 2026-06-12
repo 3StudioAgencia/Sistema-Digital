@@ -8,7 +8,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: clamp(24px, 8vh, 96px) 28px 24px;
+  padding: calc(108 * var(--u)) 28px calc(25 * var(--u));
 }
 
 /* -------------------------------------------------- cabeçalho da página */
@@ -21,23 +21,24 @@
 }
 
 .titulo {
-  font-size: clamp(32px, 3.3vw, 64px);
+  font-size: calc(64 * var(--u));
+  line-height: 1.1;
   font-weight: 400;
   color: var(--app-ink);
 }
 
 .botaoNovo {
   flex: none;
-  height: var(--app-control-h);
-  padding: 0 44px;
+  height: calc(56 * var(--u));
+  padding: 0 calc(44 * var(--u));
   border: 0;
   border-radius: var(--app-radius-pill);
   background: var(--app-accent);
   color: var(--app-ink);
   font: inherit;
-  font-size: 22px;
+  font-size: calc(22 * var(--u));
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
 .botaoNovo:hover {
@@ -49,13 +50,13 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(180px, 14.6vw, 280px) clamp(150px, 14.6vw, 280px);
   gap: 15px;
-  margin-top: clamp(28px, 7.5vh, 84px);
+  margin-top: calc(106 * var(--u));
   flex: none;
 }
 
 .campoBusca {
   position: relative;
-  height: 60px;
+  height: calc(60 * var(--u));
 }
 
 .iconeBusca {
@@ -63,6 +64,8 @@
   left: 24px;
   top: 50%;
   transform: translateY(-50%);
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
   color: var(--app-text-gray);
   pointer-events: none;
 }
@@ -75,7 +78,7 @@
   background: var(--app-field);
   color: var(--app-text-gray);
   font: inherit;
-  font-size: 20px;
+  font-size: calc(20 * var(--u));
   padding: 0 24px 0 62px;
 }
 
@@ -85,7 +88,7 @@
 
 .campoSelect {
   position: relative;
-  height: 60px;
+  height: calc(60 * var(--u));
 }
 
 .select {
@@ -97,7 +100,7 @@
   background: var(--app-field);
   color: var(--app-text-gray);
   font: inherit;
-  font-size: 20px;
+  font-size: calc(20 * var(--u));
   padding: 0 56px 0 28px;
   text-align: center;
   cursor: pointer;
@@ -108,13 +111,15 @@
   right: 24px;
   top: 50%;
   transform: translateY(-50%);
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
   color: var(--app-text-gray);
   pointer-events: none;
 }
 
 /* -------------------------------------------------- tabela (desktop) */
 .card {
-  margin-top: 30px;
+  margin-top: calc(30 * var(--u));
   flex: 1;
   min-height: 0;
   display: flex;
@@ -139,12 +144,12 @@
 }
 
 .linhaCabecalho {
-  height: clamp(56px, 9vh, 97px);
+  height: calc(97 * var(--u));
   border-bottom: 1px solid var(--app-divider);
 }
 
 .linhaCabecalho .celula {
-  font-size: 19px;
+  font-size: calc(19 * var(--u));
   color: var(--app-text-gray);
 }
 
@@ -179,7 +184,7 @@
 }
 
 .linha {
-  min-height: 56px;
+  min-height: calc(56 * var(--u));
 }
 
 .celula {
@@ -189,7 +194,7 @@
   justify-content: center;
   text-align: center;
   padding: 4px 10px;
-  font-size: 16px;
+  font-size: calc(16 * var(--u));
   color: var(--app-text-gray);
   border-right: 1px solid var(--app-divider);
   overflow: hidden;
@@ -210,14 +215,23 @@
 .botaoEditar,
 .botaoDesativar,
 .botaoReativar {
-  height: var(--app-control-h-sm);
+  height: calc(29 * var(--u));
   border: 0;
   border-radius: var(--app-radius-pill);
   font: inherit;
-  font-size: 15px;
+  font-size: calc(15 * var(--u));
   cursor: pointer;
-  padding: 0 22px;
-  transition: opacity 0.15s ease;
+  padding: 0 calc(22 * var(--u));
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+/* Touch (tablets em layout desktop): alvos ≥ 44px (revisão W1-C04 / RNF-013) */
+@media (pointer: coarse) {
+  .botaoEditar,
+  .botaoDesativar,
+  .botaoReativar {
+    min-height: 44px;
+  }
 }
 
 .botaoEditar {
@@ -250,6 +264,16 @@
   color: var(--app-text-gray);
 }
 
+/* Célula única ocupando a linha inteira (estados vazio/carregando/erro da
+   paginação) — mantém o contrato ARIA row→cell dentro do rowgroup. */
+.celulaVazia {
+  grid-column: 1 / -1;
+  border-right: 0;
+  white-space: normal;
+  padding: 24px;
+  font-size: calc(16 * var(--u));
+}
+
 .tentarNovamente {
   border: 0;
   background: none;
@@ -273,8 +297,8 @@
 }
 
 .skeleton {
-  height: 56px;
-  animation: pulso 1.2s ease-in-out infinite;
+  height: calc(56 * var(--u));
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
 }
 
 @keyframes pulso {
@@ -285,6 +309,14 @@
 
   50% {
     opacity: 0.75;
+  }
+}
+
+/* Indicador de carga é decorativo: instantâneo sob reduced-motion (RN-012). */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.5;
   }
 }
 

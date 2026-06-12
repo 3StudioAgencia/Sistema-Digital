@@ -40,10 +40,15 @@ type Props = {
 
 export function UsuarioFormModal({ estado, onFechar, onSalvo }: Props) {
   const tituloId = useId();
+  // Vive no PAI para o ESC/overlay não fecharem o modal no meio do submit —
+  // fechar durante o voo engoliria o 409/422 da resposta (revisão W1-C04).
+  const [enviando, setEnviando] = useState(false);
   return (
     <MotionModal
       open={estado !== null}
-      onClose={onFechar}
+      onClose={() => {
+        if (!enviando) onFechar();
+      }}
       labelledBy={tituloId}
       panelClassName={styles.modalPainel}
     >
@@ -54,6 +59,8 @@ export function UsuarioFormModal({ estado, onFechar, onSalvo }: Props) {
           tituloId={tituloId}
           onFechar={onFechar}
           onSalvo={onSalvo}
+          enviando={enviando}
+          setEnviando={setEnviando}
         />
       )}
     </MotionModal>
@@ -89,17 +96,20 @@ function FormInterno({
   tituloId,
   onFechar,
   onSalvo,
+  enviando,
+  setEnviando,
 }: {
   estado: EstadoForm;
   tituloId: string;
   onFechar: () => void;
   onSalvo: (usuario: Usuario, modo: "criar" | "editar") => void;
+  enviando: boolean;
+  setEnviando: (valor: boolean) => void;
 }) {
   const toast = useToast();
   const modo = estado.modo;
   const [campos, setCampos] = useState<Campos>(() => camposIniciais(estado));
   const [tocados, setTocados] = useState<Partial<Record<keyof Campos, boolean>>>({});
-  const [enviando, setEnviando] = useState(false);
   const [erroServidor, setErroServidor] = useState<string | null>(null);
 
   function atualizar<K extends keyof Campos>(campo: K, valor: Campos[K]) {

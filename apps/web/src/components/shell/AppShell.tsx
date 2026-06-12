@@ -33,8 +33,15 @@ export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
   const pathname = usePathname();
   const reduced = useReducedMotion();
   // Estado DERIVADO: o drawer guarda em qual rota foi aberto — navegar para
-  // outra rota o fecha naturalmente, sem efeito de sincronização.
+  // outra rota o fecha naturalmente. O reset guardado em fase de render
+  // (padrão oficial "storing information from previous renders") garante que
+  // VOLTAR à rota original (back/forward) não reabra o drawer (revisão W1-C04).
   const [abertoNaRota, setAbertoNaRota] = useState<string | null>(null);
+  const [rotaAnterior, setRotaAnterior] = useState(pathname);
+  if (rotaAnterior !== pathname) {
+    setRotaAnterior(pathname);
+    if (abertoNaRota !== null) setAbertoNaRota(null);
+  }
   const drawerAberto = abertoNaRota === pathname;
   const setDrawerAberto = (aberto: boolean) => setAbertoNaRota(aberto ? pathname : null);
 
