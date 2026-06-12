@@ -30,13 +30,13 @@
 .botaoNovo {
   flex: none;
   height: calc(56 * var(--u));
-  padding: 0 calc(44 * var(--u));
+  padding: 0 calc(80 * var(--u));
   border: 0;
   border-radius: var(--app-radius-pill);
   background: var(--app-accent);
   color: var(--app-ink);
   font: inherit;
-  font-size: calc(22 * var(--u));
+  font-size: calc(20 * var(--u));
   cursor: pointer;
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
