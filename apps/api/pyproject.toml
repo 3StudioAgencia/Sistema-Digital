@@ -21,6 +21,12 @@ dependencies = [
     # [crypto] traz a `cryptography` p/ verificação ES256/RS256 via JWKS (W1-C03).
     "pyjwt[crypto]>=2.8",
     "python-json-logger>=3.0",
+    # Etiqueta da prova (W2-C06/DP-7): QR vetorial (segno, pure-python) +
+    # PDF no tamanho físico exato (fpdf2) — gerados sob demanda, stateless.
+    "segno>=1.6",
+    "fpdf2>=2.8",
+    # Parser de multipart/form-data do FastAPI (upload da arte — W2-C06).
+    "python-multipart>=0.0.18",
 ]
 
 [dependency-groups]

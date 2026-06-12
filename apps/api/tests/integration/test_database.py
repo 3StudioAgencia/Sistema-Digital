@@ -9,9 +9,9 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.config import Settings
 from src.infrastructure.database import (
-    SqlAlchemyUnitOfWork,
     create_runtime_engine,
     create_session_factory,
     ping,

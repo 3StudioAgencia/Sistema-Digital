@@ -27,7 +27,9 @@ from src.application.ports.identity_provider import (
     IdentityProviderError,
     IdentityProviderNaoConfigurado,
 )
+from src.application.ports.storage import StorageError
 from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
+from src.domain.provas import ProvaNaoEncontradaError
 from src.domain.usuarios import ErroDeDominio
 from src.infrastructure.logging import request_id_var
 
@@ -95,7 +97,7 @@ async def _last_resort_handler(request: Request, exc: Exception) -> JSONResponse
 def _status_de_dominio(exc: ErroDeDominio) -> int:
     """Violações de regra de negócio → HTTP (W1-C04). 422 é o default; os dois
     casos com semântica própria têm status dedicado."""
-    if isinstance(exc, UsuarioNaoEncontradoError):
+    if isinstance(exc, UsuarioNaoEncontradoError | ProvaNaoEncontradaError):
         return status.HTTP_404_NOT_FOUND
     if isinstance(exc, EmailJaCadastradoError):
         return status.HTTP_409_CONFLICT
@@ -133,9 +135,28 @@ async def _identity_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+async def _storage_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Falha de infraestrutura no storage (R2): indisponibilidade clara (503),
+    nunca 500 opaco — mesma filosofia do provedor de identidade. O detalhe fica
+    no log estruturado (W2-C06)."""
+    logger.warning(
+        "storage indisponível durante a requisição",
+        extra={"event": "storage_indisponivel", "error_type": type(exc).__name__},
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=error_envelope(
+            "storage_indisponivel",
+            "Armazenamento de artes indisponível no momento. Tente novamente.",
+            request_id_var.get(),
+        ),
+    )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(ErroDeDominio, _dominio_exception_handler)
     app.add_exception_handler(IdentityProviderError, _identity_exception_handler)
+    app.add_exception_handler(StorageError, _storage_exception_handler)
     app.add_exception_handler(Exception, _last_resort_handler)

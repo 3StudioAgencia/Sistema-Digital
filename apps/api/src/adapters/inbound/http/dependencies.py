@@ -15,12 +15,17 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
+from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
+from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
+from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.identity_provider import IdentityProviderPort
+from src.application.ports.storage import StoragePort
+from src.application.provas import ProvasService
 from src.application.usuarios import UsuariosService
 from src.domain.rbac import Recurso, autorizar
 from src.domain.usuarios import Usuario
-from src.infrastructure.database import SqlAlchemyUnitOfWork, abrir_sessao_rls
+from src.infrastructure.database import abrir_sessao_rls
 
 
 async def get_usuarios_service(
@@ -83,4 +88,44 @@ def requer_acesso(
 get_admin_corrente = requer_acesso(Recurso.CADASTRO_USUARIOS)
 
 
-__all__ = ["get_admin_corrente", "get_usuarios_service", "requer_acesso"]
+async def get_provas_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[ProvasService]:
+    """Serviço de provas por requisição, JÁ gateado por ``CRIAR_PROVA`` (W2-C06).
+
+    Autorização e serviço compartilham UMA sessão RLS (em vez de empilhar
+    ``requer_acesso`` + serviço, que abririam duas conexões com NullPool —
+    RNF-020): a linha do próprio ator é legível pela policy
+    ``usuarios_select_self``, então o gate funciona dentro da mesma sessão.
+    Mensagem única de negação (anti-enumeração — mesma do ``requer_acesso``).
+    Ambos os endpoints do C06 (criar + etiqueta) são exclusivos do admin
+    (Matriz §7, "Criar Prova"); quando o C07 trouxer leituras universais,
+    cria-se a dependência própria com o recurso adequado.
+    """
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    storage: StoragePort = request.app.state.storage
+    etiqueta: EtiquetaPort = request.app.state.etiqueta_generator
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        usuarios_repo = SqlAlchemyUsuariosRepository(session)
+        ator = await usuarios_repo.get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.CRIAR_PROVA):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield ProvasService(
+            repo=SqlAlchemyProvasRepository(session),
+            usuarios_repo=usuarios_repo,
+            storage=storage,
+            etiqueta=etiqueta,
+            uow=SqlAlchemyUnitOfWork(session),
+        )
+
+
+__all__ = ["get_admin_corrente", "get_provas_service", "get_usuarios_service", "requer_acesso"]

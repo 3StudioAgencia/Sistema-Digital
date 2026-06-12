@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0006", (
-        "head deve registrar a revisão 0006 (search_path fixo nas funções — W1-A-004)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0008", (
+        "head deve registrar a revisão 0008 (RLS de provas + role de runtime — W2-C06)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -84,6 +84,27 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 5
     ), "0006 deve fixar search_path nas 5 funções de segurança"
+    # W2-C06: tabela provas (0007) + RLS por perfil e role de runtime (0008).
+    assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'provas'") == 1, (
+        "0007 deve criar a tabela provas"
+    )
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_provas_rota_imutavel'",
+        )
+        == 1
+    ), "0007 deve criar o trigger de imutabilidade da rota (RN-007)"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'provas'") == 6
+    ), "0008 deve criar as 6 policies de provas (5 SELECT + 1 INSERT)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_roles WHERE rolname = 'rastreio_runtime' AND NOT rolbypassrls",
+        )
+        == 1
+    ), "0008 deve criar o role de runtime não-owner (NOBYPASSRLS — ADR-034)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -110,6 +131,20 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'app_is_admin'") == 0
     ), "downgrade da 0005 deve remover os helpers de RLS"
+    assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'provas'") == 0, (
+        "downgrade da 0007 deve remover a tabela provas"
+    )
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_type WHERE typname IN ('rota_enum', 'status_prova_enum')",
+        )
+        == 0
+    ), "downgrade da 0007 deve remover os enums de provas"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'provas_rota_imutavel'")
+        == 0
+    ), "downgrade da 0007 deve remover a função do trigger"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

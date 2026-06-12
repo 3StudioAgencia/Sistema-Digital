@@ -18,8 +18,11 @@ from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
 from src.adapters.inbound.http.middleware import ErrorHandlingMiddleware, RequestIdMiddleware
+from src.adapters.inbound.http.provas import router as provas_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
+from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
 from src.adapters.outbound.identity.supabase_admin import UnconfiguredIdentityProvider
+from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
@@ -34,6 +37,7 @@ def create_app(
     jwt_verifier: JwtVerifier | None = None,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     identity_provider: IdentityProviderPort | None = None,
+    etiqueta_generator: EtiquetaPort | None = None,
     lifespan: Lifespan = None,
 ) -> FastAPI:
     """Cria a aplicação FastAPI com middlewares, handlers de erro e routers.
@@ -63,6 +67,9 @@ def create_app(
     app.state.jwt_verifier = jwt_verifier or JwtVerifier()
     app.state.session_factory = session_factory
     app.state.identity_provider = identity_provider or UnconfiguredIdentityProvider()
+    # Default concreto seguro (mesmo princípio do JwtVerifier deny-all): o
+    # gerador é puro/sem segredos — o template padrão serve a app e os testes.
+    app.state.etiqueta_generator = etiqueta_generator or FpdfEtiquetaGenerator()
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
     # para fora: ErrorHandling → CORS → RequestId.
@@ -85,6 +92,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(usuarios_router)
+    app.include_router(provas_router)
     return app
 
 

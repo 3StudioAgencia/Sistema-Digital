@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import build_jwt_verifier
+from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
 from src.adapters.outbound.identity.supabase_admin import (
     SupabaseAdminIdentityProvider,
     UnconfiguredIdentityProvider,
@@ -89,6 +90,8 @@ def build_app() -> FastAPI:
         jwt_verifier=jwt_verifier,
         session_factory=session_factory,
         identity_provider=identity_provider,
+        # Template padrão da etiqueta (RN-011); o C09 trará a configuração.
+        etiqueta_generator=FpdfEtiquetaGenerator(),
         lifespan=lifespan,
     )
 

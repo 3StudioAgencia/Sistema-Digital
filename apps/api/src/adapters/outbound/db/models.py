@@ -11,11 +11,13 @@ mantendo a sincronização Python ↔ PG do glossário (CLAUDE.md §6).
 """
 
 from datetime import datetime
+from enum import StrEnum
 
-from sqlalchemy import Boolean, MetaData, String, Uuid, text
+from sqlalchemy import Boolean, ForeignKey, MetaData, String, Uuid, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from src.domain.provas import EstadoProva, Rota
 from src.domain.usuarios import Localizacao, Setor
 
 # Convenção de nomes determinística: constraints/índices nomeados de forma
@@ -35,7 +37,7 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
-def _pg_enum(enum_cls: type[Setor] | type[Localizacao], name: str) -> postgresql.ENUM:
+def _pg_enum(enum_cls: type[StrEnum], name: str) -> postgresql.ENUM:
     return postgresql.ENUM(
         enum_cls,
         name=name,
@@ -78,4 +80,44 @@ class UsuarioRow(Base):
     )
 
 
-__all__ = ["NAMING_CONVENTION", "Base", "UsuarioRow", "metadata"]
+class ProvaRow(Base):
+    """Linha da tabela ``provas`` (migration 0007 — W2-C06).
+
+    ``id`` é gerado pela APLICAÇÃO (uuid4) — o ``server_default`` existe só
+    como rede de segurança. ``rota`` não tem caminho de update em nenhum
+    repositório (RN-007); o trigger ``trg_provas_rota_imutavel`` rejeita
+    qualquer tentativa direta no banco.
+    """
+
+    __tablename__ = "provas"
+    # RETURNING dos server defaults (created_at/updated_at) no próprio INSERT —
+    # mesmo princípio do UsuarioRow (RNF-020).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    codigo: Mapped[str] = mapped_column(String(18), nullable=False, unique=True)
+    nome: Mapped[str] = mapped_column(String(200), nullable=False)
+    requerimento: Mapped[str] = mapped_column(String(50), nullable=False)
+    cliente: Mapped[str] = mapped_column(String(200), nullable=False)
+    vendedor_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("usuarios.id"), nullable=False
+    )
+    rota: Mapped[Rota] = mapped_column(_pg_enum(Rota, "rota_enum"), nullable=False)
+    status: Mapped[EstadoProva] = mapped_column(
+        _pg_enum(EstadoProva, "status_prova_enum"),
+        nullable=False,
+        server_default=text("'criada'"),
+    )
+    arte_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    arte_content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+__all__ = ["NAMING_CONVENTION", "Base", "ProvaRow", "UsuarioRow", "metadata"]

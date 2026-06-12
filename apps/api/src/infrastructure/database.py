@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from src.application.ports.unit_of_work import UnitOfWork
 from src.infrastructure.config import Settings
 
 logger = logging.getLogger("rastreio.database")
@@ -217,35 +216,8 @@ async def abrir_sessao_rls(
         yield session
 
 
-class SqlAlchemyUnitOfWork(UnitOfWork):
-    """Unit of Work por requisição sobre uma ``AsyncSession``.
-
-    A propagação de claims para a RLS (ADR-008) é feita por
-    ``propagar_claims_rls`` (listener ``after_begin`` da sessão), e NÃO aqui:
-    repositórios fazem leituras que auto-iniciam transações sem passar pelo
-    ``begin()``, então o hook de propagação precisa ser por-transação, não
-    por-``begin()``. A UoW segue responsável apenas pela fronteira atômica
-    (RNF-017).
-    """
-
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
-
-    @property
-    def session(self) -> AsyncSession:
-        """Exposta para os repositórios concretos (adapters), não para casos de uso."""
-        return self._session
-
-    async def begin(self) -> None:
-        """Abre a transação explícita do caso de uso (escrita)."""
-        if not self._session.in_transaction():
-            await self._session.begin()
-
-    async def commit(self) -> None:
-        await self._session.commit()
-
-    async def rollback(self) -> None:
-        await self._session.rollback()
+# SqlAlchemyUnitOfWork morava aqui; movida para adapters/outbound/db/unit_of_work.py
+# no W2-C06 (W0-A-018/ADR-017 — implementação de porta mora em adapters).
 
 
 async def get_session(

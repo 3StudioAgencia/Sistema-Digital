@@ -10,9 +10,9 @@ import logging
 
 import pytest
 from sqlalchemy.pool import NullPool
+from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.config import Settings
 from src.infrastructure.database import (
-    SqlAlchemyUnitOfWork,
     create_runtime_engine,
     create_session_factory,
     get_session,

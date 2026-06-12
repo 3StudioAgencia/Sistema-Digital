@@ -3,8 +3,8 @@
 Nesta wave (C01) a porta é apenas o esqueleto da fronteira transacional: ainda
 não há repositórios de domínio para pendurar nela. Ela existe desde já para que
 a propagação de claims/RLS por request (ADR-008, Wave 1/C05) caiba SEM
-refatoração estrutural — ver o ponto de extensão documentado em
-``src/infrastructure/database.py`` (SqlAlchemyUnitOfWork.begin).
+refatoração estrutural. A implementação concreta vive em
+``src/adapters/outbound/db/unit_of_work.py`` (SqlAlchemyUnitOfWork — W0-A-018).
 """
 
 from abc import ABC, abstractmethod
