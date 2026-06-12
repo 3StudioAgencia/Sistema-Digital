@@ -50,9 +50,12 @@ for f in _roles _helpers usuarios_grants \
 done
 ```
 
-> Nota (ADR-008 — agora implementado): o backend propaga os claims do usuário por
-> requisição via `set_config('request.jwt.claims', …, true)` + `SET LOCAL ROLE
-> authenticated` (ver `src/infrastructure/database.py`,
-> `SqlAlchemyUnitOfWork.begin`), de modo que as policies que leem
-> `app_current_claims()` (= o que `auth.jwt()` lê no Supabase) valem também para
-> as consultas servidas pelo FastAPI. Detalhes em `docs/rbac.md`.
+> Nota (ADR-008 — finalizado pela ADR-031): o backend propaga os claims do usuário
+> por requisição via `set_config('request.jwt.claims', …, true)` + `SET LOCAL ROLE
+> authenticated` num listener **`after_begin`** (`propagar_claims_rls` em
+> `src/infrastructure/database.py`) — por-transação, **não** no `begin()` da UoW,
+> pois leituras dos repositórios auto-iniciam transações sem passar pelo `begin()`.
+> Assim as policies que leem `app_current_claims()` (= o que `auth.jwt()` lê no
+> Supabase) valem também para as consultas servidas pelo FastAPI. A sessão de
+> request é aberta por `abrir_sessao_rls`/`create_request_session_factory`
+> (fail-closed — W1-A-001). Detalhes em `docs/rbac.md`.

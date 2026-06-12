@@ -5,8 +5,10 @@ a tabela ``usuarios`` (PK = UUID de auth.users, vinculo 1:1 — ADR-024), os
 indices das colunas de filtro/ordenacao (RNF-019) e habilita RLS com postura
 RESTRITIVA provisoria: nenhuma policy para anon/authenticated e privilegios
 revogados — acesso ao dado SOMENTE via backend ate o C05 ligar as policies por
-perfil (DP-5/ADR-027). O espelho versionado esta em
-``migrations/rls/usuarios_baseline_restritiva.sql`` (regra do DAT §2).
+perfil (DP-5/ADR-027). Esta postura provisoria foi SUPERSEDIDA pela RLS
+definitiva por perfil da migration 0005 (opcao 6-A / ADR-032: grants +
+``usuarios_*`` policies, espelho em ``migrations/rls/*.sql``); o
+``usuarios_baseline_restritiva.sql`` foi removido junto.
 
 Modelo Setor x Administrador: ortogonal (DP-1/ADR-023) — ``administrador`` e um
 flag independente do setor; o CHECK bidirecional de localizacao espelha a
@@ -32,11 +34,10 @@ depends_on: str | Sequence[str] | None = None
 SETORES = ("studio", "vendedor", "motorista", "clicheria")
 LOCALIZACOES = ("matriz", "filial")
 
-# Postura RLS provisoria (idempotente) — identica ao .sql versionado em
-# migrations/rls/usuarios_baseline_restritiva.sql. Comandos SEPARADOS (asyncpg
-# nao aceita multiplos comandos por instrucao preparada); os REVOKE rodam
-# condicionados a existencia das roles do Supabase (anon/authenticated nao
-# existem no Postgres local de dev/teste).
+# Postura RLS provisoria (idempotente) do C04, SUPERSEDIDA pela 0005 (ADR-032).
+# Comandos SEPARADOS (asyncpg nao aceita multiplos comandos por instrucao
+# preparada); os REVOKE rodam condicionados a existencia das roles do Supabase
+# (anon/authenticated nao existem no Postgres local de dev/teste).
 _RLS_ENABLE = "ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY"
 _RLS_REVOKE = """
 DO $$
@@ -67,9 +68,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=320), nullable=False),
         sa.Column("setor", setor_enum, nullable=False),
         sa.Column("localizacao", localizacao_enum, nullable=True),
-        sa.Column(
-            "administrador", sa.Boolean(), nullable=False, server_default=sa.text("false")
-        ),
+        sa.Column("administrador", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("ativo", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column(
             "created_at",
@@ -93,9 +92,7 @@ def upgrade() -> None:
     )
 
     # Unicidade case-insensitive do e-mail (login e por e-mail no Supabase).
-    op.create_index(
-        "uq_usuarios_email_lower", "usuarios", [sa.text("lower(email)")], unique=True
-    )
+    op.create_index("uq_usuarios_email_lower", "usuarios", [sa.text("lower(email)")], unique=True)
     # Colunas de filtro/ordenacao da listagem (RNF-019).
     op.create_index("ix_usuarios_setor", "usuarios", ["setor"])
     op.create_index("ix_usuarios_ativo", "usuarios", ["ativo"])
