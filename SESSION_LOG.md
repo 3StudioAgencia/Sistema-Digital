@@ -47,7 +47,7 @@
 - ADR-029 (hook lê `app_metadata` do evento — opção B), ADR-030 (duas camadas + equivalência/PR único), ADR-031 (propagação `after_begin` + helpers portáteis — finaliza **ADR-008**), ADR-032 (RLS de `usuarios` 6-A), ADR-033 (fronteira C05↔C06). **DP-1…DP-7 confirmados** pelo dono ("segue com as recomendações"): Matriz ortogonal (Vendedor-Admin vê páginas admin), hook opção B, redirect→`/dashboard`+cookie, RLS 6-A.
 
 **Testes / cobertura:**
-- api: **228 verdes, cobertura 90%** (hook por perfil; RLS de `usuarios` sob `SET ROLE authenticated`; propagação ADR-008 + controle negativo; equivalência da Matriz; ciclo upgrade/downgrade das `0004/0005`). `ruff`/`mypy` limpos.
+- api: **229 verdes, cobertura 90%** (hook por perfil + evento malformado; RLS de `usuarios` sob `SET ROLE authenticated`; propagação ADR-008 + controle negativo; equivalência da Matriz; ciclo upgrade/downgrade das `0004/0005`). `ruff`/`mypy` limpos. **Revisão adversarial de segurança** (5 lentes): 2 achados de baixo risco endurecidos no hook (SECURITY INVOKER explícito + guard de evento malformado).
 - web: **76 verdes** (access-matrix por célula, equivalência, sidebar por perfil, `RbacFlash`); `lint`/`build` limpos.
 - Cobertura de células: **100% das de PÁGINA** (proxy/`can` ⇔ `autorizar`); **dado de `usuarios`** via RLS (admin todas; não-admin 0 alheias). 
 
