@@ -53,43 +53,63 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0005", (
-        "head deve registrar a revisão 0005 (RLS de usuarios + helpers — W1-C05)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0006", (
+        "head deve registrar a revisão 0006 (search_path fixo nas funções — W1-A-004)"
     )
-    assert _scalar(
-        database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'"
-    ) == 1, "0002 deve criar a tabela usuarios"
+    assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
+        "0002 deve criar a tabela usuarios"
+    )
     # W1-C05: hook de claims (0004) e helpers de RLS (0005) presentes no head.
-    assert _scalar(
-        database_url,
-        "SELECT count(*) FROM pg_proc WHERE proname = 'custom_access_token_hook'",
-    ) == 1, "0004 deve criar o custom_access_token_hook"
-    assert _scalar(
-        database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'app_is_admin'"
-    ) == 1, "0005 deve criar os helpers de RLS"
-    assert _scalar(
-        database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'usuarios'"
-    ) == 5, "0005 deve criar as 5 policies de usuarios"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc WHERE proname = 'custom_access_token_hook'",
+        )
+        == 1
+    ), "0004 deve criar o custom_access_token_hook"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'app_is_admin'") == 1
+    ), "0005 deve criar os helpers de RLS"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'usuarios'") == 5
+    ), "0005 deve criar as 5 policies de usuarios"
+    # W1-A-004: a 0006 fixa search_path nas 5 funções de segurança (proconfig não nulo).
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'public' AND p.proconfig IS NOT NULL "
+            "AND p.proname IN ('custom_access_token_hook', 'app_current_claims', "
+            "'app_setor', 'app_is_admin', 'app_current_user_id')",
+        )
+        == 5
+    ), "0006 deve fixar search_path nas 5 funções de segurança"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
     assert _scalar(database_url, "SELECT count(*) FROM alembic_version") == 0, (
         "base deve zerar o histórico de revisões"
     )
-    assert _scalar(
-        database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'"
-    ) == 0, "downgrade da 0002 deve remover a tabela usuarios"
-    assert _scalar(
-        database_url,
-        "SELECT count(*) FROM pg_type WHERE typname IN ('setor_enum', 'localizacao_enum')",
-    ) == 0, "downgrade da 0002 deve remover os enums de domínio"
-    assert _scalar(
-        database_url,
-        "SELECT count(*) FROM pg_proc WHERE proname = 'custom_access_token_hook'",
-    ) == 0, "downgrade da 0004 deve remover o hook"
-    assert _scalar(
-        database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'app_is_admin'"
-    ) == 0, "downgrade da 0005 deve remover os helpers de RLS"
+    assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 0, (
+        "downgrade da 0002 deve remover a tabela usuarios"
+    )
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_type WHERE typname IN ('setor_enum', 'localizacao_enum')",
+        )
+        == 0
+    ), "downgrade da 0002 deve remover os enums de domínio"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc WHERE proname = 'custom_access_token_hook'",
+        )
+        == 0
+    ), "downgrade da 0004 deve remover o hook"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'app_is_admin'") == 0
+    ), "downgrade da 0005 deve remover os helpers de RLS"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")
