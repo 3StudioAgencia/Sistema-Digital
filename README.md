@@ -45,7 +45,7 @@ Detalhamento completo da arquitetura em [`CLAUDE.md §5`](./CLAUDE.md).
 - **Docker** (Postgres local para dev/testes — opcional: a suíte roda offline sem ele)
 - Contas: **Supabase** (projeto) e **Cloudflare R2** (bucket) — provisionamento em [`docs/setup-infra.md`](./docs/setup-infra.md)
 
-> As **plataformas de deploy** ainda são revisáveis (ADR-009, *Proposta*); os **gerenciadores de pacote** (`uv`/`pnpm`) já estão **confirmados** (ADR-010, *Aceita*). Ver `DECISIONS.md`.
+> **Plataformas de deploy confirmadas:** **Vercel** (web) + **Railway** (API), on-prem futuro revisável (ADR-009, *Aceita*); gerenciadores de pacote `uv`/`pnpm` confirmados (ADR-010). Ver `DECISIONS.md`.
 
 ---
 
@@ -74,6 +74,8 @@ pnpm dev                                  # http://localhost:3000
 > Estes comandos são consolidados conforme os componentes são implementados. A fonte canônica de comandos é este README + `CLAUDE.md §9`.
 >
 > **Auth (W1-C03):** preencha `SUPABASE_URL` (api) e a *publishable key* em `NEXT_PUBLIC_SUPABASE_ANON_KEY` (web). O backend **verifica** o JWT do Supabase (**ES256 via JWKS + HS256 fallback**; prova em `GET /auth/me`) — nunca emite. Arquitetura, fluxo e validação local em [`docs/auth.md`](./docs/auth.md). Ajuste o **TTL do access token** no dashboard do Supabase (a inatividade de 30 min no app é complementar).
+>
+> **Usuários (W1-C04):** a gestão de usuários exige a chave secreta da Admin API no backend — **`SUPABASE_SECRET_KEY`** (Dashboard → Project Settings → API Keys → *Secret keys*; **server-only**, jamais no frontend). Sem ela a app sobe e a gestão responde 503. Configure também a **política de senha** no dashboard (Authentication → Providers → Password: mínimo 8, letras e dígitos — a API valida o mesmo). Primeiro administrador: `uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>"` (a conta precisa existir no Supabase Auth). Detalhes em [`docs/usuarios.md`](./docs/usuarios.md) e [`docs/app-shell.md`](./docs/app-shell.md).
 
 ---
 
@@ -115,7 +117,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | Wave | Componentes | Status |
 | --- | --- | --- |
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
-| **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários · 05 Matriz RBAC | **Em andamento** 🟡 |
+| **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC | **Em andamento** 🟡 |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta · 07 Listagem · 08 Detalhe · 09 Config | ⬜ |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |

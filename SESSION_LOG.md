@@ -32,6 +32,44 @@
 
 ---
 
+## Sessão 06 — 2026-06-12 — [Wave 1 / W1-C04] Cadastro e Gestão de Usuários + App Shell
+
+**Objetivo:** CRUD de usuários (RF-018, RF-020, US-015) com provisionamento via Supabase Auth Admin API, **primeira tabela/migration de domínio** (`usuarios`) e o **app shell** (sidebar + área de conteúdo) que hospeda toda a plataforma autenticada.
+
+**Feito:**
+- **Pré-flight** — limpeza de `__pycache__` órfãos (resíduo de tentativa anterior de C04) e commit do ajuste cosmético pendente do C03 (`login.module.css`).
+- **Tokens do design** — o MCP do Figma estourou o limite do plano Starter; extração feita por **amostragem de pixel dos exports PNG 1:1** (Downloads: `Gerenciamento de usuários - admin (3).png` + `- Modal (1).png`; lossless → cores exatas) com 3 sondas Python/Pillow: paleta completa (`#eaeaea` shell r40, `#ff5959` Desativar, `#d7d7d7` controles, `#979797` divisores, scrim `rgba(0,0,0,.76)` medido, modal idêntico aos tokens `--auth-*` do C03), geometria (colunas da tabela com frações medidas, pills 56/29px, pitch 56px) e tipografia. Tokens centralizados em `globals.css` (`--app-*`).
+- **Backend** — migration **`0002_usuarios`** (enums `setor_enum`/`localizacao_enum`, PK = UUID de `auth.users` 1:1, CHECK bidirecional RN-009, índices RNF-019, **RLS restritiva** aplicada e versionada em `migrations/rls/usuarios_baseline_restritiva.sql`; ciclo upgrade→downgrade→upgrade validado em PG 16 real porta 5433); domínio puro (`domain/usuarios.py`); portas `IdentityProviderPort`/`UsuariosRepositoryPort`; **`UsuariosService`** com provisionamento coordenado (**compensação** em falha parcial, **adoção de órfãos marcados** via `app_metadata.provisionado_por`, **fail-closed** nas mutações de status, salvaguarda do **último admin ativo**, sync de `app_metadata.{setor,administrador}` p/ o C05); adapter **`SupabaseAdminIdentityProvider`** (httpx, `sb_secret` server-only) + stand-in 503; endpoints `/usuarios` (listagem paginada server-side com busca escapada + filtros, criar, editar com e-mail imutável, desativar/reativar idempotentes, `/me`) com **guard mínimo de admin**; task **`bootstrap_admin`**; `.env.example` com `SUPABASE_SECRET_KEY`.
+- **Frontend** — **app shell** no grupo `(app)` (`AppShell` + `Sidebar` com indicador ativo via `layoutId`, busca inerte, rodapé via `GET /usuarios/me` com fallback gracioso; placeholders DP-6; transição de conteúdo por rota); **Gerenciador de usuários** fiel ao design (debounce 300ms, filtros server-side, scroll infinito na área da tabela, mutações em memória); **`MotionModal`** reutilizável (DAT §5.2, focus trap, reduced-motion) + form Novo/Editar (validação em tempo real, localização condicional p/ Vendedor, 409 inline) + confirmação de status; **toasts** (`useToast`); **responsivo** DP-7 (drawer/cards/folha, ≥44px). Rotas `/`, `/login`, `/inicio` → `/usuarios`; `AuthProof`/`ApiStatus` removidos (mortos).
+- **Fidelidade visual** — verificada por rota de preview temporária + screenshot Playwright **1920×1080 comparado pixel a pixel** com os exports (cores idênticas; scrim `#343434` vs `#333333`); preview removido antes do commit.
+- **Qualidade** — api: ruff + mypy strict verdes, **201 testes** (90% cobertura) incl. compensação com PG real e estrutura da migration; web: eslint + prettier + build verdes, **50 testes** vitest + Playwright 8/8 (5 live gated); **revisão adversarial multi-agente** (5 dimensões × céticos) sobre os dois commits.
+- **Docs** — `docs/usuarios.md`, `docs/app-shell.md`; CLAUDE.md §2.1/§5.5-5.6/§6/§9; README (deploy confirmado, setup C04, roadmap); CHANGELOG (duas seções `### Fixed` consolidadas).
+
+**Decisões (ADRs):**
+- **ADR-023** — DP-1: modelo **Setor × Administrador ortogonal** (o design governa) + releitura da Matriz §7 p/ o C05; refletida em CLAUDE.md §2.1.
+- **ADR-024** — DP-2: `usuarios` 1:1 com `auth.users` (PK = UUID do auth, sem FK física) + schema/índices.
+- **ADR-025** — DP-3/DP-4: provisionamento via Admin API (httpx, sem SDK), compensação/adoção de órfãos, `SUPABASE_SECRET_KEY` server-only, desativar = ban + `ativo=false` (US-015), e-mail imutável.
+- **ADR-026** — app shell como layout do grupo `(app)` (DP-6/DP-7/DP-9: lucide-react, wordmark do C03, status no 2º dropdown, scroll infinito, "Satus"→"Status").
+- **ADR-027** — DP-5: guard mínimo de admin agora + RLS provisória + `app_metadata`; RBAC completo no C05.
+- **ADR-028** — DP-8: `MotionModal`/toasts criados já no contrato do C19 (que generaliza sem reescrever).
+
+**Testes / cobertura:**
+- api: `uv run pytest` → **201 passed** (REQUIRE_DB_TESTS=1, PG 16 real), cobertura **90%** (fail_under 80); ruff + mypy strict limpos.
+- web: `pnpm test` → **50 passed** (10 arquivos); `pnpm test:e2e` → 8 passed + 5 live-gated; lint/build/format verdes.
+
+**Pendências / em aberto:**
+- [ ] **Responsável:** cadastrar `SUPABASE_SECRET_KEY` no backend (Railway/.env), configurar a **política de senha** no dashboard (min. 8, letras+dígitos), rodar `alembic upgrade head` no Supabase real e o `bootstrap_admin` do primeiro administrador.
+- [ ] Visibilidade dos itens de menu por perfil + enforcement de rota + RLS por perfil + Custom Access Token Hook → **C05**.
+- [ ] Busca global da sidebar (inerte até a Wave 2); reset/troca de senha (componente futuro); "página inicial do perfil" (C05).
+- [ ] Itens herdados: W0-A-001 (`KEEPALIVE_DATABASE_URL`), TTL do access token (DP-3 do C03), W0-A-018 (mover `SqlAlchemyUnitOfWork` p/ `adapters/outbound/db/` no C06).
+
+**Próximo passo:**
+- **W1-C05 · Controle de Acesso por Perfil — Matriz RBAC** (access-matrix.ts + enforcement no proxy + políticas RLS por perfil + Custom Access Token Hook, sobre o `app_metadata` já gravado).
+
+**Definition of Done:** ✅ atendida — testes (incl. provisionamento/RN-009/RN-010/idempotência), migration versionada e documentada, RLS versionada em `migrations/rls/`, sem erros de console/log crítico, docs do módulo, animações validadas com `prefers-reduced-motion`, sem segredos versionados, árvore limpa.
+
+---
+
 ## Sessão 05 — 2026-06-11 — [Wave 1 / W1-C03] Tela de Login e Sessão
 
 **Objetivo:** Autenticação por e-mail/senha (Supabase Auth), sessão stateless em cookie + refresh, encerramento por inatividade de 30 min, verificação de JWT no backend e as **três telas do design** — primeiro componente da Wave 1.

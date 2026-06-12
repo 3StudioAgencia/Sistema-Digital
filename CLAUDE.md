@@ -39,6 +39,7 @@ O UML v3.0 e partes do DAT v3.0 foram escritos para um produto anterior (≈9–
 | Localização do vendedor | Determina a rota | **Apenas informativa** — não roteia nada (RN-009) |
 | Migração de dados (DAT §6 / "Wave 7") | Estratégia v3.0→v4.0 | **NÃO se aplica.** Projeto é greenfield; não há dados legados. Ignorar DAT §6. |
 | Referências cruzadas do DAT | "Requisitos v4.0, Seção 6" (Matriz de Acesso) | Nos Requisitos v1.0: **Matriz de Transições = §6**, **Matriz de Acesso = §7** |
+| Modelo de perfil (Requisitos §3: "3Studio (Administrador)" = setor único admin) | — | **Setor × Administrador ORTOGONAIS** (W1-C04/DP-1, **o design governa** — ADR-023): `usuarios.setor` = escopo operacional; `usuarios.administrador` = flag de perfil (um Vendedor pode ser Admin). Releitura da Matriz §7: linhas "Exclusivo 3Studio" chaveiam pelo **flag**; escopos operacionais (◐/●) pelo **setor** |
 
 > **Regra prática:** se a especificação de um componente referenciar algo do DAT que contradiga a tabela acima, prevalece a v1.0. Registre a divergência em `DECISIONS.md` se encontrar uma nova.
 
@@ -142,7 +143,13 @@ A **Matriz de Acesso (Requisitos §7)** é fonte única. Implementada em **duas 
 
 ### 5.5 Camada de animação (Wave 6, tokens desde já)
 
-Tokens em `apps/web/src/lib/motion/tokens.ts` (`DURATION`, `EASING`). **Proibido literais inline.** Componentes padrão: `<PageTransition>`, `<MotionModal>`, `<AnimatedCounter>`, `<AnimatedTimeline>`, `Toaster`. Hook `useReducedMotion` central zera durações quando `prefers-reduced-motion`.
+Tokens em `apps/web/src/lib/motion/tokens.ts` (`DURATION`, `EASING`, `SPRING`). **Proibido literais inline.** Componentes padrão: `<PageTransition>`, `<MotionModal>`, `<AnimatedCounter>`, `<AnimatedTimeline>`, `Toaster`. Hook `useReducedMotion` central zera durações quando `prefers-reduced-motion`. *(Desde o W1-C04 já existem `components/ui/modal/MotionModal` e `components/ui/toast/ToastProvider` — o C19 generaliza sem reescrever; ADR-028.)*
+
+### 5.6 App shell (W1-C04 — layout de TODA a plataforma autenticada)
+
+Grupo de rotas **`apps/web/src/app/(app)/`** com `layout.tsx` único: proteção server-side (`getUser()`), `InactivityGuard`, `ToastProvider` e `<AppShell>` (sidebar preta + área de conteúdo `#eaeaea` raio 40 — tokens `--app-*` em `globals.css`, extraídos 1:1 do design). **Páginas novas plugam criando rotas no grupo** e, se entram no menu, um item em `components/shell/nav-items.ts`. Visibilidade por perfil = C05. Detalhes: `docs/app-shell.md`.
+
+**Usuários (W1-C04):** tabela `usuarios` (PK = UUID de `auth.users`, 1:1 — ADR-024) com `setor`/`localizacao`/`administrador`/`ativo`; provisionamento coordenado via **Admin API** com compensação/adoção de órfãos (ADR-025). **`SUPABASE_SECRET_KEY` é server-only** (só no ambiente do backend; jamais em `NEXT_PUBLIC_*`/cliente). Acesso ao dado SEMPRE via backend (guard de admin — ADR-027). Detalhes: `docs/usuarios.md`.
 
 ---
 
@@ -150,8 +157,9 @@ Tokens em `apps/web/src/lib/motion/tokens.ts` (`DURATION`, `EASING`). **Proibido
 
 Enums sincronizados Python (Pydantic v2) ↔ PostgreSQL. **Membro Python em MAIÚSCULA; valor em `snake_case`/`lowercase`** (igual ao PG).
 
-**`Setor` / `setor_enum`:** `STUDIO`, `VENDEDOR`, `MOTORISTA`, `CLICHERIA`
-**`Localizacao` / `localizacao_enum`:** `MATRIZ`, `FILIAL` *(apenas informativa)*
+**`Setor` / `setor_enum`:** `STUDIO` (`studio`; rótulo de UI "3Studio"), `VENDEDOR`, `MOTORISTA`, `CLICHERIA`
+**`Localizacao` / `localizacao_enum`:** `MATRIZ`, `FILIAL` *(apenas informativa; obrigatória SÓ p/ Vendedor e indevida p/ os demais — RN-009/CHECK)*
+**Perfil (`usuarios.administrador`):** flag booleano **ortogonal ao setor** (ADR-023); UI exibe `Admin`/`Usuário`
 **`Rota` / `rota_enum`:** `matriz`, `lam_matriz`, `filial`, `lam_filial` *(imutável após criação)*
 **`Acao` / ação de transição:** `IDENTIFICAR_E_ASSINAR`, `APROVAR`, `REPROVAR`, `REINICIAR_CICLO`, `CANCELAR`
 **`EstadoProva` / `status_prova_enum` (14 estados):**
@@ -230,6 +238,9 @@ uv run alembic upgrade head                 # migrations (usa MIGRATIONS_DATABAS
 uv run pytest --cov                         # testes + cobertura (offline; @db pula sem Postgres)
 uv run ruff check . && uv run mypy          # lint + types (strict; mypy lê files do pyproject)
 uv run python -m src.tasks.keep_alive       # keep-alive: ping read-only ao banco (W0-C02; exit 0/≠0)
+uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>"
+                                            # 1º admin (W1-C04): upsert da linha de domínio a partir
+                                            # da conta de auth EXISTENTE (exige SUPABASE_SECRET_KEY)
 
 # Frontend (apps/web)
 cd apps/web && pnpm install
@@ -246,6 +257,8 @@ docker compose up -d db                      # Postgres 17 local (cria rastreio 
 > Notas operacionais: `alembic.ini` deve permanecer **ASCII puro** (o Alembic lê o `.ini` no encoding do locale — cp1252 no Windows). Testes `@db` usam `TEST_DATABASE_URL` (default: Postgres local) e viram falha com `REQUIRE_DB_TESTS=1` (CI).
 >
 > **Auth (W1-C03):** front via `@supabase/ssr` (clients browser/servidor + `src/proxy.ts` de refresh; proteção com `getUser()`). O backend **verifica** o JWT do Supabase (**ES256 via JWKS + HS256 fallback**) em `adapters/inbound/http/auth.py`, exposto por `GET /auth/me` (`uv run pytest tests/unit/test_auth.py tests/integration/test_auth_me.py`). Vars de auth: `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_JWT_SECRET` (api) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` *publishable* (web). PyJWT **só verifica**, nunca emite. Detalhes em `docs/auth.md`.
+>
+> **Usuários (W1-C04):** gestão exige **`SUPABASE_SECRET_KEY`** no api (server-only; sem ela responde 503) e a migration `0002_usuarios` aplicada (`uv run alembic upgrade head`). Fluxo local: api de pé → `bootstrap_admin` (1º admin) → web em `/usuarios`. Testes @db usam o Postgres local (zonky 5433: `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/rastreio_test`). Detalhes em `docs/usuarios.md` e `docs/app-shell.md`.
 
 ---
 
