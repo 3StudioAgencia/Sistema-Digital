@@ -220,6 +220,36 @@
 - **Status:** **Aceita** (remediação W1). Endurecimentos correlatos da mesma sessão: **`iss` do JWT** validado config-gated (W1-A-013, derivado de `SUPABASE_URL`) e **`search_path = ''`** fixado nas 5 funções de segurança (migration `0006`, W1-A-004). **W1-A-006** (janela auth↔domínio) aceito como **dívida rastreada** (trade-off ADR-025; revisitar com outbox).
 - **Consequências:** O C06 herda uma fundação fail-closed (a perna de role fecha o achado por completo lá). `FORCE RLS` permanece inerte contra `BYPASSRLS` e **não** substitui a troca de role. Prova: `tests/integration/test_claims_propagation.py` (fail-closed + positivo + controle de sistema).
 
+## ADR-035 — Modelo de `provas` + `rota_enum` NOT NULL + imutabilidade via trigger (W2-C06 / DP-5)
+- **Contexto:** Primeira tabela de domínio de provas. A RN-007 exige rota escolhida manualmente na criação e **imutável** depois; uma CHECK não compara OLD/NEW.
+- **Decisão:** Migration `0007`: tabela `provas` (`id` uuid gerado pela **aplicação** — a chave da arte no R2 deriva dele e fica estável entre retries; `codigo` UNIQUE; `requerimento` como **texto de dígitos**; FK `vendedor_id`→`usuarios` com "setor Vendedor ativo" validado na aplicação; `arte_key`/`arte_content_type`), `rota_enum` **NOT NULL desde a primeira migration**, índices RNF-019 (`status`/`rota`/`vendedor_id`/`created_at`) e trigger **`BEFORE UPDATE OF rota`** (`provas_rota_imutavel`, `search_path=''`) rejeitando `NEW.rota IS DISTINCT FROM OLD.rota` — vale até para o owner; `SET rota = rota` (idempotente) passa. Nenhum schema Pydantic ou endpoint expõe update de rota (PATCH/PUT inexistem nesta wave — 405/404 por ausência; o C11 herda o schema sem `rota`).
+- **Status:** **Aceita** (W2-C06, DP-1/DP-5 do dono).
+- **Consequências:** Mudar a rota = cancelar e recriar (C14). O C11 fará transições por UPDATE de `status` sem tocar `rota`.
+
+## ADR-036 — Código `PRV-AAAA-MM-NNNNNN` (charset não ambíguo) e QR = código puro (W2-C06 / DP-3)
+- **Contexto:** RF-002 exige identificador alfanumérico único; o fallback manual do C10 digita esse código; DAT §8.2/§8.3 pedem entropia e charset sem ambíguos.
+- **Decisão:** Sufixo de 6 caracteres por **`secrets`** no alfabeto `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (31 símbolos; sem `0/O`, `1/I/L`; ~887 mi/mês); **UNIQUE + retry de colisão no serviço** (5 tentativas; esgotar = erro interno, nunca 422). **Payload do QR = o próprio código** (sem URL/deep-link — DAT §8.3: "sem indireção"); `CODIGO_REGEX` em `domain/provas.py` é a fonte única que a máscara do C10 reutiliza.
+- **Status:** **Aceita** (W2-C06, DP-3 do dono).
+- **Consequências:** QR e digitação manual resolvem para o mesmo registro pelo mesmo caminho (`resolver_prova()` — C10). Códigos imprevisíveis (anti-enumeração), nunca sequenciais.
+
+## ADR-037 — `status_prova_enum` completo (14 estados) já no C06; transições só no C11 (W2-C06 / DP-4)
+- **Contexto:** A coluna `status` precisa nascer corretamente tipada; `ALTER TYPE ... ADD VALUE` posterior é operacionalmente chato e o glossário canônico (CLAUDE.md §6) já fixa os 14 nomes.
+- **Decisão:** A `0007` cria o `status_prova_enum` **completo** (14 valores, default `'criada'`). O C06 **só** cria a prova em `criada`; matriz de transições/movimentações/audit log são do **C11** (`domain/state_machine/`). `ESTADOS_EM_TRANSITO` (os 3 "Com Motorista") vive no domínio e é travado por teste de equivalência contra a policy SQL do motorista.
+- **Status:** **Aceita** (W2-C06, DP-4 do dono).
+- **Consequências:** O C11 não toca o enum, e a RLS do motorista já enxerga os estados "Em Trânsito" testáveis via fixtures (sem máquina de estados).
+
+## ADR-038 — Etiqueta: segno + fpdf2, vetorial, sob demanda, 95×55 mm, reconciliada com a DP-1 (W2-C06 / DP-1/DP-2/DP-7)
+- **Contexto:** RF-003 exige etiqueta PDF com nome, requerimento, vendedor, **rota**, QR e **código textual em destaque** — o design do Figma omitia o código e a rota. O DAT não nomeia lib de PDF (só QR de frontend).
+- **Decisão:** Geração **no backend, sob demanda** (`GET /api/provas/{id}/etiqueta.pdf`, stateless, nada armazenado; `creation_date` fixada em `created_at` → reimprimir = bytes idênticos), com **`segno`** (QR desenhado módulo a módulo, vetorial) e **`fpdf2`** (página exatamente 95×55 mm, landscape, Helvetica core). **Reconciliação DP-1 (opção A do dono):** código em fonte grande **abaixo do QR** (posição do Backlog C06) e rota como **quinta linha** do bloco de campos; logos 3STUDIO + Studio&ART **fixas** (DP-2), em SVG pré-processado (classes CSS → atributos `fill`/`fill-rule`) em `adapters/outbound/etiqueta/assets/`. Template padrão **parametrizável** (`EtiquetaTemplate`) — a configuração (RN-011) é do C09. Porta `EtiquetaPort` na aplicação; ano da etiqueta dinâmico (`created_at`).
+- **Status:** **Aceita** (W2-C06, DP-1/DP-2/DP-7 do dono).
+- **Consequências:** R$ 0 e print-perfect em qualquer impressora (tudo vetorial). `qrcode.react` (DAT) permanece para QR em TELA (C08/C10). Novas deps da api: `segno`, `fpdf2`, `python-multipart`.
+
+## ADR-039 — RLS de `provas` por perfil + admin vê todas + role de runtime não-owner (W2-C06 / DP-6 — fecha ADR-033 e ADR-034 item 3)
+- **Contexto:** As células de DADO da Matriz §7 (Vendedor só as suas; Motorista só "Em Trânsito") ficaram pendentes no C05 (ADR-033); o role de login não-owner foi adiado ao C06 (ADR-034 item 3). Sob o modelo ortogonal (ADR-023), um admin de setor não-studio criaria provas que não conseguiria ver.
+- **Decisão:** Migration `0008` + espelhos `provas_*.sql`: SELECT por **setor** (`studio`/`clicheria` todas; `vendedor` via `vendedor_id = app_current_user_id()`; `motorista` via `status IN` os 3 "Com Motorista") **+ `provas_select_admin`** (flag admin vê todas — espelha `usuarios_select_admin`; decisão do dono na DP-6); INSERT exclusivo do flag admin; grants de **privilégio mínimo** (`SELECT, INSERT` — UPDATE no C11, DELETE no C14). **`rastreio_runtime`** criado `NOLOGIN NOINHERIT NOBYPASSRLS` + membro de `authenticated` (`_runtime_role.sql`); LOGIN/senha é **passo de operação** fora do repo; tarefas de sistema permanecem no owner via `MIGRATIONS_DATABASE_URL`. Harness de equivalência **estendido**: `test_equivalencia_rls_provas.py` (domínio ↔ sql ↔ migration, offline) + `test_rls_provas.py` (@db, células por perfil com provas semeadas em vários status). Endpoints do C06 usam **uma sessão RLS por requisição** (gate de `criar_prova` fundido em `get_provas_service` — NullPool não abre duas conexões).
+- **Status:** **Aceita** (W2-C06, DP-6 do dono). Fecha a pendência do C05 (ADR-033) e o item 3 do ADR-034.
+- **Consequências:** Query direta fora do escopo → 0 registros (validado @db); anti-enumeração no 404 da etiqueta. Falta apenas a ação de operação: `ALTER ROLE rastreio_runtime LOGIN PASSWORD ...` + apontar `DATABASE_URL` (registrado no checklist abaixo).
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)
@@ -237,3 +267,5 @@
 - [x] **ADR-023/024/025/026/027/028 (W1/C04)** — modelo Setor×Admin ortogonal, vínculo 1:1 com `auth.users`, provisionamento via Admin API (compensação/adoção de órfãos), app shell, guard mínimo + RLS provisória + `app_metadata`, e modal/toasts reutilizáveis: entregues e testados (api 201 testes/90% + web 50 testes + E2E).
 - [ ] **Responsável (DP-3 do C04):** configurar a **política de senha** no dashboard do Supabase (Authentication → Providers → Password: min. 8, letras e dígitos) e cadastrar **`SUPABASE_SECRET_KEY`** no ambiente do backend (Railway/`.env` local) — sem ela a gestão de usuários responde 503.
 - [ ] **Responsável (pós-C04):** rodar `alembic upgrade head` no Supabase real e `uv run python -m src.tasks.bootstrap_admin -- --email <email-do-admin> --nome "<Nome>"` para provisionar o primeiro administrador.
+- [x] **ADR-035/036/037/038/039 (W2-C06)** — modelo de `provas` + rota imutável (trigger), código `PRV-AAAA-MM-NNNNNN` + QR puro, enum completo de 14 estados, etiqueta segno+fpdf2 95×55 reconciliada (DP-1) e RLS de `provas` + role de runtime: entregues e testados (api 338 testes/95% + web 93 + E2E).
+- [ ] **Responsável (pós-C06, operação):** rodar `alembic upgrade head` no Supabase real (aplica `0007`/`0008`); criar o **bucket R2** e preencher as 4 vars `R2_*` no ambiente da api; ativar o role de runtime — `ALTER ROLE rastreio_runtime LOGIN PASSWORD '<segredo>'` — e apontar `DATABASE_URL` para ele (pooler: usuário `rastreio_runtime.<project-ref>`), mantendo `MIGRATIONS_DATABASE_URL` no owner.

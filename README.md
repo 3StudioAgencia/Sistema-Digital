@@ -78,6 +78,8 @@ pnpm dev                                  # http://localhost:3000
 > **Usuários (W1-C04):** a gestão de usuários exige a chave secreta da Admin API no backend — **`SUPABASE_SECRET_KEY`** (Dashboard → Project Settings → API Keys → *Secret keys*; **server-only**, jamais no frontend). Sem ela a app sobe e a gestão responde 503. Configure também a **política de senha** no dashboard (Authentication → Providers → Password: mínimo 8, letras e dígitos — a API valida o mesmo). Primeiro administrador: `uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>"` (a conta precisa existir no Supabase Auth). Detalhes em [`docs/usuarios.md`](./docs/usuarios.md) e [`docs/app-shell.md`](./docs/app-shell.md).
 >
 > **RBAC (W1-C05):** rode `uv run alembic upgrade head` (cria o **Custom Access Token Hook** e a RLS de `usuarios`) e **habilite o hook** no dashboard: Authentication → Hooks → *Customize Access Token (JWT) Claims* → `public.custom_access_token_hook`. Sem isso o JWT não carrega `setor`/`administrador` no topo e a RLS/proxy tratam todos como menor privilégio. A Matriz §7 é fonte única (`apps/web/src/lib/access-matrix.ts` + RLS em `apps/api/migrations/rls/`) — toda mudança exige **PR único** cobrindo as duas camadas. Detalhes em [`docs/rbac.md`](./docs/rbac.md).
+>
+> **Provas (W2-C06):** `uv run alembic upgrade head` cria a tabela **`provas`** (rota imutável via trigger), a **RLS por perfil** e o role de runtime `rastreio_runtime`. O upload da **arte** exige as 4 vars **`R2_*`** no `.env` da api (crie o bucket no Cloudflare R2; sem elas a criação responde 503 com erro claro). A **etiqueta PDF** (95×55 mm, QR + código `PRV-AAAA-MM-NNNNNN`) é gerada sob demanda — libs novas da api: `segno`, `fpdf2`, `python-multipart` (entram no `uv sync`). Fluxo local: api de pé → web `/provas/nova` (admin). Em produção, ative o role de runtime não-owner (passo de operação — [`docs/provas.md`](./docs/provas.md) §6).
 
 ---
 
@@ -120,7 +122,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | --- | --- | --- |
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
-| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta · 07 Listagem · 08 Detalhe · 09 Config | ⬜ |
+| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem · 08 Detalhe · 09 Config | **Em andamento** 🔄 |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |

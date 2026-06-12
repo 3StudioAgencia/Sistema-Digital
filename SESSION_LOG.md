@@ -32,6 +32,38 @@
 
 ---
 
+## Sessão 09 — 2026-06-12 — [Wave 2 / Componente C06] Cadastro de Prova + Rota + Etiqueta
+
+**Objetivo:** Abrir a Wave 2 com a porta de entrada do domínio: criação de provas com seleção manual de rota (imutável), código `PRV-AAAA-MM-NNNNNN`, QR, etiqueta PDF 95×55 e a RLS de `provas` que fecha a pendência do C05.
+
+**Decisões do dono (Pontos de Decisão, 1 rodada):** DP-1 = **(A)** reconciliar a etiqueta (código em fonte grande abaixo do QR + rota como 5ª linha do bloco); DP-2 = 95×55 landscape confirmado, logos 3STUDIO + Studio&ART **fixas** (SVGs fornecidos em `apps/web/public/`); DP-3/4/5/6/7 = recomendações aceitas (código canônico + QR puro; enum completo 14 estados; sem PATCH + trigger; RLS com admin vendo todas; segno+fpdf2 sob demanda + toast/download/navegação). Rápidas: requerimento texto-de-dígitos; cliente texto livre; ano da etiqueta dinâmico.
+
+**Feito:**
+- Migrations **`0007_provas`** (enums, tabela, índices RNF-019, trigger de imutabilidade, RLS restritiva provisória) e **`0008_rls_provas_e_runtime_role`** (grants mínimos SELECT/INSERT, 6 policies por perfil, role `rastreio_runtime` NOBYPASSRLS) + espelhos 1:1 em `migrations/rls/` — ciclo `upgrade→downgrade→upgrade` limpo no PG 5433.
+- Backend hexagonal: `domain/provas.py` (código/charset/regex p/ C10, magic bytes, vendedor ativo), portas `ProvasRepositoryPort`/`EtiquetaPort`, `ProvasService` (criação atômica: upload R2 → INSERT com retry de colisão → commit; compensação logada), adapter `FpdfEtiquetaGenerator` (vetorial, determinístico, template parametrizável), repositório SQLAlchemy, endpoints `POST /provas` + `GET /provas/{id}/etiqueta.pdf` (admin-only, 1 sessão RLS/request), `StorageError`→503.
+- Frontend: `/provas/nova` real (cartão branco, segmented control de rota sem pré-seleção, dropzone, vendedores em 1 consulta, pós-criação com download automático + retry); `apiFetch` multipart + `apiFetchBlob`; `lib/api/provas.ts`.
+- Dívidas herdadas absorvidas: **role não-owner** (ADR-034 item 3) e **`SqlAlchemyUnitOfWork` → `adapters/outbound/db/`** (W0-A-018).
+- Etiqueta validada VISUALMENTE (PDF de amostra renderizado e comparado ao design — código e rota presentes, logos vetoriais ok).
+
+**Decisões (ADRs):** **ADR-035** (modelo/trigger), **ADR-036** (código+QR puro), **ADR-037** (enum completo, fronteira C06↔C11), **ADR-038** (etiqueta segno+fpdf2/DP-1), **ADR-039** (RLS de provas + admin vê todas + role de runtime — fecha ADR-033/034).
+
+**Testes / cobertura:**
+- api: **338 verdes** (era 255; `REQUIRE_DB_TESTS=1`, PG 17 local 5433), cobertura **95.09%** (domínio e serviço de provas: **100%**); `ruff`/`ruff format --check`/`mypy --strict` limpos; ciclo Alembic limpo (head **0008**).
+- RLS de provas validada célula a célula @db (vendedor só as suas; motorista só os 3 "Em Trânsito" via fixtures de status; studio/clicheria/admin todas; fantasma → **0**; INSERT só admin; UPDATE sem grant; trigger rejeita rota até para owner) + **equivalência anti-drift** domínio↔sql↔migration.
+- web: **93 verdes** (era 85; 17 arquivos); `eslint`/`prettier --check`/`next build` limpos; Playwright **9 verdes** (+ specs live gateados).
+
+**Pendências / em aberto:**
+- [ ] **Dono (operação, pós-C06):** `alembic upgrade head` no Supabase real (aplica 0007/0008); criar **bucket R2** + 4 vars `R2_*` no ambiente da api; ativar o role de runtime (`ALTER ROLE rastreio_runtime LOGIN PASSWORD ...`) e apontar `DATABASE_URL` p/ ele (`MIGRATIONS_DATABASE_URL` segue no owner).
+- [ ] Itens herdados que permanecem: `KEEPALIVE_DATABASE_URL` (W0-A-001), TTL do access token (DP-3 do C03), leaked-password/política de senha no dashboard (W1-A-011), W1-A-006 (outbox), sink real de erros (C19/C20).
+- [ ] C07 estende `ProvasRepositoryPort` com listagem paginada/filtros; C08 serve a arte (decidir bytes-via-backend vs presigned URL — a porta de storage não tem presigned hoje).
+
+**Próximo passo:**
+- **W2-C07 — Listagem, Pesquisa e Filtros de Provas** (a página `/provas` hoje é placeholder e recebe a navegação pós-criação).
+
+**Definition of Done:** ✅ atendida (testes ≥80%/máquina de estados n/a nesta wave; migrations versionadas/documentadas; critérios US-001 e Matriz §7 validados com teste de acesso não autorizado por perfil; RLS versionada; sem N+1; idempotência/atomicidade verificadas; error boundary do grupo cobre a rota; animações com reduced-motion; sem segredos versionados; protocolo §10 executado).
+
+---
+
 ## Sessão 08 — 2026-06-12 — [Wave 1 / Remediação] Auditoria da Wave 1 → GO
 
 **Objetivo:** Resolver os achados de `docs/audits/AUDITORIA-WAVE-1.md` (escopo `PROMPTS/W1-REMEDIACAO-wave1.md`) — Críticos/Altos primeiro — re-verificar a Wave 1 inteira e atualizar o veredito para **GO** antes da Wave 2.
