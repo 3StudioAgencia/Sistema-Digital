@@ -171,6 +171,18 @@ class Settings(BaseSettings):
             return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
         return None
 
+    @property
+    def effective_issuer(self) -> str | None:
+        """Emissor (``iss``) esperado dos JWT do Supabase: ``<supabase_url>/auth/v1``.
+
+        Mesma base de ``effective_jwks_url`` — derivar ambos do MESMO campo evita
+        divergência. ``None`` quando ``SUPABASE_URL`` não está configurada: aí a
+        validação de ``iss`` fica desligada (W1-A-013), preservando os setups de
+        teste que não montam auth e o fallback HS256 legado sem URL."""
+        if self.supabase_url:
+            return f"{self.supabase_url.rstrip('/')}/auth/v1"
+        return None
+
 
 @lru_cache
 def get_settings() -> Settings:

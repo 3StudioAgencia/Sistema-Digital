@@ -193,6 +193,50 @@ def test_sub_nao_string_rejeitado() -> None:
         verifier.verify(token)
 
 
+# --- Validação de issuer (iss) — W1-A-013 -----------------------------------
+ISSUER = "https://proj.supabase.co/auth/v1"
+
+
+def test_issuer_correto_aceito(ec_private_key: EllipticCurvePrivateKey) -> None:
+    verifier = JwtVerifier(jwks_client=_FakeJwksClient(ec_private_key.public_key()), issuer=ISSUER)
+    assert verifier.verify(_es256(ec_private_key, iss=ISSUER)).sub == SUB
+
+
+def test_issuer_incorreto_rejeitado(ec_private_key: EllipticCurvePrivateKey) -> None:
+    verifier = JwtVerifier(jwks_client=_FakeJwksClient(ec_private_key.public_key()), issuer=ISSUER)
+    with pytest.raises(InvalidToken):
+        verifier.verify(_es256(ec_private_key, iss="https://evil.supabase.co/auth/v1"))
+
+
+def test_issuer_ausente_rejeitado_quando_exigido(
+    ec_private_key: EllipticCurvePrivateKey,
+) -> None:
+    verifier = JwtVerifier(jwks_client=_FakeJwksClient(ec_private_key.public_key()), issuer=ISSUER)
+    with pytest.raises(InvalidToken):
+        verifier.verify(_es256(ec_private_key))  # sem claim iss
+
+
+def test_hs256_issuer_validado() -> None:
+    """Caminho que de fato importa (W1-A-013): segredo HS256 partilhável entre
+    projetos — o ``iss`` distingue o emissor."""
+    verifier = JwtVerifier(hs256_secret=HS256_SECRET, issuer=ISSUER)
+    bom = jwt.encode(_claims(iss=ISSUER), HS256_SECRET, algorithm="HS256")
+    assert verifier.verify(bom).sub == SUB
+    ruim = jwt.encode(
+        _claims(iss="https://outro.supabase.co/auth/v1"), HS256_SECRET, algorithm="HS256"
+    )
+    with pytest.raises(InvalidToken):
+        verifier.verify(ruim)
+
+
+def test_issuer_nao_exigido_quando_nao_configurado(
+    ec_private_key: EllipticCurvePrivateKey,
+) -> None:
+    # Back-compat: verifier sem issuer (default) aceita token sem iss.
+    verifier = JwtVerifier(jwks_client=_FakeJwksClient(ec_private_key.public_key()))
+    assert verifier.verify(_es256(ec_private_key)).sub == SUB
+
+
 # --- Fábrica a partir do Settings (composition root) ------------------------
 def test_build_verifier_deriva_jwks_e_segredo() -> None:
     settings = Settings(
@@ -203,9 +247,12 @@ def test_build_verifier_deriva_jwks_e_segredo() -> None:
         supabase_jwt_secret="hs-secret",
     )
     assert settings.effective_jwks_url == ("https://proj.supabase.co/auth/v1/.well-known/jwks.json")
+    assert settings.effective_issuer == "https://proj.supabase.co/auth/v1"
     verifier = build_jwt_verifier(settings)
     assert verifier._jwks_client is not None
     assert verifier._hs256_secret == "hs-secret"
+    # Derivado da MESMA base do JWKS — sem divergência (W1-A-013).
+    assert verifier._issuer == "https://proj.supabase.co/auth/v1"
 
 
 def test_build_verifier_sem_supabase_e_denyall() -> None:
@@ -215,6 +262,8 @@ def test_build_verifier_sem_supabase_e_denyall() -> None:
         migrations_database_url=_LOCAL_PG,
     )
     assert settings.effective_jwks_url is None
+    assert settings.effective_issuer is None
     verifier = build_jwt_verifier(settings)
     assert verifier._jwks_client is None
     assert verifier._hs256_secret is None
+    assert verifier._issuer is None

@@ -76,10 +76,15 @@ class JwtVerifier:
         jwks_client: PyJWKClient | None = None,
         hs256_secret: str | None = None,
         audience: str = SUPABASE_AUDIENCE,
+        issuer: str | None = None,
     ) -> None:
         self._jwks_client = jwks_client
         self._hs256_secret = hs256_secret
         self._audience = audience
+        # Validação de ``iss`` só quando configurada (derivada de SUPABASE_URL):
+        # protege o fallback HS256 contra um segredo compartilhado entre projetos
+        # (W1-A-013). Mantida opcional para não quebrar verifiers de teste/sem URL.
+        self._issuer = issuer
 
     def verify(self, token: str) -> AuthenticatedUser:
         """Verifica o token e devolve a identidade, ou levanta ``InvalidToken``."""
@@ -119,16 +124,22 @@ class JwtVerifier:
         return self._decode(token, self._hs256_secret, [_SYMMETRIC_ALGORITHM])
 
     def _decode(self, token: str, key: Any, algorithms: list[str]) -> dict[str, Any]:
+        # Exige e valida ``iss`` apenas quando o emissor é conhecido (W1-A-013);
+        # com ``issuer=None``/``verify_iss=False`` o comportamento é o de antes.
+        valida_iss = self._issuer is not None
+        require = [*_REQUIRED_CLAIMS, "iss"] if valida_iss else list(_REQUIRED_CLAIMS)
         return jwt.decode(
             token,
             key,
             algorithms=algorithms,
             audience=self._audience,
+            issuer=self._issuer,
             options={
-                "require": list(_REQUIRED_CLAIMS),
+                "require": require,
                 "verify_signature": True,
                 "verify_exp": True,
                 "verify_aud": True,
+                "verify_iss": valida_iss,
             },
         )
 
@@ -170,7 +181,11 @@ def build_jwt_verifier(settings: Settings) -> JwtVerifier:
         if settings.supabase_jwt_secret is not None
         else None
     )
-    return JwtVerifier(jwks_client=jwks_client, hs256_secret=secret)
+    return JwtVerifier(
+        jwks_client=jwks_client,
+        hs256_secret=secret,
+        issuer=settings.effective_issuer,
+    )
 
 
 # ---------------------------------------------------------------------------
