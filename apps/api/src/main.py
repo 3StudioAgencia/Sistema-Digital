@@ -52,9 +52,7 @@ def _build_identity_provider(settings: Settings) -> IdentityProviderPort:
             supabase_url=settings.supabase_url,
             secret_key=settings.supabase_secret_key.get_secret_value(),
         )
-    logger.warning(
-        "SUPABASE_SECRET_KEY não configurada — gestão de usuários indisponível (503)"
-    )
+    logger.warning("SUPABASE_SECRET_KEY não configurada — gestão de usuários indisponível (503)")
     return UnconfiguredIdentityProvider()
 
 
@@ -64,7 +62,9 @@ def build_app() -> FastAPI:
     configure_logging(settings.log_level)
 
     engine = database.create_runtime_engine(settings)
-    session_factory = database.create_session_factory(engine)
+    # Fábrica de sessões de REQUEST: fail-closed na RLS (W1-A-001) — recusa
+    # transação sem claims propagados, em vez de cair no role owner (BYPASSRLS).
+    session_factory = database.create_request_session_factory(engine)
     storage = _build_storage(settings)
     jwt_verifier = build_jwt_verifier(settings)
     identity_provider = _build_identity_provider(settings)

@@ -20,7 +20,7 @@ from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.usuarios import UsuariosService
 from src.domain.rbac import Recurso, autorizar
 from src.domain.usuarios import Usuario
-from src.infrastructure.database import SqlAlchemyUnitOfWork, propagar_claims_rls
+from src.infrastructure.database import SqlAlchemyUnitOfWork, abrir_sessao_rls
 
 
 async def get_usuarios_service(
@@ -37,9 +37,9 @@ async def get_usuarios_service(
             detail="Persistência não configurada.",
         )
     identity: IdentityProviderPort = request.app.state.identity_provider
-    async with factory() as session:
-        # Liga a RLS ao usuário corrente ANTES de qualquer query do serviço.
-        propagar_claims_rls(session, user.claims)
+    # Sessão de request com a RLS ligada ao usuário corrente (ponto único,
+    # fail-closed — W1-A-001). O C06 reusa este mesmo opener para ``provas``.
+    async with abrir_sessao_rls(factory, user.claims) as session:
         yield UsuariosService(
             repo=SqlAlchemyUsuariosRepository(session),
             identity=identity,

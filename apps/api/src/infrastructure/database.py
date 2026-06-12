@@ -18,6 +18,7 @@ do cache de statements.
 import json
 import logging
 from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, cast
 
@@ -28,6 +29,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from src.application.ports.unit_of_work import UnitOfWork
@@ -110,12 +112,63 @@ async def ping(engine: AsyncEngine) -> bool:
     return True
 
 
+# Chave em ``session.info`` onde os claims do JWT ficam registrados para a RLS.
+# A presença dela distingue uma sessão de REQUEST (que DEVE rodar sob
+# ``authenticated`` com claims) de uma sessão de sistema (seed/CLI/migrations,
+# que roda como owner de propósito).
+_RLS_CLAIMS_KEY = "rls_claims"
+
+
+class _RlsSyncSession(Session):
+    """Sessão síncrona dedicada às requisições, com o guarda *fail-closed* da RLS.
+
+    Existe apenas para escopar o listener ``after_begin`` abaixo a ESTAS sessões
+    (as criadas por ``create_request_session_factory``), sem afetar as sessões de
+    sistema/seed que usam a ``Session`` padrão.
+    """
+
+
+@event.listens_for(_RlsSyncSession, "after_begin")
+def _exigir_claims_rls(session: Session, _trans: Any, _connection: Any) -> None:
+    """Guarda *fail-closed*: nenhuma transação de uma sessão de request pode
+    começar sem claims propagados.
+
+    Sem este guarda, esquecer a propagação faria a consulta rodar com o role de
+    conexão (owner + ``BYPASSRLS`` no Supabase) e VAZAR dados entre escopos em
+    silêncio (fail-**open**). Aqui, esquecer **levanta** — o erro é alto e cedo,
+    não um vazamento silencioso (W1-A-001). A propagação em si é feita pelo
+    listener de ``propagar_claims_rls``; este apenas recusa a ausência de claims,
+    de modo que o C06 (RLS de ``provas``) herde o padrão *fail-closed*.
+    """
+    if not session.info.get(_RLS_CLAIMS_KEY):
+        raise RuntimeError(
+            "Sessão de request iniciou transação sem claims de RLS propagados: a "
+            "consulta rodaria como owner (fail-open). Abra a sessão via "
+            "abrir_sessao_rls()/propagar_claims_rls() antes de qualquer query."
+        )
+
+
+def create_request_session_factory(
+    engine: AsyncEngine,
+) -> async_sessionmaker[AsyncSession]:
+    """Fábrica das sessões de REQUEST — toda sessão daqui é *fail-closed* na RLS.
+
+    Diferente de ``create_session_factory`` (sessões de sistema/owner: seed, CLI,
+    bootstrap), as sessões produzidas aqui recusam iniciar uma transação sem
+    claims propagados (``_RlsSyncSession`` + guarda ``after_begin``). É a ÚNICA
+    fábrica que o caminho HTTP deve usar; o C06 herda o padrão *fail-closed* sem
+    reimplementar a propagação em cada wiring (W1-A-001).
+    """
+    return async_sessionmaker(engine, expire_on_commit=False, sync_session_class=_RlsSyncSession)
+
+
 def propagar_claims_rls(session: AsyncSession, claims: Mapping[str, Any]) -> None:
     """Propaga os claims do JWT verificado para CADA transação da sessão (ADR-008).
 
-    Anexa um listener ``after_begin``: no início de toda transação — leitura OU
-    escrita, **inclusive as auto-begin** dos repositórios — executa
-    ``set_config('request.jwt.claims', <json>, true)`` + ``SET LOCAL ROLE
+    Registra os claims em ``session.info`` (lido pelo guarda *fail-closed* das
+    sessões de request) e anexa um listener ``after_begin``: no início de toda
+    transação — leitura OU escrita, **inclusive as auto-begin** dos repositórios —
+    executa ``set_config('request.jwt.claims', <json>, true)`` + ``SET LOCAL ROLE
     authenticated``. Assim, as policies de RLS (que leem ``app_current_claims()``,
     o mesmo conteúdo que ``auth.jwt()`` expõe no Supabase) valem também para as
     consultas servidas pelo FastAPI — sem esta propagação, a conexão *owner*
@@ -129,15 +182,39 @@ def propagar_claims_rls(session: AsyncSession, claims: Mapping[str, Any]) -> Non
     Ordem deliberada: claims ANTES da troca de role (o ``set_config`` corre como
     owner; o GUC local sobrevive à troca de role e é lido pelas policies).
     """
-    claims_json = json.dumps(dict(claims))
+    claims_dict = dict(claims)
+    session.sync_session.info[_RLS_CLAIMS_KEY] = claims_dict
+    claims_json = json.dumps(claims_dict)
 
     @event.listens_for(session.sync_session, "after_begin")
-    def _aplicar(_sess: Any, _trans: Any, connection: Any) -> None:
+    def _aplicar(sess: Any, _trans: Any, connection: Any) -> None:
+        # Fail-closed também aqui: claims vazios não devem propagar como owner.
+        if not sess.info.get(_RLS_CLAIMS_KEY):
+            raise RuntimeError(
+                "propagar_claims_rls chamado sem claims — a sessão rodaria como owner (fail-open)."
+            )
         connection.execute(
             text("SELECT set_config('request.jwt.claims', :c, true)"),
             {"c": claims_json},
         )
         connection.execute(text("SET LOCAL ROLE authenticated"))
+
+
+@asynccontextmanager
+async def abrir_sessao_rls(
+    factory: async_sessionmaker[AsyncSession], claims: Mapping[str, Any]
+) -> AsyncIterator[AsyncSession]:
+    """Abre uma sessão de request com a RLS ligada (ADR-008) — ponto ÚNICO.
+
+    Centraliza ``factory() + propagar_claims_rls`` para que todo serviço por
+    requisição (C04 e, daqui em diante, o C06 e seguintes) honre a RLS por
+    padrão, sem reimplementar a propagação em cada wiring (W1-A-001). Use sempre
+    com uma fábrica de ``create_request_session_factory`` para herdar o guarda
+    *fail-closed*.
+    """
+    async with factory() as session:
+        propagar_claims_rls(session, claims)
+        yield session
 
 
 class SqlAlchemyUnitOfWork(UnitOfWork):
