@@ -12,7 +12,7 @@
  * requisições — RNF-020); criar refaz a primeira página.
  */
 import { motion } from "framer-motion";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/api/usuarios";
 import { DURATION, EASING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
+import { Dropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 
 import { ConfirmarStatusModal, type AcaoStatus } from "./confirmar-status-modal";
@@ -309,32 +310,30 @@ export function UsuariosView() {
           />
         </div>
         <div className={styles.campoSelect}>
-          <select
+          <Dropdown
+            ariaLabel="Filtrar por setor"
             value={setor}
-            onChange={(event) => setSetor(event.target.value as "" | Setor)}
-            aria-label="Filtrar por setor"
-            className={styles.select}
-          >
-            <option value="">Todos os setores</option>
-            <option value="studio">3Studio</option>
-            <option value="vendedor">Vendedor</option>
-            <option value="motorista">Motorista</option>
-            <option value="clicheria">Clicheria</option>
-          </select>
-          <ChevronDown size={22} className={styles.chevron} aria-hidden />
+            onChange={setSetor}
+            opcoes={[
+              { value: "", label: "Todos os setores" },
+              { value: "studio", label: "3Studio" },
+              { value: "vendedor", label: "Vendedor" },
+              { value: "motorista", label: "Motorista" },
+              { value: "clicheria", label: "Clicheria" },
+            ]}
+          />
         </div>
         <div className={styles.campoSelect}>
-          <select
+          <Dropdown
+            ariaLabel="Filtrar por status"
             value={statusFiltro}
-            onChange={(event) => setStatusFiltro(event.target.value as "" | "ativo" | "inativo")}
-            aria-label="Filtrar por status"
-            className={styles.select}
-          >
-            <option value="">Todos</option>
-            <option value="ativo">Ativos</option>
-            <option value="inativo">Inativos</option>
-          </select>
-          <ChevronDown size={22} className={styles.chevron} aria-hidden />
+            onChange={setStatusFiltro}
+            opcoes={[
+              { value: "", label: "Todos" },
+              { value: "ativo", label: "Ativos" },
+              { value: "inativo", label: "Inativos" },
+            ]}
+          />
         </div>
       </div>
 

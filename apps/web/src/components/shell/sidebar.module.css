@@ -23,10 +23,10 @@
 }
 
 .saudacao {
-  margin-top: calc(75 * var(--u));
-  font-size: calc(32 * var(--u));
-  line-height: 1.15;
-  font-weight: 600;
+  margin-top: calc(66 * var(--u));
+  font-size: calc(34 * var(--u));
+  line-height: 1;
+  font-weight: 400;
   color: var(--auth-text);
 }
 
@@ -87,10 +87,11 @@
 .navItem {
   display: flex;
   align-items: center;
-  height: calc(42 * var(--u)); /* pitch exato do design */
+  height: calc(46 * var(--u)); /* pitch exato do design */
   color: var(--auth-text);
-  font-size: calc(20 * var(--u));
+  font-size: calc(21 * var(--u));
   text-decoration: none;
+  font-weight: 300;
 }
 
 .navItem:hover {
@@ -110,16 +111,16 @@
 
 .indicador {
   display: block;
-  width: 3px;
-  height: calc(18 * var(--u));
+  width: 4px;
+  height: calc(26 * var(--u));
   border-radius: 2px;
   background: var(--app-accent);
 }
 
 .navIcone {
   flex: none;
-  width: calc(22 * var(--u));
-  height: calc(22 * var(--u));
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
   margin-right: calc(12 * var(--u));
 }
 

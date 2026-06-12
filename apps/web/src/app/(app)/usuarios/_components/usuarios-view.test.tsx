@@ -114,21 +114,25 @@ describe("UsuariosView (W1-C04)", () => {
     }
   });
 
-  it("filtros de setor e status disparam consulta server-side", async () => {
+  it("filtros (dropdown custom) de setor e status disparam consulta server-side", async () => {
+    const user = userEvent.setup();
     renderView();
     await screen.findAllByText("Ana Lima");
     mocks.listarUsuarios.mockClear();
 
-    fireEvent.change(screen.getByLabelText("Filtrar por setor"), {
-      target: { value: "vendedor" },
-    });
+    await user.click(screen.getByRole("button", { name: "Filtrar por setor" }));
+    await user.click(await screen.findByRole("option", { name: "Vendedor" }));
     await waitFor(() =>
       expect(mocks.listarUsuarios.mock.calls.at(-1)?.[0]).toMatchObject({ setor: "vendedor" }),
     );
+    // painel fecha após selecionar (estado do gatilho; o unmount visual fica
+    // com a animação de saída, que o jsdom não progride) e reflete a escolha
+    const gatilhoSetor = screen.getByRole("button", { name: "Filtrar por setor" });
+    expect(gatilhoSetor).toHaveAttribute("aria-expanded", "false");
+    expect(gatilhoSetor).toHaveTextContent("Vendedor");
 
-    fireEvent.change(screen.getByLabelText("Filtrar por status"), {
-      target: { value: "inativo" },
-    });
+    await user.click(screen.getByRole("button", { name: "Filtrar por status" }));
+    await user.click(await screen.findByRole("option", { name: "Inativos" }));
     await waitFor(() =>
       expect(mocks.listarUsuarios.mock.calls.at(-1)?.[0]).toMatchObject({ status: "inativo" }),
     );

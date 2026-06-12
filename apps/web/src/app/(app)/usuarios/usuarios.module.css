@@ -87,34 +87,10 @@
 }
 
 .campoSelect {
+  /* O visual do gatilho/painel vive no componente Dropdown
+     (components/ui/select) — aqui só a altura do slot no grid. */
   position: relative;
   height: calc(60 * var(--u));
-}
-
-.select {
-  appearance: none;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: var(--app-radius-pill);
-  background: var(--app-field);
-  color: var(--app-text-gray);
-  font: inherit;
-  font-size: calc(20 * var(--u));
-  padding: 0 56px 0 28px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.chevron {
-  position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: calc(22 * var(--u));
-  height: calc(22 * var(--u));
-  color: var(--app-text-gray);
-  pointer-events: none;
 }
 
 /* -------------------------------------------------- tabela (desktop) */
@@ -145,7 +121,19 @@
 
 .linhaCabecalho {
   height: calc(97 * var(--u));
-  border-bottom: 1px solid var(--app-divider);
+  position: relative;
+}
+
+/* Sublinha do cabeçalho RECUADA das laterais — não encosta na borda do card
+   (referência do design). */
+.linhaCabecalho::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 1px;
+  background: var(--app-divider);
 }
 
 .linhaCabecalho .celula {
@@ -188,6 +176,7 @@
 }
 
 .celula {
+  position: relative;
   height: 100%;
   display: flex;
   align-items: center;
@@ -196,14 +185,29 @@
   padding: 4px 10px;
   font-size: calc(16 * var(--u));
   color: var(--app-text-gray);
-  border-right: 1px solid var(--app-divider);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.grade > .celula:last-child {
-  border-right: 0;
+/* Divisores verticais como SEGMENTOS (não bordas): no cabeçalho começam
+   afastados do topo do card — as linhas nunca encostam na moldura. */
+.celula::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background: var(--app-divider);
+}
+
+.linhaCabecalho .celula::after {
+  top: 18px;
+}
+
+.grade > .celula:last-child::after {
+  display: none;
 }
 
 .celulaAcoes {
@@ -384,31 +388,32 @@
 
 /* -------------------------------------------------- modal (Novo usuário) */
 .modalPainel {
-  padding: 52px 60px 48px;
+  padding: calc(52 * var(--u, 1px)) calc(60 * var(--u, 1px)) calc(48 * var(--u, 1px));
 }
 
 .modalPainelConfirmacao {
-  width: min(560px, 100%);
-  padding: 44px 48px 40px;
-  border-radius: 32px;
+  width: min(calc(560 * var(--u, 1px)), 100%);
+  padding: calc(44 * var(--u, 1px)) calc(48 * var(--u, 1px)) calc(40 * var(--u, 1px));
+  border-radius: calc(32 * var(--u, 1px));
 }
 
 .modalTitulo {
-  font-size: clamp(32px, 2.5vw, 48px);
+  font-size: calc(48 * var(--u, 1px));
+  line-height: 1.15;
   font-weight: 400;
   color: var(--auth-text);
 }
 
 .modalSeparador {
   /* no design o separador excede a largura dos campos em 18px de cada lado */
-  margin: clamp(24px, 2.2vw, 42px) -18px 0;
+  margin: calc(42 * var(--u, 1px)) -18px 0;
   border: 0;
   border-top: 1px solid var(--auth-text);
 }
 
 .modalTexto {
-  margin-top: 28px;
-  font-size: 18px;
+  margin-top: calc(28 * var(--u, 1px));
+  font-size: calc(18 * var(--u, 1px));
   line-height: 1.5;
   color: var(--auth-text-muted);
 }
@@ -418,27 +423,27 @@
 }
 
 .modalCampo {
-  margin-top: 28px;
+  margin-top: calc(28 * var(--u, 1px));
 }
 
 .modalLabel {
   display: block;
-  font-size: 22px;
+  font-size: calc(22 * var(--u, 1px));
   color: var(--auth-text);
 }
 
 .modalInput,
 .modalSelect {
-  margin-top: 14px;
+  margin-top: calc(14 * var(--u, 1px));
   width: 100%;
-  height: var(--app-control-h);
+  height: calc(56 * var(--u, 1px));
   border: 0;
   border-radius: var(--app-radius-pill);
   background: var(--app-modal-field);
   color: var(--auth-text);
   font: inherit;
-  font-size: 18px;
-  padding: 0 30px;
+  font-size: calc(18 * var(--u, 1px));
+  padding: 0 calc(30 * var(--u, 1px));
 }
 
 .modalInput::placeholder {
@@ -462,30 +467,30 @@
 .modalChevron {
   position: absolute;
   right: 24px;
-  bottom: 17px;
+  bottom: calc(17 * var(--u, 1px));
   color: var(--auth-text-muted);
   pointer-events: none;
 }
 
 .modalNota {
   margin-top: 8px;
-  font-size: 14px;
+  font-size: calc(14 * var(--u, 1px));
   color: var(--auth-text-muted);
 }
 
 .modalErro {
   margin-top: 8px;
-  font-size: 14px;
+  font-size: calc(14 * var(--u, 1px));
   color: var(--auth-error);
 }
 
 /* Checkbox custom 30×30 com check branco sobre amarelo (medido no design) */
 .modalCheckboxLinha {
-  margin-top: 32px;
+  margin-top: calc(32 * var(--u, 1px));
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-size: 22px;
+  gap: calc(14 * var(--u, 1px));
+  font-size: calc(22 * var(--u, 1px));
   color: var(--auth-text);
   cursor: pointer;
   min-height: 44px;
@@ -494,15 +499,15 @@
 .modalCheckbox {
   position: absolute;
   opacity: 0;
-  width: 30px;
-  height: 30px;
+  width: calc(30 * var(--u, 1px));
+  height: calc(30 * var(--u, 1px));
   cursor: pointer;
 }
 
 .modalCheckboxCaixa {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: calc(30 * var(--u, 1px));
+  height: calc(30 * var(--u, 1px));
   border-radius: 8px;
   background: var(--app-modal-field);
   border: 1px solid var(--app-text-gray);
@@ -531,31 +536,31 @@
 }
 
 .modalAcoes {
-  margin-top: 36px;
+  margin-top: calc(36 * var(--u, 1px));
   display: flex;
-  gap: 19px;
+  gap: calc(19 * var(--u, 1px));
 }
 
 .botaoCancelar {
   flex: 1;
-  height: var(--app-control-h);
+  height: calc(56 * var(--u, 1px));
   border: 1px solid var(--auth-text-muted);
   border-radius: var(--app-radius-pill);
   background: var(--app-modal-field);
   color: var(--auth-text-muted);
   font: inherit;
-  font-size: 22px;
+  font-size: calc(22 * var(--u, 1px));
   cursor: pointer;
 }
 
 .botaoConfirmar,
 .botaoConfirmarPerigo {
   flex: 1;
-  height: var(--app-control-h);
+  height: calc(56 * var(--u, 1px));
   border: 0;
   border-radius: var(--app-radius-pill);
   font: inherit;
-  font-size: 22px;
+  font-size: calc(22 * var(--u, 1px));
   cursor: pointer;
   color: var(--app-ink);
 }

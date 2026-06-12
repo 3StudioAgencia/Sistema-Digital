@@ -45,8 +45,15 @@
   --app-modal-field: var(--auth-field); /* #1f1f1f */
   --app-control-h: 56px; /* botões/inputs grandes (pill) */
   --app-control-h-sm: 29px; /* botões de linha da tabela (Editar/Desativar) */
-  --app-card-radius: 8px; /* card da tabela */
+  --app-card-radius: 30px; /* card da tabela */
   --app-radius-pill: 999px;
+  --app-field-hover: #c9c9c9; /* derivado: hover/foco das opções do dropdown */
+
+  /* Unidade de ESCALA do design (Figma desenhado num quadro de 1080px de
+     altura): 1 "pixel de design" = calc(N * var(--u)). Em viewport 1080 →
+     1px exato; em janelas menores tudo encolhe proporcionalmente, com piso
+     de 0.78. No :root para valer também nos portais (modal/toasts). */
+  --u: clamp(0.78px, calc(100vh / 1080), 1px);
 
   /* Espelho CSS dos tokens de motion (lib/motion/tokens.ts — DAT §5.1): os
      ÚNICOS literais de duração/easing permitidos em CSS. Componentes usam as

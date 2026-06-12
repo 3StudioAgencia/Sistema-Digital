@@ -2,13 +2,8 @@
    raio 40 e margem 16/18 nas bordas; sidebar ~495px @1920 (fluida via clamp). */
 
 .layout {
-  /* Unidade de ESCALA do design: o Figma foi desenhado num quadro de 1080px de
-     altura. 1 "pixel de design" = calc(1 * var(--u)). Em viewport 1080 → 1px
-     exato (fiel ao Figma); em janelas menores (browser chrome) tudo encolhe
-     PROPORCIONALMENTE — fontes, alturas e espaçamentos juntos — com piso de
-     0.78 para nunca ficar ilegível. */
-  --u: clamp(0.78px, calc(100vh / 1080), 1px);
-
+  /* A unidade de escala --u (1 px de design do quadro 1080 do Figma) vive no
+     :root (globals.css) para valer também nos portais (modal/toasts). */
   display: flex;
   height: 100dvh;
   background: var(--app-sidebar-bg);
@@ -16,7 +11,9 @@
 
 .sidebarDesktop {
   flex: none;
-  width: clamp(280px, 25.8vw, 495px);
+  /* Levemente mais estreita que o quadro do Figma (495 @1920), a pedido do
+     dono — o conteúdo ganha respiro sem mudar a hierarquia da sidebar. */
+  width: clamp(264px, 23.5vw, 450px);
   min-height: 0;
 }
 
