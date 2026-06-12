@@ -92,11 +92,15 @@ API**) e a linha de domínio. Orquestração em
   linha `usuarios` do chamador com `administrador=true` e `ativo=true` → senão
   403. `GET /usuarios/me` é a exceção (qualquer autenticado lê a própria linha
   — alimenta o app shell). Enforcement por página + RLS por perfil = **C05**.
-- **RLS provisória**: `usuarios` nasce com RLS habilitada e **sem policies**
-  (negação por padrão no PostgREST) + REVOKE de `anon`/`authenticated`
-  (condicional à existência das roles). Versionada em
-  `migrations/rls/usuarios_baseline_restritiva.sql` e aplicada pela migration
-  0002. Policies por perfil chegam no C05.
+- **RLS (definitiva desde o C05)**: o C04 ligou uma postura **provisória**
+  restritiva na migration 0002 (RLS habilitada, sem policies, REVOKE de
+  `anon`/`authenticated`); o **C05 a SUBSTITUIU** pela RLS definitiva por perfil
+  (opção 6-A / ADR-032, migration 0005): `GRANT` a `authenticated` + policy
+  `usuarios_select_self` (cada um lê a própria linha) e
+  `usuarios_{select,insert,update,delete}_admin` (flag `administrador`); `anon`
+  segue sem acesso. Espelhada em `migrations/rls/*.sql` (o
+  `usuarios_baseline_restritiva.sql` foi removido). O guard de admin permanece
+  como camada explícita extra.
 - **Claims para o C05**: `app_metadata.setor` e `app_metadata.administrador`
   são gravadas/sincronizadas em todo provisionamento/edição — é o que o Custom
   Access Token Hook e as policies (`auth.jwt()`) consumirão.

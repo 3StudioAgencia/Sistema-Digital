@@ -13,14 +13,14 @@
  Browser ───────────────────────► Supabase Auth ───────────────────► Browser
    │   signInWithPassword (@supabase/ssr)   (emite access+refresh JWT)
    │
-   │  navega para /inicio
+   │  navega para a home do perfil (/dashboard — HOME_PADRAO)
    ▼
- Next.js (proxy.ts)  ── a cada navegação ──► supabase.auth.getUser()  (refresh)
-   │
-   │  AuthProof envia o access token (Bearer)
+ Next.js (proxy.ts)  ── a cada navegação ──► getUser() (refresh) + RBAC por perfil
+   │                                          (getClaims local + access-matrix — C05)
+   │  rotas autenticadas no grupo (app); o layout/cliente envia o Bearer
    ▼
- FastAPI  GET /auth/me ──► verifica a assinatura do JWT (ES256/JWKS + HS256),
-                            valida aud="authenticated" e exp → identidade.
+ FastAPI  ──► verifica a assinatura do JWT (ES256/JWKS + HS256),
+              valida iss/aud="authenticated"/exp → identidade (+ RLS no C05).
 ```
 
 - **Login**: direto **Frontend ↔ Supabase Auth** via `@supabase/ssr`
@@ -41,30 +41,34 @@
 | `src/lib/supabase/client.ts` | **Browser** (`createBrowserClient`) — singleton por aba. |
 | `src/lib/supabase/server.ts` | **Server** (`createServerClient`) — lê cookies via `next/headers`. |
 | `src/lib/supabase/middleware.ts` | `updateSession()` — refresh do token + reescrita dos cookies. |
-| `src/proxy.ts` | Convenção do App Router (Next 16) — chama `updateSession`. **Só refresh.** |
+| `src/proxy.ts` | Convenção do App Router (Next 16) — chama `updateSession` (refresh + RBAC). |
 
 ### Regras críticas
 
 - **Proteção sempre com `supabase.auth.getUser()`** (valida no servidor de auth),
   **nunca `getSession()`** (que só lê o cookie, sem revalidar) — prompt §3.2.
-- O `proxy.ts` (sucessor do `middleware.ts` no Next 16) **só faz refresh** nesta
-  wave. O **enforcement de RBAC** (camada superior, CLAUDE.md §5.4) entra no
-  **W1-C05**, lendo `lib/access-matrix.ts`. Ver ADR-021.
+- O `proxy.ts` (sucessor do `middleware.ts` no Next 16) faz o **refresh** e, desde o
+  **W1-C05**, o **enforcement de RBAC por perfil** (camada superior, CLAUDE.md §5.4):
+  após o refresh lê os claims por `getClaims()` (local) e decide pela
+  `lib/access-matrix.ts`; acesso negado → 302 à home + flash. Ver ADR-021/ADR-030.
 - **Cache/CDN (Vercel):** respostas que escrevem `Set-Cookie` de refresh **não**
   podem ser cacheadas (ISR/CDN serviria a sessão de um usuário a outro). O
   `updateSession` aplica `Cache-Control: no-store`; o `matcher` do proxy exclui
   assets estáticos. Prompt §3.5.
 
-### Telas (DP-7)
+### Telas (DP-7 / ADR-022)
 
-- `/bem-vindo` — **mobile**: boas-vindas (hero + "Seja bem vindo!" + Entrar). No
-  **desktop** encaminha para `/login` (a tela é mobile-only).
-- `/login` — **adaptativa**: desktop = split (imagem-herói + formulário);
-  mobile = formulário em coluna. `signInWithPassword`, **erro genérico** (não
-  revela qual campo falhou), estados de carregamento.
-- `/inicio` — landing autenticada **placeholder** (DP-4). Protegida por `getUser()`;
-  monta o guarda de inatividade e a prova `AuthProof` (chama `/auth/me`).
-- `/` — autenticado → `/inicio`; senão → `/bem-vindo`.
+- `/login` — **rota única adaptativa** (`<AuthFlow>`): no **desktop**, split
+  (imagem-herói com formato custom + formulário); no **mobile**, as boas-vindas
+  aparecem PRIMEIRO e o formulário é revelado ao clicar em "Entrar" (troca de
+  passo, sem redirect por viewport). `signInWithPassword`, **erro genérico** (não
+  revela qual campo falhou), estados de carregamento. Login válido → `HOME_PADRAO`
+  (`/dashboard`).
+- `/` — autenticado → `HOME_PADRAO` (`/dashboard`); senão → `/login`.
+- **Rotas legadas** `/bem-vindo` e `/inicio` → redirecionam (a primeira para
+  `/login`; `/inicio` para `/dashboard`). Não há mais tela `/bem-vindo` separada
+  nem `AuthProof`/`/inicio` (removidos no C04 — a plataforma autenticada vive no
+  **app shell** do grupo `(app)`; ver `docs/app-shell.md`).
 
 ### Encerramento por inatividade (30 min — RNF-004 / DP-3)
 
@@ -72,8 +76,8 @@
 (mousemove/keydown/scroll/touch/click). Ao expirar (30 min), faz `signOut` e volta
 ao `/login?expirado=1` — onde um aviso discreto é exibido (sem antecipar o Toaster
 global do C19). **Complementar** ao TTL do access token no dashboard do Supabase
-(ver §5). Montado nas páginas autenticadas (por ora `/inicio`; o C05 levará para um
-layout autenticado compartilhado).
+(ver §5). Montado no **`(app)/layout.tsx`** — o layout único da plataforma
+autenticada (W1-C04; ver `docs/app-shell.md`).
 
 ### Animações (DP-6)
 
@@ -95,7 +99,9 @@ degradam para instantâneas com `prefers-reduced-motion`. O C19 estende. Ver ADR
   - O algoritmo é escolhido pelo header e validado contra lista explícita — nunca
     `none`, sem confusão de algoritmo (chave pública só para assimétrico; segredo
     só para HS256).
-  - Valida **assinatura**, **`aud="authenticated"`** e **`exp`**.
+  - Valida **assinatura**, **`aud="authenticated"`**, **`exp`** e, quando
+    configurado, o **`iss`** (emissor `<SUPABASE_URL>/auth/v1` — derivado da mesma
+    base do JWKS; W1-A-013). Sem `SUPABASE_URL`, a checagem de `iss` fica desligada.
 - Qualquer falha → **401 genérico** (`WWW-Authenticate: Bearer`), sem revelar a
   causa; o motivo fica no log estruturado (só o **tipo** da exceção, nunca o token).
 - **`GET /auth/me`** — exige Bearer válido e devolve `{ sub, email, role }`. É a
@@ -162,8 +168,9 @@ pnpm test:e2e                                  # Playwright (telas, responsivo, 
 
 ## 7. Checklist dos critérios de aceitação (§6 do prompt)
 
-- [x] Login válido entra e redireciona ao destino (`/inicio`); login inválido →
-      **mensagem clara e genérica**, sem revelar o campo.
+- [x] Login válido entra e redireciona à home do perfil (`/dashboard` —
+      `HOME_PADRAO`); login inválido → **mensagem clara e genérica**, sem revelar
+      o campo.
 - [x] Sessão inativa > 30 min é encerrada automaticamente (volta ao login).
 - [x] HTTPS/TLS documentado (responsabilidade do edge); cookies seguros.
 - [x] Verificação de JWT no backend funciona — `/auth/me` 200 para token válido

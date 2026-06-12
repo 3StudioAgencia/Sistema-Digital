@@ -28,9 +28,11 @@ apps/web/src/
   `GET /usuarios/me` para a saudação/rodapé. **Degrada com fallback de e-mail**
   se a API estiver fora ou o usuário não estiver provisionado — o shell nunca
   derruba a página.
-- A **visibilidade por perfil** dos itens de menu e o enforcement de rota são
-  do **C05** (access-matrix + proxy). Hoje todo autenticado vê o menu inteiro;
-  o dado sensível continua protegido pelo guard do backend.
+- A **visibilidade por perfil** dos itens de menu e o enforcement de rota foram
+  entregues no **C05**: a sidebar filtra os itens via `lib/access-matrix.ts`
+  (`can`/`podeAcessarRota`) e o `proxy.ts` enforça as rotas após o refresh
+  (`getClaims`), com a RLS como camada inferior; o guard do backend permanece
+  como defesa em profundidade. Ver `docs/rbac.md`.
 
 ## 2. Como plugar uma página nova
 
@@ -89,6 +91,6 @@ antialiasing/compositing — dentro da tolerância).
 
 - A **busca da sidebar é inerte** (campo fiel ao design, `disabled`): o alvo
   (busca global de provas) só existe a partir da Wave 2.
-- `/` e `/inicio` redirecionam para `/usuarios` (única página real); a
-  "página inicial do perfil" será definida no C05.
+- `/` e `/inicio` redirecionam para `HOME_PADRAO` (`/dashboard`) — a home do
+  perfil definida no C05 (● a todos na Matriz §7; ADR-030/W1-A-003).
 - A wordmark reutiliza `public/logo-3studio.svg` (C03); ícones: `lucide-react`.
