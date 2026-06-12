@@ -51,12 +51,18 @@ CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
+SECURITY INVOKER
 AS $$
 DECLARE
     claims jsonb;
     meta jsonb;
 BEGIN
     claims := event->'claims';
+    -- Robustez (pilar "nunca quebra a auth"): evento malformado/sem 'claims'
+    -- valido -> devolve intacto em vez de estourar em jsonb_set(NULL, ...).
+    IF claims IS NULL OR jsonb_typeof(claims) <> 'object' THEN
+        RETURN event;
+    END IF;
     meta := COALESCE(claims->'app_metadata', '{}'::jsonb);
 
     -- user_id = sub (UUID de auth.users) — posicao lida pela RLS (DAT §7.2).

@@ -51,25 +51,25 @@ $$
 _HELPERS = (
     """
     CREATE OR REPLACE FUNCTION public.app_current_claims()
-    RETURNS jsonb LANGUAGE sql STABLE AS $$
+    RETURNS jsonb LANGUAGE sql STABLE SECURITY INVOKER AS $$
         SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_setor()
-    RETURNS text LANGUAGE sql STABLE AS $$
+    RETURNS text LANGUAGE sql STABLE SECURITY INVOKER AS $$
         SELECT public.app_current_claims() ->> 'setor';
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_is_admin()
-    RETURNS boolean LANGUAGE sql STABLE AS $$
+    RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER AS $$
         SELECT COALESCE((public.app_current_claims() ->> 'administrador')::boolean, false);
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_current_user_id()
-    RETURNS uuid LANGUAGE sql STABLE AS $$
+    RETURNS uuid LANGUAGE sql STABLE SECURITY INVOKER AS $$
         SELECT NULLIF(public.app_current_claims() ->> 'user_id', '')::uuid;
     $$
     """,

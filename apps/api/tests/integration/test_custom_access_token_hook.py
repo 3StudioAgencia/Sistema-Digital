@@ -95,3 +95,20 @@ async def test_hook_sem_flag_administrador_assume_false(
     claims = await _claims(usuarios_engine, {"setor": "studio"})
     assert claims["setor"] == "studio"
     assert claims["administrador"] is False
+
+
+async def test_hook_evento_malformado_nao_quebra_a_emissao(
+    usuarios_engine: AsyncEngine,
+) -> None:
+    """Robustez (revisão de segurança W1-C05): evento SEM 'claims' não pode
+    estourar em jsonb_set(NULL, ...) — devolve o evento intacto."""
+    for evento in ({"user_id": _SUB}, {"user_id": _SUB, "claims": None}):
+        async with usuarios_engine.connect() as conn:
+            devolvido = (
+                await conn.execute(
+                    text("SELECT public.custom_access_token_hook(CAST(:e AS jsonb))"),
+                    {"e": json.dumps(evento)},
+                )
+            ).scalar_one()
+        resultado = devolvido if isinstance(devolvido, dict) else json.loads(devolvido)
+        assert resultado == evento  # inalterado, sem erro
