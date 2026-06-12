@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Variants, motion } from "framer-motion";
 
+import { HOME_PADRAO } from "@/lib/access-matrix";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -73,7 +74,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         setLoading(false);
         return;
       }
-      router.push("/usuarios");
+      router.push(HOME_PADRAO);
       router.refresh();
     } catch {
       setError("Não foi possível entrar agora. Tente novamente em instantes.");

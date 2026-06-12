@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { HOME_PADRAO } from "@/lib/access-matrix";
+
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   refresh: vi.fn(),
@@ -42,7 +44,7 @@ describe("LoginPanel", () => {
     expect(screen.getByText(/sess[aã]o expirou por inatividade/i)).toBeInTheDocument();
   });
 
-  it("login válido chama signInWithPassword e redireciona para o app shell", async () => {
+  it("login válido chama signInWithPassword e redireciona para a home do perfil", async () => {
     const user = userEvent.setup();
     mocks.signInWithPassword.mockResolvedValue({ error: null });
     render(<LoginPanel expired={false} />);
@@ -55,7 +57,9 @@ describe("LoginPanel", () => {
       email: "vendedor@3studio.test",
       password: "minhaSenhaForte",
     });
-    expect(mocks.push).toHaveBeenCalledWith("/usuarios");
+    // HOME_PADRAO (/dashboard) é universal: um vendedor NÃO é barrado pelo proxy
+    // (corrige o W1-A-003; antes apontava para /usuarios, admin-only).
+    expect(mocks.push).toHaveBeenCalledWith(HOME_PADRAO);
   });
 
   it("login inválido mostra mensagem GENÉRICA, sem revelar o campo nem o detalhe do provedor", async () => {

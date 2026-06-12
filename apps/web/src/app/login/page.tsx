@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { HOME_PADRAO } from "@/lib/access-matrix";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 import { AuthFlow } from "../_components/auth-flow";
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
  * - desktop (>=768px): split com a imagem-herói (formato custom) + formulário;
  * - mobile: boas-vindas primeiro e o formulário ao clicar em "Entrar" (mesmo /login).
  *
- * Já autenticado → app shell (/usuarios). O notice de inatividade chega por ?expirado=1 (DP-3).
+ * Já autenticado → home do perfil (HOME_PADRAO = /dashboard). O notice de inatividade
+ * chega por ?expirado=1 (DP-3).
  */
 export default async function LoginPage({
   searchParams,
@@ -22,7 +24,7 @@ export default async function LoginPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/usuarios");
+  if (user) redirect(HOME_PADRAO);
 
   const sp = await searchParams;
   return <AuthFlow expired={sp.expirado === "1"} />;
