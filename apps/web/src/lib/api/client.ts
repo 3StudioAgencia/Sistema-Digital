@@ -35,22 +35,29 @@ async function accessToken(): Promise<string | null> {
   return session?.access_token ?? null;
 }
 
-export async function apiFetch<T>(
-  path: string,
-  init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
-): Promise<T> {
+type RequestInitLeve = {
+  method?: string;
+  /** JSON por padrão; `FormData` envia multipart (o browser define o boundary). */
+  body?: unknown;
+  signal?: AbortSignal;
+  /** Override do timeout — uploads/downloads (W2-C06) precisam de mais folga. */
+  timeoutMs?: number;
+};
+
+async function request(path: string, init: RequestInitLeve): Promise<Response> {
   if (!API_BASE_URL) {
     throw new ApiError(0, "api_nao_configurada", "API não configurada (NEXT_PUBLIC_API_BASE_URL).");
   }
   const token = await accessToken();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (init.body !== undefined) headers["Content-Type"] = "application/json";
+  const multipart = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (init.body !== undefined && !multipart) headers["Content-Type"] = "application/json";
 
   // O timeout vale SEMPRE — um signal externo (abort de filtro trocado) é
   // COMBINADO com ele, não o substitui (revisão W1-C04: API pendurada não pode
   // deixar skeleton infinito).
-  const timeout = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
 
   let response: Response;
@@ -58,7 +65,12 @@ export async function apiFetch<T>(
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: init.method ?? "GET",
       headers,
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      body:
+        init.body !== undefined
+          ? multipart
+            ? (init.body as FormData)
+            : JSON.stringify(init.body)
+          : undefined,
       cache: "no-store",
       signal,
     });
@@ -82,5 +94,16 @@ export async function apiFetch<T>(
     throw new ApiError(response.status, code, message, requestId);
   }
 
+  return response;
+}
+
+export async function apiFetch<T>(path: string, init: RequestInitLeve = {}): Promise<T> {
+  const response = await request(path, init);
   return (await response.json()) as T;
+}
+
+/** Resposta binária (etiqueta PDF — W2-C06); mesmo contrato de erro do apiFetch. */
+export async function apiFetchBlob(path: string, init: RequestInitLeve = {}): Promise<Blob> {
+  const response = await request(path, init);
+  return await response.blob();
 }

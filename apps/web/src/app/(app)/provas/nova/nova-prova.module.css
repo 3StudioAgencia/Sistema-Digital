@@ -1,0 +1,356 @@
+/* Nova prova Digital (W2-C06) — fiel ao design: título 64px + botão amarelo
+   pill no topo, cartão branco raio 30 com o formulário (2 colunas), campos
+   pill cinza-claro, segmented control de Rota (pílula preta no item ativo) e
+   dropzone ampla. Mesma régua fluida das demais páginas (--u). */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(108 * var(--u)) 28px calc(25 * var(--u));
+  overflow-y: auto;
+}
+
+/* -------------------------------------------------- cabeçalho da página */
+.cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+}
+
+.titulo {
+  font-size: calc(64 * var(--u));
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.botaoCriar {
+  flex: none;
+  height: calc(56 * var(--u));
+  padding: 0 calc(64 * var(--u));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoCriar:hover {
+  opacity: 0.9;
+}
+
+.botaoCriar:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* -------------------------------------------------- cartão do formulário */
+.cartao {
+  margin-top: calc(56 * var(--u));
+  background: #ffffff;
+  border-radius: var(--app-card-radius);
+  padding: calc(56 * var(--u)) calc(44 * var(--u)) calc(44 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(36 * var(--u));
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: calc(64 * var(--u));
+  row-gap: calc(36 * var(--u));
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rotulo {
+  font-size: calc(24 * var(--u));
+  color: var(--app-ink);
+  margin-bottom: calc(14 * var(--u));
+}
+
+.entrada {
+  width: 100%;
+  height: var(--app-control-h);
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-shell-bg);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  padding: 0 24px;
+}
+
+.entrada:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+.entrada[aria-invalid="true"] {
+  outline: 2px solid var(--app-danger);
+  outline-offset: 0;
+}
+
+.erro {
+  margin-top: calc(10 * var(--u));
+  font-size: calc(16 * var(--u));
+  color: var(--app-danger);
+}
+
+/* Slot do Dropdown de vendedor — mesma altura dos inputs. */
+.slotSelect {
+  position: relative;
+  height: var(--app-control-h);
+}
+
+.recarregar {
+  height: var(--app-control-h);
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-shell-bg);
+  color: var(--app-danger);
+  font: inherit;
+  font-size: calc(18 * var(--u));
+  cursor: pointer;
+  padding: 0 24px;
+  text-align: left;
+}
+
+/* -------------------------------------------------- segmented control (Rota) */
+.segmento {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--app-shell-bg);
+  border-radius: var(--app-radius-pill);
+  height: var(--app-control-h);
+  padding: 0;
+}
+
+.segmentoItem {
+  position: relative;
+  border: 0;
+  background: none;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  color: var(--app-ink);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.segmentoItem:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+/* Pílula preta animada por transform (layoutId) — GPU only. */
+.segmentoPill {
+  position: absolute;
+  inset: 0;
+  background: var(--app-ink);
+  border-radius: var(--app-radius-pill);
+}
+
+.segmentoRotulo {
+  position: relative;
+  z-index: 1;
+  transition: color var(--motion-micro) var(--motion-ease-standard);
+}
+
+.segmentoItem[data-ativa] .segmentoRotulo {
+  color: #ffffff;
+}
+
+/* -------------------------------------------------- dropzone (arte) */
+.dropzone {
+  border-radius: var(--app-card-radius);
+  background: var(--app-shell-bg);
+  min-height: calc(280 * var(--u));
+  display: flex;
+}
+
+.dropzone[data-arrastando] {
+  background: var(--app-field-hover);
+}
+
+.dropzone[data-erro] {
+  outline: 2px solid var(--app-danger);
+}
+
+.inputArquivo {
+  display: none;
+}
+
+.dropzoneAlvo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--u));
+  border: 0;
+  background: none;
+  border-radius: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: calc(24 * var(--u));
+  min-width: 0;
+}
+
+.dropzoneAlvo:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+.dropzoneIcone {
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+  color: var(--app-ink);
+}
+
+.dropzoneTitulo {
+  font-size: calc(24 * var(--u));
+  color: var(--app-ink);
+  overflow-wrap: anywhere;
+}
+
+.dropzoneDica {
+  font-size: calc(16 * var(--u));
+  color: var(--app-text-gray);
+  letter-spacing: 0.08em;
+}
+
+/* -------------------------------------------------- pós-criação (retry) */
+.cartaoSucesso {
+  margin-top: calc(56 * var(--u));
+  background: #ffffff;
+  border-radius: var(--app-card-radius);
+  padding: calc(64 * var(--u)) calc(44 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: calc(16 * var(--u));
+}
+
+.sucessoIcone {
+  width: calc(64 * var(--u));
+  height: calc(64 * var(--u));
+  border-radius: 50%;
+  background: var(--app-accent);
+  color: var(--app-ink);
+  display: grid;
+  place-items: center;
+}
+
+.sucessoTitulo {
+  font-size: calc(36 * var(--u));
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.sucessoTexto {
+  max-width: 56ch;
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.sucessoAcoes {
+  display: flex;
+  gap: 16px;
+  margin-top: calc(12 * var(--u));
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.botaoSecundario {
+  height: calc(56 * var(--u));
+  padding: 0 calc(40 * var(--u));
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-radius-pill);
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(18 * var(--u));
+  cursor: pointer;
+}
+
+/* -------------------------------------------------- responsivo (≤768px) */
+@media (max-width: 768px) {
+  .pagina {
+    padding: 24px 16px;
+  }
+
+  .cabecalho {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .titulo {
+    font-size: 32px;
+  }
+
+  .botaoCriar {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .cartao {
+    margin-top: 20px;
+    padding: 20px 16px;
+    gap: 20px;
+  }
+
+  .grade {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 20px;
+  }
+
+  .rotulo {
+    font-size: 16px;
+  }
+
+  .entrada,
+  .slotSelect,
+  .recarregar {
+    height: 48px;
+    font-size: 15px;
+  }
+
+  .segmento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    padding: 4px;
+    row-gap: 4px;
+  }
+
+  .segmentoItem {
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .dropzone {
+    min-height: 180px;
+  }
+
+  .dropzoneTitulo {
+    font-size: 17px;
+  }
+
+  .erro {
+    font-size: 13px;
+  }
+}
