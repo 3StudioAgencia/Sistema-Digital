@@ -27,6 +27,29 @@
   color: var(--auth-text);
 }
 
+/* Scrollbar personalizada (mesma linguagem da tabela, em tom escuro):
+   fina, discreta e sem trilho — o conteúdo do modal pode exceder a altura
+   da janela (ex.: dropdown aberto em telas baixas). */
+.panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel::-webkit-scrollbar-thumb {
+  background: var(--app-text-gray);
+  border-radius: 3px;
+}
+
+.panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .panel {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-text-gray) transparent;
+  }
+}
+
 /* Mobile (DP-7): folha em tela cheia, raio menor, ocupa o viewport. */
 @media (max-width: 767px) {
   .overlay {
