@@ -68,6 +68,12 @@
 
 **Definition of Done:** ✅ atendida — testes (incl. provisionamento/RN-009/RN-010/idempotência), migration versionada e documentada, RLS versionada em `migrations/rls/`, sem erros de console/log crítico, docs do módulo, animações validadas com `prefers-reduced-motion`, sem segredos versionados, árvore limpa.
 
+**Pós-entrega (mesma sessão):**
+- **Suporte live ao dono:** o 500 em `/usuarios` no ambiente real era a migration `0002` não aplicada no Supabase — `alembic upgrade head` executado lá + primeiro admin provisionado por upsert direto (a `SUPABASE_SECRET_KEY` ainda não está no `.env`; sem ela, criar/editar/desativar respondem 503 — pendência do responsável).
+- **Revisão adversarial concluída** (38 agentes; 27 confirmados/6 refutados) → correções em dois commits `fix(w1-c04)`: concorrência no backend (adoção de órfão com idade mínima, lock otimista + 409, RN-010 com advisory lock transacional, idle-in-transaction, bootstrap reordenado, migration **`0003`** trancando `alembic_version` no PostgREST — aplicada no Supabase real, `/docs` off em produção, JWKS timeout) e robustez no frontend (loop infinito do scroll, corrida de paginação, timeout combinado, modais durante submit, drawer back/forward, signOut, motion/ARIA/touch). api: **207 testes**, 90%; web: **50 testes**.
+- **Fidelidade (feedback do dono):** sidebar/conteúdo escalados ao quadro de 1080px do Figma via unidade `--u` — pixel a pixel em 1080 (±2px), proporcional em janelas menores.
+- Refutados pela verificação cética (sem ação): cap da busca por e-mail, acesso do desativado até o TTL (mitigado pelo ban+revogação), `layoutId` duplicado desktop/drawer, falta de `error.tsx` no grupo, ILIKE sem índice dedicado (escala ~30 usuários).
+
 ---
 
 ## Sessão 05 — 2026-06-11 — [Wave 1 / W1-C03] Tela de Login e Sessão
