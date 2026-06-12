@@ -52,6 +52,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
 SECURITY INVOKER
+SET search_path = ''
 AS $$
 DECLARE
     claims jsonb;

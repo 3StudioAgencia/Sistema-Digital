@@ -59,14 +59,20 @@ claims o que a RLS lê:
 **Fonte = `app_metadata` já presente no `event.claims`** (DP-2 / opção B): o
 Supabase injeta `app_metadata` no evento, e o C04 já o mantém sincronizado
 (ADR-025/027). O hook **não lê a tabela `usuarios`** → rápido, `SECURITY
-INVOKER`, **nunca quebra a autenticação** por RLS/lock; e **dispensa** grant de
-leitura ao `supabase_auth_admin`. Preserva todos os claims obrigatórios; conta
-sem `app_metadata` emite token sem `setor` e com `administrador=false` (menor
-privilégio, sem enumeração).
+INVOKER` + `SET search_path = ''`, **nunca quebra a autenticação** por RLS/lock;
+e **dispensa** grant de leitura ao `supabase_auth_admin`. Preserva todos os
+claims obrigatórios; conta sem `app_metadata` emite token sem `setor` e com
+`administrador=false` (menor privilégio, sem enumeração).
 
 **Grants** (na migration, condicionados à existência das roles): `execute` só a
 `supabase_auth_admin` + `usage` no schema; `execute` revogado de
 `authenticated`/`anon`/`public`.
+
+**Hardening de `search_path`** (W1-A-004): o hook e os 4 helpers de RLS fixam
+`SET search_path = ''` (advisor `function_search_path_mutable`). Seguro porque os
+corpos só usam built-ins de `pg_catalog` e chamadas já `public.`-qualificadas. As
+migrations `0004`/`0005` criam endurecido; a `0006` aplica o `ALTER` no banco já
+migrado (editar migration aplicada não a reexecuta).
 
 ### Registro do hook (passo de projeto, fora do SQL)
 

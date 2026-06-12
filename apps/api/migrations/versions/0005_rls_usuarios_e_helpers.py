@@ -48,28 +48,32 @@ $$
 """
 
 # --- helpers (CREATE OR REPLACE — idempotentes) ----------------------------
+# ``SET search_path = ''``: funcoes de seguranca lidas pelas policies — fixar o
+# search_path bloqueia sequestro por objetos homonimos (advisor
+# function_search_path_mutable, W1-A-004). Seguro: o corpo so usa built-ins de
+# pg_catalog (implicito) e chamadas ja schema-qualificadas (``public.*``).
 _HELPERS = (
     """
     CREATE OR REPLACE FUNCTION public.app_current_claims()
-    RETURNS jsonb LANGUAGE sql STABLE SECURITY INVOKER AS $$
+    RETURNS jsonb LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
         SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_setor()
-    RETURNS text LANGUAGE sql STABLE SECURITY INVOKER AS $$
+    RETURNS text LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
         SELECT public.app_current_claims() ->> 'setor';
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_is_admin()
-    RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER AS $$
+    RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
         SELECT COALESCE((public.app_current_claims() ->> 'administrador')::boolean, false);
     $$
     """,
     """
     CREATE OR REPLACE FUNCTION public.app_current_user_id()
-    RETURNS uuid LANGUAGE sql STABLE SECURITY INVOKER AS $$
+    RETURNS uuid LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
         SELECT NULLIF(public.app_current_claims() ->> 'user_id', '')::uuid;
     $$
     """,
