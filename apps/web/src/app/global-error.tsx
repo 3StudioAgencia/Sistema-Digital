@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { reportClientError } from "@/lib/observability/report-error";
+
 /**
  * Global error boundary (App Router) — captura erros lançados no PRÓPRIO
  * `layout.tsx` raiz (que o `error.tsx` não cobre, pois renderiza dentro dele).
@@ -20,7 +22,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    reportClientError(error, { boundary: "global", digest: error.digest });
   }, [error]);
 
   return (
