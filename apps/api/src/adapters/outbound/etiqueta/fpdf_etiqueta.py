@@ -101,7 +101,6 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
         pdf.image(str(_ASSETS / "logo_studio_art.svg"), x=28.6, y=5.0, h=8.2)
 
         # "Aponte a câmera para o QR CODE" — centrado SOBRE o QR (mesmo x-range)
-        self._caixa_pontilhada(pdf, qr_box_x, 4.8, qr_box_l, 9.0)
         pdf.set_xy(qr_box_x, 5.8)
         pdf.set_font(t.fonte, "", 8.5)
         pdf.multi_cell(
@@ -121,7 +120,6 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
             ("Vendedor:", _imprimivel(vendedor_nome)),
             ("Rota:", ROTULO_ROTA[prova.rota]),
         ]
-        self._caixa_pontilhada(pdf, 3.2, 18.0, 53.4, 29.2)
         y = 19.6
         for rotulo, valor in campos:
             pdf.set_xy(4.5, y)
@@ -162,13 +160,11 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
         # Rodapé: ano de criação (dinâmico) + "Etiqueta de rastreio"
         ano = str((prova.created_at or datetime.now(UTC)).year)
         pdf.set_font(t.fonte, "", 9.5)
-        self._caixa_pontilhada(pdf, 3.2, 47.4, pdf.get_string_width(ano) + 4.0, 5.0)
         pdf.set_xy(5.2, 47.9)
         pdf.cell(pdf.get_string_width(ano) + 0.5, 4.0, ano)
 
         rotulo_rodape = "Etiqueta de rastreio"
         largura_rodape = pdf.get_string_width(rotulo_rodape) + 4.0
-        self._caixa_pontilhada(pdf, x1 - largura_rodape, 47.4, largura_rodape, 5.0)
         pdf.set_xy(x1 - largura_rodape + 2.0, 47.9)
         pdf.cell(largura_rodape - 4.0, 4.0, rotulo_rodape)
 
@@ -207,17 +203,6 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
                         modulo + 0.02,
                         style="F",
                     )
-
-    @staticmethod
-    def _caixa_pontilhada(pdf: FPDF, x: float, y: float, w: float, h: float) -> None:
-        """Moldura pontilhada cinza-clara dos blocos de texto (como no design)."""
-        pdf.set_draw_color(150)
-        pdf.set_line_width(0.15)
-        pdf.set_dash_pattern(dash=0.5, gap=0.7)
-        pdf.rect(x, y, w, h)
-        pdf.set_dash_pattern()  # volta ao traço sólido
-        pdf.set_draw_color(0)
-        pdf.set_line_width(0.2)
 
 
 __all__ = ["ROTULO_ROTA", "EtiquetaTemplate", "FpdfEtiquetaGenerator"]
