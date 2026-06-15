@@ -3,7 +3,7 @@
 > Porta de entrada do domínio (Wave 2): a prova nasce aqui, com **rota imutável**
 > (RN-007), **código alfanumérico único** (RF-002) e **etiqueta PDF** (RF-003).
 > Referências: Requisitos v1.0 RF-001/002/003/010, RN-007/011, US-001,
-> RNF-017/019 · Backlog C06 · DAT §2/§8 · ADR-035 a ADR-039.
+> RNF-017/019 · Backlog C06 · DAT §2/§8 · ADR-035 a ADR-040.
 
 ## 1. Modelo de dados (`provas` — migration `0007`)
 
@@ -36,22 +36,33 @@
 
 ## 3. Criação atômica (RNF-017)
 
-`POST /api/provas` (multipart; exclusivo do **admin** — Matriz §7 "Criar Prova"):
+`POST /provas` (multipart; exclusivo do **admin** — Matriz §7 "Criar Prova"):
 
-1. Borda valida FORMA (campos obrigatórios, requerimento numérico, rota
-   presente) e lê **no máximo 10 MB + 1 byte** do upload;
-2. Serviço valida a arte por **magic bytes** (JPEG/PNG; o header declarado
+1. O **`BodyLimitMiddleware`** corta o corpo acima de **12 MB** (413) — inclusive
+   ANTES da auth (o FastAPI parseia o multipart antes das dependências): por
+   `Content-Length` declarado e por contador de bytes no `receive` (chunked).
+2. Borda valida FORMA (campos obrigatórios, requerimento numérico, rota
+   presente) e lê **no máximo 10 MB + 1 byte** do upload para a memória;
+3. Serviço valida a arte por **magic bytes** (JPEG/PNG; o header declarado
    precisa concordar) e o vendedor (setor Vendedor ativo);
-3. Fecha a transação de leitura, faz o **upload no R2** (`provas/<id>/arte.<ext>`,
+4. Fecha a transação de leitura, faz o **upload no R2** (`provas/<id>/arte.<ext>`,
    porta do C01 via `asyncio.to_thread`);
-4. **INSERT + COMMIT** com retry de colisão do código; qualquer falha após o
+5. **INSERT + COMMIT** com retry de colisão do código; qualquer falha após o
    upload **compensa** o objeto no R2 (delete idempotente; falha da própria
    compensação → log `CRITICAL` com `arte_key`).
 
 Resultado: **prova órfã nunca existe**; o pior caso é objeto órfão **marcado**
 no log. Storage indisponível responde **503 `storage_indisponivel`** (nunca 500
-opaco). Idempotência (RNF-015): retry de criação que **falhou** converge (nada
-persistiu); a UI desabilita o botão durante o submit (duplo clique não duplica).
+opaco).
+
+**Idempotência (RNF-015):** o cliente envia `prova_id` (UUID gerado no form) como
+**chave de idempotência**. Reenvio após resposta perdida (timeout/abort com o
+INSERT já commitado) **converge** para a prova existente — mesmos dados → devolve
+a prova já criada (a arte regrava a MESMA key, *put* idempotente, ANTES de
+qualquer upload no caminho de pré-check); dados diferentes sob a mesma chave →
+**409 `criacao_divergente`** (nunca duplicata nem sobrescrita silenciosa). A UI
+gera a chave uma vez por preenchimento e a reusa nas retentativas, além de manter
+o botão desabilitado durante o submit e a navegação pós-sucesso.
 
 ## 4. Imutabilidade da rota (RN-007 / DP-5)
 
@@ -67,7 +78,7 @@ Três camadas, sem caminho de update em nenhuma:
 
 ## 5. Etiqueta PDF (RF-003 / RN-011 / DP-1 / DP-2)
 
-- `GET /api/provas/{id}/etiqueta.pdf` — **sob demanda, stateless** (nada é
+- `GET /provas/{id}/etiqueta.pdf` — **sob demanda, stateless** (nada é
   armazenado; reimprimir gera bytes idênticos — `creation_date` fixada em
   `created_at`). Download com `Content-Disposition: etiqueta-<codigo>.pdf`.
 - **Tamanho físico exato 95 × 55 mm** (landscape), tudo **vetorial**: QR
@@ -98,7 +109,15 @@ Espelho versionado em `apps/api/migrations/rls/` (aplicado pela migration
 | `provas_select_admin` | flag `administrador` vê **todas** (quem cria precisa enxergar — releitura ADR-023) |
 | `provas_select_vendedor` | `vendedor_id = app_current_user_id()` |
 | `provas_select_motorista` | `status ∈` os **3** "Com Motorista" (= `ESTADOS_EM_TRANSITO` do domínio) |
-| `provas_insert_admin` | INSERT exclusivo do flag admin |
+| `provas_insert_admin` | INSERT do flag admin **+ invariantes de criação** (migration `0009`) |
+
+**WITH CHECK endurecido (`0009`):** como `provas` é exposta pela Data API/PostgREST,
+a policy de INSERT espelha os invariantes que o backend valida — para acesso
+direto não burlar o domínio: `status = 'criada'` (US-001), `codigo` no formato
+canônico (`PRV-\d{4}-(0[1-9]|1[0-2])-[charset]{6}` — mesmo de `domain/provas.py`)
+e `vendedor_id` de um usuário **setor vendedor ativo** (a FK só garante
+existência). Sem isso, um admin poderia inserir direto prova em status arbitrário,
+código fora do contrato do C10/QR ou vendedor inválido.
 
 Grants de **privilégio mínimo**: `authenticated` tem só `SELECT, INSERT`
 (UPDATE chega no C11; DELETE no C14). Anti-enumeração: prova inexistente e
@@ -145,7 +164,8 @@ cd apps/api && uv run alembic upgrade head
 TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/rastreio_test \
   uv run pytest tests/unit/test_provas_dominio.py tests/unit/test_provas_service.py \
   tests/unit/test_etiqueta_pdf.py tests/unit/test_equivalencia_rls_provas.py \
-  tests/integration/test_rls_provas.py tests/integration/test_provas_endpoints.py
+  tests/integration/test_rls_provas.py tests/integration/test_provas_endpoints.py \
+  tests/integration/test_body_limit.py
 
 # gerar uma etiqueta de amostra (sem banco): ver docstring de
 # src/adapters/outbound/etiqueta/fpdf_etiqueta.py — FpdfEtiquetaGenerator().gerar_pdf(...)

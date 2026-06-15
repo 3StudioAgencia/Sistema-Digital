@@ -126,6 +126,20 @@ class VendedorInvalidoError(ErroDeDominio):
         super().__init__("Vendedor responsável inválido: selecione um vendedor ativo.")
 
 
+class CriacaoDivergenteError(ErroDeDominio):
+    """A mesma chave de idempotência (``prova_id``) chegou com DADOS diferentes
+    dos já registrados — reenvio legítimo converge; payload divergente é erro
+    do cliente (409), nunca sobrescrita silenciosa (RNF-015)."""
+
+    codigo = "criacao_divergente"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Esta criação já foi registrada com dados diferentes. "
+            "Verifique a listagem de provas antes de reenviar."
+        )
+
+
 class ProvaNaoEncontradaError(ErroDeDominio):
     """Prova inexistente OU fora do escopo do ator (mensagem ÚNICA — a RLS não
     distingue os dois casos e a borda também não deve: anti-enumeração,
@@ -208,6 +222,7 @@ __all__ = [
     "ESTADOS_EM_TRANSITO",
     "EXTENSAO_POR_TIPO",
     "ArteInvalidaError",
+    "CriacaoDivergenteError",
     "EstadoProva",
     "Prova",
     "ProvaNaoEncontradaError",

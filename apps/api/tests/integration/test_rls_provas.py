@@ -204,7 +204,16 @@ async def test_query_direta_fora_do_escopo_retorna_zero(cenario: dict[str, Any])
 # ---------------------------------------------------------------------------
 # Mutações: INSERT só admin; UPDATE/DELETE sem GRANT (C11/C14)
 # ---------------------------------------------------------------------------
-async def _inserir_como(cenario: dict[str, Any], *, sub: str, setor: str, admin: bool) -> None:
+async def _inserir_como(
+    cenario: dict[str, Any],
+    *,
+    sub: str,
+    setor: str,
+    admin: bool,
+    status: str = "criada",
+    codigo: str | None = None,
+    vendedor_id: str | None = None,
+) -> None:
     engine: AsyncEngine = cenario["engine"]
     async with engine.connect() as conn:
         trans = await conn.begin()
@@ -213,13 +222,14 @@ async def _inserir_como(cenario: dict[str, Any], *, sub: str, setor: str, admin:
             await conn.execute(
                 text(
                     "INSERT INTO provas (id, codigo, nome, requerimento, cliente, vendedor_id, "
-                    "rota, arte_key, arte_content_type) VALUES (:id, :codigo, 'P', '1', 'C', "
-                    ":vendedor, 'matriz', 'provas/y/arte.png', 'image/png')"
+                    "rota, status, arte_key, arte_content_type) VALUES (:id, :codigo, 'P', '1', "
+                    "'C', :vendedor, 'matriz', :status, 'provas/y/arte.png', 'image/png')"
                 ),
                 {
                     "id": str(uuid.uuid4()),
-                    "codigo": gerar_codigo(dt.datetime.now(tz=dt.UTC)),
-                    "vendedor": cenario["vendedor1"],
+                    "codigo": codigo or gerar_codigo(dt.datetime.now(tz=dt.UTC)),
+                    "vendedor": vendedor_id or cenario["vendedor1"],
+                    "status": status,
                 },
             )
             await trans.commit()
@@ -238,6 +248,23 @@ async def test_admin_insere_e_nao_admin_e_bloqueado(cenario: dict[str, Any]) -> 
                 setor=setor,
                 admin=False,
             )
+
+
+async def test_with_check_endurecido_rejeita_invariantes_violados(cenario: dict[str, Any]) -> None:
+    """Revisão adversarial W2-C06 (migration 0009): mesmo um ADMIN inserindo
+    DIRETO no banco (Data API) não cria prova fora dos invariantes de criação."""
+    admin = {"sub": cenario["admin_studio"], "setor": "studio", "admin": True}
+    # status diferente do inicial (burlaria a máquina de estados do C11)
+    with pytest.raises(DBAPIError):
+        await _inserir_como(cenario, **admin, status="recebida_clicheria")
+    # código fora do formato/charset canônico (quebraria o contrato do C10/QR)
+    with pytest.raises(DBAPIError):
+        await _inserir_como(cenario, **admin, codigo="PRV-2026-06-K3T9X0")  # 0 é ambíguo
+    with pytest.raises(DBAPIError):
+        await _inserir_como(cenario, **admin, codigo="CODIGO-LIVRE")
+    # vendedor de outro setor (a FK aceitaria; o WITH CHECK não)
+    with pytest.raises(DBAPIError):
+        await _inserir_como(cenario, **admin, vendedor_id=cenario["motorista"])
 
 
 async def test_update_como_authenticated_nao_tem_grant(cenario: dict[str, Any]) -> None:

@@ -195,6 +195,8 @@ describe("NovaProvaView (W2-C06)", () => {
       vendedorId: RENAN.id,
       rota: "matriz",
     });
+    // RNF-015: envia uma chave de idempotência (prova_id) para o backend.
+    expect(mocks.criarProva.mock.calls[0][0].provaId).toEqual(expect.any(String));
     expect(await screen.findByText("Prova PRV-2026-06-K3T9XB criada.")).toBeInTheDocument();
     await waitFor(() => expect(mocks.baixarEtiqueta).toHaveBeenCalledWith(PROVA.id));
     expect(mocks.salvarArquivo).toHaveBeenCalledWith(
@@ -202,6 +204,28 @@ describe("NovaProvaView (W2-C06)", () => {
       "etiqueta-PRV-2026-06-K3T9XB.pdf",
     );
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/provas"));
+    // o botão NÃO reabilita na navegação em voo (sem janela de duplo submit)
+    expect(screen.getByRole("button", { name: "Criando…" })).toBeDisabled();
+  });
+
+  it("radiogroup de Rota: setas movem e selecionam (WAI-ARIA APG)", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    const matriz = screen.getByRole("radio", { name: "Matriz" });
+    matriz.focus();
+    await user.keyboard("{ArrowRight}"); // Matriz → Filial
+    expect(screen.getByRole("radio", { name: "Filial" })).toHaveAttribute("aria-checked", "true");
+    await user.keyboard("{End}"); // → Lam. Filial (último)
+    expect(screen.getByRole("radio", { name: "Lam. Filial" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.keyboard("{ArrowRight}"); // wrap → Matriz
+    expect(screen.getByRole("radio", { name: "Matriz" })).toHaveAttribute("aria-checked", "true");
+    // roving tabindex: só a opção ativa é tab stop
+    expect(screen.getByRole("radio", { name: "Matriz" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Filial" })).toHaveAttribute("tabindex", "-1");
   });
 
   it("erro da API vira toast e o formulário segue editável (sem perder dados)", async () => {

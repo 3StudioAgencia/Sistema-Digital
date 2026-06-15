@@ -27,6 +27,12 @@ type DropdownProps<T extends string> = {
   ariaLabel?: string;
   /** …ou via id de um rótulo visível (campos do modal). */
   labelledBy?: string;
+  /** id do texto de erro a anunciar (aria-describedby), quando inválido. */
+  describedBy?: string;
+  /** Marca o gatilho como inválido (aria-invalid) — feedback de erro do form. */
+  invalido?: boolean;
+  /** Desabilita o gatilho (ex.: enquanto as opções carregam) — não abre. */
+  disabled?: boolean;
   /** Texto do gatilho quando nenhum valor casa (campo ainda vazio). */
   placeholder?: string;
   /** "claro" = filtros sobre o shell; "escuro" = campos do modal. */
@@ -42,6 +48,9 @@ export function Dropdown<T extends string>({
   onChange,
   ariaLabel,
   labelledBy,
+  describedBy,
+  invalido = false,
+  disabled = false,
   placeholder = "",
   variante = "claro",
   abrirPara = "baixo",
@@ -56,6 +65,8 @@ export function Dropdown<T extends string>({
   const atual = opcoes.find((o) => o.value === value);
 
   function abrir() {
+    // Sem opções (ex.: carregando) ou desabilitado: não abre um painel vazio.
+    if (disabled || opcoes.length === 0) return;
     setFoco(
       Math.max(
         0,
@@ -142,6 +153,9 @@ export function Dropdown<T extends string>({
         aria-expanded={aberto}
         aria-label={ariaLabel}
         aria-labelledby={labelledBy}
+        aria-describedby={invalido ? describedBy : undefined}
+        aria-invalid={invalido || undefined}
+        disabled={disabled}
         onClick={() => (aberto ? fechar() : abrir())}
         onKeyDown={(event) => {
           if (!aberto && (event.key === "ArrowDown" || event.key === "ArrowUp")) {

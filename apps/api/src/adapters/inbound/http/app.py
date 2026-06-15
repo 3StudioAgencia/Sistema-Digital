@@ -17,7 +17,11 @@ from src.adapters.inbound.http.auth import router as auth_router
 from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
-from src.adapters.inbound.http.middleware import ErrorHandlingMiddleware, RequestIdMiddleware
+from src.adapters.inbound.http.middleware import (
+    BodyLimitMiddleware,
+    ErrorHandlingMiddleware,
+    RequestIdMiddleware,
+)
 from src.adapters.inbound.http.provas import router as provas_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
@@ -72,11 +76,14 @@ def create_app(
     app.state.etiqueta_generator = etiqueta_generator or FpdfEtiquetaGenerator()
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
-    # para fora: ErrorHandling → CORS → RequestId.
+    # para fora: BodyLimit → ErrorHandling → CORS → RequestId.
+    # - BodyLimit o mais interno: o 413 do contador sobe como HTTPException
+    #   para o ExceptionMiddleware da app (envelope canônico), nunca vira 500;
     # - ErrorHandling interno ao CORS: o envelope 500 sai com headers CORS
     #   (sem eles o frontend cross-origin não lê o request_id — ADR-013);
     # - RequestId por fora de tudo: TODA resposta (inclusive preflights e
     #   erros) sai com X-Request-ID e access log correlacionado.
+    app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(ErrorHandlingMiddleware)
     app.add_middleware(
         CORSMiddleware,

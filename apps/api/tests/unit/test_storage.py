@@ -85,8 +85,10 @@ class TestR2Especifico:
             R2Storage.from_settings(s)
 
     def test_from_settings_define_timeouts_explicitos(self) -> None:
-        """W0-A-004: o cliente boto3 do R2 nasce com connect/read timeout
-        alinhados ao orçamento de 5s do readiness (sem eles seriam 60s)."""
+        """Calibração W2-C06: connect curto (falha rápido) + read longo (upload
+        de arte de até 10 MB) + retries idempotentes. O orçamento de 5s do
+        readiness (W0-A-004) é imposto pelo CALLER — asyncio.wait_for no health
+        check — e não depende mais do timeout do cliente."""
         s = Settings(
             _env_file=None,  # type: ignore[call-arg]
             database_url="postgresql+asyncpg://u:p@h/db",
@@ -99,4 +101,7 @@ class TestR2Especifico:
         storage = R2Storage.from_settings(s)
         config = storage._client.meta.config
         assert config.connect_timeout == 5
-        assert config.read_timeout == 5
+        assert config.read_timeout == 60
+        # botocore normaliza max_attempts=3 (retries) em total_max_attempts=4
+        # (1 tentativa inicial + 3 retentativas)
+        assert config.retries == {"mode": "standard", "total_max_attempts": 4}

@@ -117,3 +117,23 @@ def test_pdf_e_deterministico_para_a_mesma_prova() -> None:
     a = FpdfEtiquetaGenerator().gerar_pdf(_prova(), "V")
     b = FpdfEtiquetaGenerator().gerar_pdf(_prova(), "V")
     assert a == b
+
+
+def test_texto_fora_do_latin1_nunca_derruba_a_geracao() -> None:
+    """Revisão adversarial W2-C06 (achado alto): nome/cliente são texto livre —
+    travessão, aspas curvas (Word/celular) e acentos saem no PDF (cp1252);
+    emoji degrada para '?' em vez de 500 permanente no download da etiqueta."""
+    prova = _prova()
+    prova.nome = "Etiqueta — 'Premium' café"  # travessão + aspas curvas + acento
+    prova.cliente = "Çã€™ Ltda"
+    pdf = FpdfEtiquetaGenerator().gerar_pdf(prova, "José D'Ávila 😀")
+    texto = _texto_do_pdf(pdf)
+    assert "PREMIUM" in texto and "CAFÉ" in texto.upper()
+    assert "JOSÉ" in texto.upper()
+    assert "?" in texto  # o emoji degradou, não derrubou
+
+
+def test_fallback_de_vendedor_ausente_e_ascii() -> None:
+    """O fallback usado pelo serviço ('-') precisa ser renderizável SEMPRE."""
+    pdf = FpdfEtiquetaGenerator().gerar_pdf(_prova(), "-")
+    assert pdf.startswith(b"%PDF")

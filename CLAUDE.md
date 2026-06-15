@@ -182,7 +182,7 @@ Enums sincronizados Python (Pydantic v2) ↔ PostgreSQL. **Membro Python em MAI�
 | 13 | `RECEBIDA_CLICHERIA` | `recebida_clicheria` | todas (terminal) |
 | 14 | `CANCELADA` | `cancelada` | transversal (terminal) |
 
-**Código identificador da prova:** `PRV-AAAA-MM-NNNNNN` — `NNNNNN` por **nanoid** (alfabeto A–Z 0–9 sem ambíguos `0/O`, `1/I/L`). É o **mesmo** conteúdo do QR Code, apenas exposto em texto na etiqueta. QR e código resolvem para o **mesmo** registro via `resolver_prova()`.
+**Código identificador da prova:** `PRV-AAAA-MM-NNNNNN` — `NNNNNN` por aleatoriedade criptográfica (`secrets`, estilo nanoid; alfabeto A–Z 0–9 sem ambíguos `0/O`, `1/I/L` — ADR-036; fonte única `domain/provas.py`). É o **mesmo** conteúdo do QR Code, apenas exposto em texto na etiqueta. QR e código resolvem para o **mesmo** registro via `resolver_prova()`.
 
 ---
 

@@ -54,15 +54,16 @@ class R2Storage(StoragePort):
             region_name="auto",
             config=BotoConfig(
                 signature_version="s3v4",
-                # Timeouts explícitos alinhados ao orçamento do readiness (5s).
-                # Sem eles o botocore usa 60s+60s por tentativa e a thread do
-                # threadpool ficaria presa muito além do `wait_for` do health
-                # check (W0-A-004). max_attempts=1 mantém o tempo total da
-                # chamada perto do orçamento; a Wave 2 calibra a política de
-                # retry própria para upload/download quando eles existirem.
+                # Calibração da Wave 2 (W2-C06): o cliente agora serve o upload
+                # de artes de até 10 MB e o delete de compensação — read_timeout
+                # de 60s (por leitura de socket, não tempo total) e retries
+                # idempotentes (put/delete/head) toleram rede instável até o R2.
+                # O orçamento do readiness segue protegido pelo CALLER: o health
+                # check é envolvido em asyncio.wait_for(5s) (W0-A-004) — a
+                # resposta do readiness não espera além disso.
                 connect_timeout=5,
-                read_timeout=5,
-                retries={"max_attempts": 1},
+                read_timeout=60,
+                retries={"max_attempts": 3, "mode": "standard"},
             ),
         )
         return cls(client=client, bucket=settings.r2_bucket)

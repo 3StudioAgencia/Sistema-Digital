@@ -9,7 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.outbound.db.models import ProvaRow
-from src.application.ports.provas_repository import CodigoJaExisteError, ProvasRepositoryPort
+from src.application.ports.provas_repository import (
+    CodigoJaExisteError,
+    ProvaJaExisteError,
+    ProvasRepositoryPort,
+)
 from src.domain.provas import EstadoProva, Prova, Rota
 
 
@@ -51,10 +55,16 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         try:
             await self._session.flush()
         except IntegrityError as exc:
+            texto = str(exc.orig)
             # Colisão do código único: sinal de RETRY do serviço (DP-3) — o
             # cliente nunca escolhe o código, então isto não é erro de negócio.
-            if "uq_provas_codigo" in str(exc.orig):
+            if "uq_provas_codigo" in texto:
                 raise CodigoJaExisteError(prova.codigo) from exc
+            # PK repetida = chave de idempotência já persistida (RNF-015):
+            # uma requisição idêntica venceu a corrida; o serviço converge.
+            # ("provas_pkey" é o nome default do PG; "pk_provas" o da convenção.)
+            if "provas_pkey" in texto or "pk_provas" in texto:
+                raise ProvaJaExisteError(prova.id) from exc
             raise
         # eager_defaults: created_at/updated_at vêm no RETURNING do INSERT.
         prova.created_at = row.created_at

@@ -23,6 +23,11 @@
   cursor: pointer;
 }
 
+.trigger:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .rotulo {
   overflow: hidden;
   text-overflow: ellipsis;

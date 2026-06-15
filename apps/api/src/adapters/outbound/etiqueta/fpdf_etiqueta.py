@@ -25,6 +25,16 @@ from src.domain.provas import Prova, Rota
 
 _ASSETS = Path(__file__).parent / "assets"
 
+
+def _imprimivel(texto: str) -> str:
+    """Reduz ``texto`` ao repertório cp1252 das fontes core do PDF.
+
+    Caracteres fora (emoji, símbolos raros) viram ``?`` — uma etiqueta sempre
+    sai, nunca um 500 (degradação graciosa; revisão adversarial W2-C06).
+    """
+    return texto.encode("cp1252", errors="replace").decode("cp1252")
+
+
 # Rótulos de impressão das rotas (apresentação — o frontend tem o próprio mapa).
 ROTULO_ROTA: dict[Rota, str] = {
     Rota.MATRIZ: "Matriz",
@@ -61,6 +71,10 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
     def gerar_pdf(self, prova: Prova, vendedor_nome: str) -> bytes:
         t = self._t
         pdf = FPDF(unit="mm", format=(t.largura, t.altura))
+        # Fontes core com cp1252 (cobre acentos PT-BR, travessão, aspas curvas,
+        # €): o default latin-1 do fpdf2 LEVANTA para esses caracteres — e nome/
+        # cliente são texto livre (revisão adversarial W2-C06, achado alto).
+        pdf.core_fonts_encoding = "windows-1252"
         pdf.set_auto_page_break(False)
         pdf.set_margins(0, 0, 0)
         pdf.set_title(f"Etiqueta {prova.codigo}")
@@ -92,12 +106,14 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
         # Barra divisória (parcial, como no design)
         pdf.rect(x0, 14.4, 49.5, 2.0, style="F")
 
-        # Bloco de campos (esquerda) — Nome/Requerimento/Cliente/Vendedor + Rota (DP-1)
+        # Bloco de campos (esquerda) — Nome/Requerimento/Cliente/Vendedor + Rota
+        # (DP-1). Valores reduzidos ao repertório cp1252 das fontes core: o que
+        # sobrar (emoji etc.) vira "?" em vez de derrubar a renderização.
         campos = [
-            ("Nome:", prova.nome),
-            ("Requerimento:", prova.requerimento),
-            ("Cliente:", prova.cliente),
-            ("Vendedor:", vendedor_nome),
+            ("Nome:", _imprimivel(prova.nome)),
+            ("Requerimento:", _imprimivel(prova.requerimento)),
+            ("Cliente:", _imprimivel(prova.cliente)),
+            ("Vendedor:", _imprimivel(vendedor_nome)),
             ("Rota:", ROTULO_ROTA[prova.rota]),
         ]
         self._caixa_pontilhada(pdf, 3.2, 18.0, 53.4, 29.2)

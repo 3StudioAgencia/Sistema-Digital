@@ -219,6 +219,33 @@ async def test_criacao_atomica_storage_fora_nao_deixa_prova_orfa(
     assert total == 0
 
 
+async def test_reenvio_com_prova_id_e_idempotente(ctx: tuple[Any, ...]) -> None:
+    """RNF-015: resposta perdida + retry com a MESMA chave não duplica prova."""
+    client, _, engine = ctx
+    chave = str(uuid.uuid4())
+    form = _form(prova_id=chave)
+
+    primeira = await client.post("/provas", data=form, files=_arte(), headers=_auth_admin())
+    segunda = await client.post("/provas", data=form, files=_arte(), headers=_auth_admin())
+
+    assert primeira.status_code == 201 and segunda.status_code == 201
+    assert segunda.json()["id"] == primeira.json()["id"]
+    assert segunda.json()["codigo"] == primeira.json()["codigo"]
+    async with engine.connect() as conn:
+        total = (await conn.execute(text("SELECT count(*) FROM provas"))).scalar_one()
+    assert total == 1  # convergiu — nenhuma duplicata
+
+    # mesma chave com payload DIFERENTE → 409 explícito, nunca sobrescrita
+    divergente = await client.post(
+        "/provas",
+        data=_form(prova_id=chave, nome="Outro Nome"),
+        files=_arte(),
+        headers=_auth_admin(),
+    )
+    assert divergente.status_code == 409
+    assert divergente.json()["error"]["code"] == "criacao_divergente"
+
+
 # ---------------------------------------------------------------------------
 # Gate de admin (Matriz §7, "Criar Prova") e superfícies inexistentes
 # ---------------------------------------------------------------------------

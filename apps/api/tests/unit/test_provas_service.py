@@ -10,7 +10,11 @@ import logging
 
 import pytest
 from src.application.ports.etiqueta import EtiquetaPort
-from src.application.ports.provas_repository import CodigoJaExisteError, ProvasRepositoryPort
+from src.application.ports.provas_repository import (
+    CodigoJaExisteError,
+    ProvaJaExisteError,
+    ProvasRepositoryPort,
+)
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import (
     FiltrosUsuarios,
@@ -25,6 +29,7 @@ from src.application.provas import (
 )
 from src.domain.provas import (
     ArteInvalidaError,
+    CriacaoDivergenteError,
     EstadoProva,
     Prova,
     ProvaNaoEncontradaError,
@@ -269,6 +274,74 @@ async def test_compensacao_que_falha_loga_critical_e_preserva_o_erro_original(
     assert any(
         getattr(r, "event", "") == "compensacao_arte_falhou" for r in caplog.records
     )  # objeto órfão fica MARCADO para limpeza (RNF-024)
+
+
+# ---------------------------------------------------------------------------
+# Idempotência por prova_id (RNF-015 — revisão adversarial W2-C06)
+# ---------------------------------------------------------------------------
+async def test_reenvio_com_a_mesma_chave_converge_sem_novo_upload() -> None:
+    """Resposta perdida (timeout pós-commit) + retry: devolve a prova existente."""
+    service, repo, _, storage, uow = _montar(_vendedor())
+    primeira = await service.criar(
+        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
+    )
+    uploads_antes = dict(storage._objects)
+
+    segunda = await service.criar(
+        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
+    )
+
+    assert segunda is primeira or segunda.id == primeira.id
+    assert segunda.codigo == primeira.codigo  # NENHUMA prova nova
+    assert len(repo.provas) == 1
+    assert storage._objects == uploads_antes  # pré-check converge ANTES do upload
+    assert uow.commits == 1  # só a primeira criação commitou
+
+
+async def test_mesma_chave_com_dados_diferentes_e_409() -> None:
+    service, repo, _, _, _ = _montar(_vendedor())
+    await service.criar(
+        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
+    )
+    with pytest.raises(CriacaoDivergenteError):
+        await service.criar(
+            _cmd(prova_id="33333333-3333-3333-3333-333333333333", nome="OUTRO NOME"),
+            JPEG_MINIMO,
+            "image/jpeg",
+        )
+    assert len(repo.provas) == 1  # nada duplicado nem sobrescrito
+
+
+async def test_corrida_de_idempotencia_no_insert_converge_sem_compensar_a_arte() -> None:
+    """Requisição idêntica venceu entre o pré-check e o INSERT (PK violada):
+    converge para a existente e NÃO deleta a arte — a key pertence a ela."""
+    service, repo, _, storage, _ = _montar(_vendedor())
+    chave = "44444444-4444-4444-4444-444444444444"
+    existente = Prova(
+        id=chave,
+        codigo="PRV-2026-06-K3T9XB",
+        nome="Etiq Cafe Caproni Classico",
+        requerimento="155295",
+        cliente="Cafe Caproni",
+        vendedor_id=VENDEDOR_ID,
+        rota=Rota.MATRIZ,
+        arte_key=f"provas/{chave}/arte.jpg",
+        arte_content_type="image/jpeg",
+        created_at=QUANDO,
+        updated_at=QUANDO,
+    )
+    repo.falhas_pendentes = [ProvaJaExisteError(chave)]
+
+    async def get_pos_colisao(prova_id: str) -> Prova | None:
+        # pré-check vê vazio; após a "colisão", a linha da concorrente aparece
+        return existente if repo.codigos_tentados else None
+
+    repo.get = get_pos_colisao  # type: ignore[method-assign]
+
+    prova = await service.criar(_cmd(prova_id=chave), JPEG_MINIMO, "image/jpeg")
+
+    assert prova is existente
+    assert existente.arte_key in storage._objects  # compensação NÃO rodou
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
-"""Middlewares HTTP — correlação por ``request_id`` (RNF-024) e catch-all de erros.
+"""Middlewares HTTP — correlação por ``request_id`` (RNF-024), catch-all de
+erros e teto do corpo da requisição.
 
-Dois middlewares com papéis distintos, em camadas diferentes (ver ``app.py``):
+Três middlewares com papéis distintos, em camadas diferentes (ver ``app.py``):
 
 - ``RequestIdMiddleware`` (o MAIS EXTERNO): reusa o ``X-Request-ID`` recebido
   ou gera um UUID4, publica no ``ContextVar`` (todos os logs da requisição o
@@ -12,6 +13,11 @@ Dois middlewares com papéis distintos, em camadas diferentes (ver ``app.py``):
   cross-origin veria apenas um erro de rede opaco e não conseguiria ler o
   ``request_id`` para reportar (ADR-013). A correlação é preservada porque o
   ``RequestIdMiddleware`` externo já populou o ``ContextVar``.
+- ``BodyLimitMiddleware`` (o MAIS INTERNO): rejeita corpos acima do teto com
+  413 — inclusive ANTES da autenticação, pois o FastAPI parseia o multipart
+  antes de resolver as dependências (revisão adversarial W2-C06: sem o teto,
+  um cliente anônimo faria o servidor receber GBs para disco temporário antes
+  do 401/403).
 """
 
 import logging
@@ -19,12 +25,17 @@ import re
 import time
 import uuid
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
-from starlette.types import ASGIApp
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from src.adapters.inbound.http.errors import log_and_build_internal_error_response
+from src.adapters.inbound.http.errors import (
+    error_envelope,
+    log_and_build_internal_error_response,
+)
+from src.domain.provas import ARTE_TAMANHO_MAXIMO
 from src.infrastructure.logging import request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -34,6 +45,68 @@ REQUEST_ID_HEADER = "X-Request-ID"
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 logger = logging.getLogger("rastreio.http")
+
+
+# Teto do CORPO da requisição: a maior carga legítima é a arte (10 MB) + os
+# campos e o overhead do multipart — 12 MB dá folga sem abrir espaço a abuso.
+LIMITE_CORPO_BYTES = ARTE_TAMANHO_MAXIMO + 2 * 1024 * 1024
+_MENSAGEM_413 = "Corpo da requisição excede o limite de 12 MB."
+
+
+class BodyLimitMiddleware:
+    """ASGI puro: corta corpos acima do teto o mais cedo possível (413).
+
+    Duas defesas complementares:
+    1. ``Content-Length`` declarado acima do teto → 413 imediato, sem ler nada;
+    2. corpo em streaming/chunked (ou Content-Length mentiroso) → o ``receive``
+       é envelopado num contador e a leitura ABORTA no byte que cruza o teto
+       (``HTTPException(413)`` — tratada pelo handler canônico, que devolve o
+       envelope de erro com os headers CORS/Request-ID das camadas externas).
+
+    Mais interno que o ``ErrorHandlingMiddleware``: a ``HTTPException`` sobe
+    para o ``ExceptionMiddleware`` do Starlette (dentro da app), nunca vira 500.
+    """
+
+    def __init__(self, app: ASGIApp, max_body: int = LIMITE_CORPO_BYTES) -> None:
+        self.app = app
+        self.max_body = max_body
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        declarado = self._content_length(scope)
+        if declarado is not None and declarado > self.max_body:
+            response = JSONResponse(
+                status_code=413,
+                content=error_envelope("payload_too_large", _MENSAGEM_413, request_id_var.get()),
+            )
+            await response(scope, receive, send)
+            return
+
+        total = 0
+
+        async def receber_limitado() -> Message:
+            nonlocal total
+            mensagem = await receive()
+            if mensagem["type"] == "http.request":
+                total += len(mensagem.get("body", b""))
+                if total > self.max_body:
+                    raise StarletteHTTPException(status_code=413, detail=_MENSAGEM_413)
+            return mensagem
+
+        await self.app(scope, receber_limitado, send)
+
+    @staticmethod
+    def _content_length(scope: Scope) -> int | None:
+        for nome, valor in scope.get("headers") or []:
+            if nome == b"content-length":
+                try:
+                    return int(valor)
+                except ValueError:
+                    return None
+        return None
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):

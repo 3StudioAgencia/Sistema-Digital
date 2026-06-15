@@ -15,6 +15,12 @@ class CodigoJaExisteError(Exception):
     (DP-3), não erro de negócio: o cliente nunca escolhe o código."""
 
 
+class ProvaJaExisteError(Exception):
+    """Violação da PK de ``provas`` — o ``prova_id`` (chave de idempotência,
+    RNF-015) já foi persistido: uma requisição idêntica venceu a corrida. O
+    serviço CONVERGE para a prova existente em vez de duplicar."""
+
+
 class ProvasRepositoryPort(ABC):
     """Operações de persistência da entidade ``Prova``."""
 

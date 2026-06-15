@@ -67,12 +67,15 @@ async def criar(
     vendedor_id: Annotated[uuid.UUID, Form()],
     rota: Annotated[Rota, Form()],
     arte: UploadFile,
+    # Chave de idempotência gerada pelo cliente (RNF-015): reenvio após
+    # resposta perdida converge para a prova já criada em vez de duplicar.
+    prova_id: Annotated[uuid.UUID | None, Form()] = None,
 ) -> ProvaOut:
     """Criação ATÔMICA da prova (RNF-017): arte no R2 + INSERT com código único.
 
-    Lê no MÁXIMO 10 MB + 1 byte do upload — o excedente nunca entra em memória
-    e o serviço rejeita por tamanho (RF-001), independente do Content-Length
-    declarado pelo cliente.
+    Lê no MÁXIMO 10 MB + 1 byte do upload para a MEMÓRIA do processo; o teto
+    do corpo inteiro da requisição (anti-DoS, inclusive pré-auth) é do
+    ``BodyLimitMiddleware``.
     """
     conteudo = await arte.read(ARTE_TAMANHO_MAXIMO + 1)
     prova = await service.criar(
@@ -82,6 +85,7 @@ async def criar(
             cliente=cliente,
             vendedor_id=str(vendedor_id),
             rota=rota,
+            prova_id=str(prova_id) if prova_id is not None else None,
         ),
         arte=conteudo,
         arte_content_type_declarado=arte.content_type,

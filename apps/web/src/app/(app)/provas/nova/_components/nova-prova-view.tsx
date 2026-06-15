@@ -53,6 +53,12 @@ function formatarTamanho(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function gerarChaveIdempotencia(): string {
+  // crypto.randomUUID em contexto seguro (browser/jsdom); fallback defensivo.
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function validarArte(file: File): string | null {
   const tipoOk =
     (ARTE_TIPOS as readonly string[]).includes(file.type) || /\.(jpe?g|png)$/i.test(file.name);
@@ -85,6 +91,10 @@ export function NovaProvaView() {
   const [baixandoEtiqueta, setBaixandoEtiqueta] = useState(false);
 
   const inputArquivoRef = useRef<HTMLInputElement | null>(null);
+  const rotaRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Chave de idempotência (RNF-015): uma por preenchimento da tela, reusada nas
+  // retentativas — reenvio após timeout converge no backend em vez de duplicar.
+  const [chaveIdempotencia] = useState(gerarChaveIdempotencia);
 
   // Vendedores ativos em UMA consulta (RNF-020/022) — o select é pequeno por
   // natureza (equipe de vendas), 100 cobre com folga.
@@ -94,12 +104,22 @@ export function NovaProvaView() {
       { setor: "vendedor", status: "ativo", page: 1, pageSize: 100 },
       controller.signal,
     )
-      .then((pagina) =>
+      .then((pagina) => {
+        // 100 é o teto rígido da API; se houver mais vendedores ativos, os
+        // excedentes não apareceriam no select — alerta em vez de truncar mudo
+        // (o paginador chega com o C07). Improvável no porte da 3Studio.
+        if (pagina.total > pagina.items.length) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Nova prova: ${pagina.total} vendedores ativos, exibindo ${pagina.items.length} ` +
+              "(teto da API). Vendedores além do limite não aparecem no select.",
+          );
+        }
         setVendedores({
           estado: "ok",
           opcoes: pagina.items.map((u) => ({ value: u.id, label: u.nome })),
-        }),
-      )
+        });
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setVendedores({ estado: "erro" });
@@ -170,21 +190,25 @@ export function NovaProvaView() {
         vendedorId,
         rota,
         arte,
+        provaId: chaveIdempotencia, // RNF-015: retry após timeout converge
       });
       toast.success(`Prova ${prova.codigo} criada.`);
       const baixou = await baixarEtiquetaDe(prova);
       if (baixou) {
+        // NÃO reabilita o botão: a navegação RSC ainda está em voo e um segundo
+        // clique nesse intervalo criaria duplicata. `enviando` fica true até o
+        // unmount (revisão adversarial W2-C06).
         router.push("/provas"); // placeholder do C07 (DP-7)
-      } else {
-        setPendenteEtiqueta(prova); // degradação graciosa: retry sem perder nada
+        return;
       }
+      setPendenteEtiqueta(prova); // degradação graciosa: retry sem perder nada
+      setEnviando(false);
     } catch (error) {
       const mensagem =
         error instanceof ApiError
           ? error.message
           : "Não foi possível criar a prova. Tente novamente.";
       toast.error(mensagem);
-    } finally {
       setEnviando(false);
     }
   }
@@ -351,6 +375,9 @@ export function NovaProvaView() {
                       limparErro("vendedor");
                     }}
                     labelledBy={`${idBase}-vendedor-rotulo`}
+                    describedBy={`${idBase}-vendedor-erro`}
+                    invalido={!!erros.vendedor}
+                    disabled={vendedores.estado === "carregando"}
                     placeholder={
                       vendedores.estado === "carregando" ? "Carregando…" : "Selecione o vendedor"
                     }
@@ -359,7 +386,7 @@ export function NovaProvaView() {
                 </div>
               )}
               {erros.vendedor && (
-                <p className={styles.erro} role="alert">
+                <p id={`${idBase}-vendedor-erro`} className={styles.erro} role="alert">
                   {erros.vendedor}
                 </p>
               )}
@@ -373,16 +400,46 @@ export function NovaProvaView() {
             <div
               role="radiogroup"
               aria-labelledby={`${idBase}-rota-rotulo`}
+              aria-describedby={erros.rota ? `${idBase}-rota-erro` : undefined}
+              aria-invalid={erros.rota ? true : undefined}
               className={styles.segmento}
+              onKeyDown={(event) => {
+                // Padrão WAI-ARIA de radiogroup: setas movem E selecionam (com
+                // wrap); Home/End vão aos extremos. O movimento parte do item
+                // FOCADO (roving tabindex), caindo na seleção/1º item quando o
+                // foco ainda não está num radio.
+                const teclas = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+                if (!teclas.includes(event.key)) return;
+                event.preventDefault();
+                const ultimo = ROTAS_ORDEM_UI.length - 1;
+                const focado = rotaRefs.current.findIndex((b) => b === document.activeElement);
+                const base = focado >= 0 ? focado : rota ? ROTAS_ORDEM_UI.indexOf(rota) : 0;
+                let proximo: number;
+                if (event.key === "Home") proximo = 0;
+                else if (event.key === "End") proximo = ultimo;
+                else if (event.key === "ArrowRight" || event.key === "ArrowDown")
+                  proximo = (base + 1) % ROTAS_ORDEM_UI.length;
+                else proximo = base <= 0 ? ultimo : base - 1;
+                setRota(ROTAS_ORDEM_UI[proximo]);
+                limparErro("rota");
+                rotaRefs.current[proximo]?.focus();
+              }}
             >
-              {ROTAS_ORDEM_UI.map((opcao) => {
+              {ROTAS_ORDEM_UI.map((opcao, indice) => {
                 const ativa = rota === opcao;
+                // Roving tabindex: um único tab stop. Sem seleção, o 1º item é o
+                // ponto de entrada; com seleção, é a opção ativa.
+                const tabStop = rota ? ativa : indice === 0;
                 return (
                   <button
                     key={opcao}
+                    ref={(node) => {
+                      rotaRefs.current[indice] = node;
+                    }}
                     type="button"
                     role="radio"
                     aria-checked={ativa}
+                    tabIndex={tabStop ? 0 : -1}
                     className={styles.segmentoItem}
                     data-ativa={ativa || undefined}
                     onClick={() => {
@@ -408,7 +465,7 @@ export function NovaProvaView() {
               })}
             </div>
             {erros.rota && (
-              <p className={styles.erro} role="alert">
+              <p id={`${idBase}-rota-erro`} className={styles.erro} role="alert">
                 {erros.rota}
               </p>
             )}

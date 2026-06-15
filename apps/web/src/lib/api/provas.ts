@@ -43,6 +43,9 @@ export type CriarProvaPayload = {
   vendedorId: string;
   rota: Rota;
   arte: File;
+  /** Chave de idempotência (RNF-015): reenvio após timeout converge no backend
+   * em vez de duplicar. Gerada uma vez pela tela e reusada nas retentativas. */
+  provaId?: string;
 };
 
 export function criarProva(payload: CriarProvaPayload): Promise<Prova> {
@@ -53,6 +56,7 @@ export function criarProva(payload: CriarProvaPayload): Promise<Prova> {
   form.set("vendedor_id", payload.vendedorId);
   form.set("rota", payload.rota);
   form.set("arte", payload.arte);
+  if (payload.provaId) form.set("prova_id", payload.provaId);
   // Upload de até 10 MB: timeout maior que o padrão de 10s do client.
   return apiFetch<Prova>("/provas", { method: "POST", body: form, timeoutMs: 60_000 });
 }

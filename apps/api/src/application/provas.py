@@ -15,9 +15,13 @@ deixa órfãos nem segura conexão de banco atravessando IO externo:
 Resultado: prova órfã nunca existe (o commit só acontece com a arte já no R2);
 o pior caso é um objeto órfão no R2, marcado em log para limpeza.
 
-Idempotência (RNF-015): o retry de uma criação que FALHOU converge (nada foi
-persistido); a proteção contra duplo submit é da UI (botão desabilitado) — cada
-POST bem-sucedido cria deliberadamente uma nova prova com código novo.
+Idempotência (RNF-015): o cliente envia o ``prova_id`` (UUID gerado no form)
+como CHAVE DE IDEMPOTÊNCIA. Reenvio após resposta perdida (timeout/abort com o
+INSERT já commitado) CONVERGE para a prova existente — mesmos dados → devolve a
+prova já criada (a arte regrava a MESMA key, put idempotente); dados diferentes
+sob a mesma chave → 409 (``CriacaoDivergenteError``), nunca duplicata nem
+sobrescrita silenciosa. Sem ``prova_id`` (clientes antigos), o id é gerado aqui
+e cada POST cria uma prova nova.
 """
 
 import asyncio
@@ -28,12 +32,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from src.application.ports.etiqueta import EtiquetaPort
-from src.application.ports.provas_repository import CodigoJaExisteError, ProvasRepositoryPort
+from src.application.ports.provas_repository import (
+    CodigoJaExisteError,
+    ProvaJaExisteError,
+    ProvasRepositoryPort,
+)
 from src.application.ports.storage import StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import UsuariosRepositoryPort
 from src.domain.provas import (
     EXTENSAO_POR_TIPO,
+    CriacaoDivergenteError,
     Prova,
     ProvaNaoEncontradaError,
     Rota,
@@ -56,13 +65,19 @@ class GeracaoDeCodigoEsgotadaError(Exception):
 
 @dataclass(frozen=True)
 class CriarProva:
-    """Comando de criação — payload já validado em FORMA pela borda HTTP."""
+    """Comando de criação — payload já validado em FORMA pela borda HTTP.
+
+    ``prova_id`` é a chave de idempotência gerada pelo CLIENTE (RNF-015): o
+    mesmo form reenviado carrega o mesmo UUID e converge. Opcional — sem ela,
+    o serviço gera o id e cada POST cria uma prova nova.
+    """
 
     nome: str
     requerimento: str
     cliente: str
     vendedor_id: str
     rota: Rota
+    prova_id: str | None = None
 
 
 class ProvasService:
@@ -98,16 +113,31 @@ class ProvasService:
         vendedor = await self._usuarios_repo.get(cmd.vendedor_id)
         validar_vendedor(vendedor)
 
+        prova_id = cmd.prova_id or str(uuid.uuid4())
+        # Idempotência (RNF-015): reenvio após resposta perdida converge ANTES
+        # de qualquer upload — não regrava a arte nem toca o banco de novo.
+        if cmd.prova_id is not None:
+            existente = await self._repo.get(prova_id)
+            if existente is not None:
+                return self._convergir(existente, cmd)
+
         # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
         await self._uow.rollback()
 
-        prova_id = str(uuid.uuid4())
         arte_key = f"provas/{prova_id}/arte{EXTENSAO_POR_TIPO[tipo]}"
         # Porta síncrona (boto3) fora do event loop — mesmo padrão do readiness.
         await asyncio.to_thread(self._storage.upload, arte_key, arte, tipo)
 
         try:
             prova = await self._inserir_com_retry(cmd, prova_id, arte_key, tipo)
+        except ProvaJaExisteError:
+            # Corrida da idempotência: uma requisição idêntica venceu entre o
+            # pré-check e o INSERT. SEM compensação — a arte_key pertence à
+            # prova existente (o put regravou os mesmos bytes).
+            existente = await self._repo.get(prova_id)
+            if existente is None:  # pragma: no cover — PK violada e linha sumiu
+                raise
+            return self._convergir(existente, cmd)
         except Exception:
             await self._compensar_arte(arte_key)
             raise
@@ -123,6 +153,29 @@ class ProvasService:
             },
         )
         return prova
+
+    @staticmethod
+    def _convergir(existente: Prova, cmd: CriarProva) -> Prova:
+        """Resolução da chave de idempotência repetida (RNF-015).
+
+        Mesmos dados → devolve a prova já criada (reenvio legítimo). Dados
+        diferentes sob a mesma chave → 409: o cliente renova a chave quando o
+        form muda; divergência aqui é bug/abuso, nunca sobrescrita.
+        """
+        coincide = (
+            existente.nome == cmd.nome.strip()
+            and existente.requerimento == cmd.requerimento.strip()
+            and existente.cliente == cmd.cliente.strip()
+            and existente.vendedor_id == cmd.vendedor_id
+            and existente.rota is cmd.rota
+        )
+        if not coincide:
+            raise CriacaoDivergenteError()
+        logger.info(
+            "criação idempotente convergiu (reenvio após resposta perdida)",
+            extra={"event": "prova_criacao_idempotente", "prova_id": existente.id},
+        )
+        return existente
 
     async def _inserir_com_retry(
         self, cmd: CriarProva, prova_id: str, arte_key: str, tipo: str
@@ -188,7 +241,8 @@ class ProvasService:
         if prova is None:
             raise ProvaNaoEncontradaError()
         vendedor = await self._usuarios_repo.get(prova.vendedor_id)
-        vendedor_nome = vendedor.nome if vendedor is not None else "—"
+        # Fallback ASCII: "-" (um travessão aqui derrubaria fontes core latin-1).
+        vendedor_nome = vendedor.nome if vendedor is not None else "-"
         pdf = await asyncio.to_thread(self._etiqueta.gerar_pdf, prova, vendedor_nome)
         return pdf, prova.codigo
 

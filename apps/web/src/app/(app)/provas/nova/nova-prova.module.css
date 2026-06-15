@@ -186,7 +186,9 @@
 .segmentoRotulo {
   position: relative;
   z-index: 1;
-  transition: color var(--motion-micro) var(--motion-ease-standard);
+  /* Troca de cor INSTANTÂNEA: o pilar §3.4/§11 permite só transform/opacity em
+     animações. A pílula preta deslizante (layoutId, transform) é a animação; o
+     texto inverte a cor sem transição. */
 }
 
 .segmentoItem[data-ativa] .segmentoRotulo {

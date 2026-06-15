@@ -45,12 +45,17 @@
 - Dívidas herdadas absorvidas: **role não-owner** (ADR-034 item 3) e **`SqlAlchemyUnitOfWork` → `adapters/outbound/db/`** (W0-A-018).
 - Etiqueta validada VISUALMENTE (PDF de amostra renderizado e comparado ao design — código e rota presentes, logos vetoriais ok).
 
-**Decisões (ADRs):** **ADR-035** (modelo/trigger), **ADR-036** (código+QR puro), **ADR-037** (enum completo, fronteira C06↔C11), **ADR-038** (etiqueta segno+fpdf2/DP-1), **ADR-039** (RLS de provas + admin vê todas + role de runtime — fecha ADR-033/034).
+**Decisões (ADRs):** **ADR-035** (modelo/trigger), **ADR-036** (código+QR puro), **ADR-037** (enum completo, fronteira C06↔C11), **ADR-038** (etiqueta segno+fpdf2/DP-1), **ADR-039** (RLS de provas + admin vê todas + role de runtime — fecha ADR-033/034), **ADR-040** (remediação da revisão adversarial).
 
-**Testes / cobertura:**
-- api: **338 verdes** (era 255; `REQUIRE_DB_TESTS=1`, PG 17 local 5433), cobertura **95.09%** (domínio e serviço de provas: **100%**); `ruff`/`ruff format --check`/`mypy --strict` limpos; ciclo Alembic limpo (head **0008**).
-- RLS de provas validada célula a célula @db (vendedor só as suas; motorista só os 3 "Em Trânsito" via fixtures de status; studio/clicheria/admin todas; fantasma → **0**; INSERT só admin; UPDATE sem grant; trigger rejeita rota até para owner) + **equivalência anti-drift** domínio↔sql↔migration.
-- web: **93 verdes** (era 85; 17 arquivos); `eslint`/`prettier --check`/`next build` limpos; Playwright **9 verdes** (+ specs live gateados).
+**Revisão adversarial (multi-agente, pós-merge):** 4 dimensões × verificadores céticos → 15 achados confirmados (1 alto, 3 médios, 11 baixos), corrigidos na mesma sessão (migration **`0009`** + middleware + idempotência + a11y; ver ADR-040):
+- **Alto:** etiqueta PDF dava **500 permanente** para travessão/aspas curvas/emoji (nome/cliente são texto livre) — corrigido com `core_fonts_encoding='windows-1252'` + sanitização cp1252; fallback de vendedor `—`→`-`.
+- **Médios:** (a) **idempotência real** via `prova_id` (reenvio após timeout converge / 409 divergente); (b) **`BodyLimitMiddleware`** 12 MB pré-auth (anti-DoS); (c) **WITH CHECK de INSERT endurecido** (`0009`: status/código/vendedor) contra acesso direto via Data API.
+- **Baixos:** R2 recalibrado p/ upload (read 60s, retries 3); roving tabindex + setas no radiogroup; aria nos erros de Vendedor/Rota; `Dropdown` `disabled`/`invalido`; `transition: color` removido; aviso de truncamento >100 vendedores; drifts de doc (`/api`, nanoid→secrets).
+
+**Testes / cobertura (pós-remediação):**
+- api: **349 verdes** (era 255 no início da wave; `REQUIRE_DB_TESTS=1`, PG 17 local 5433), cobertura **94.84%** (domínio e serviço de provas: **100%**); `ruff`/`ruff format --check`/`mypy --strict` limpos; ciclo Alembic limpo (head **0009**).
+- RLS de provas validada célula a célula @db (vendedor só as suas; motorista só os 3 "Em Trânsito" via fixtures de status; studio/clicheria/admin todas; fantasma → **0**; INSERT só admin com invariantes; UPDATE sem grant; trigger rejeita rota até para owner) + **equivalência anti-drift** domínio↔sql↔migration.
+- web: **94 verdes** (era 85; 17 arquivos); `eslint`/`prettier --check`/`next build` limpos; Playwright **9 verdes** (+ specs live gateados).
 
 **Pendências / em aberto:**
 - [ ] **Dono (operação, pós-C06):** `alembic upgrade head` no Supabase real (aplica 0007/0008); criar **bucket R2** + 4 vars `R2_*` no ambiente da api; ativar o role de runtime (`ALTER ROLE rastreio_runtime LOGIN PASSWORD ...`) e apontar `DATABASE_URL` p/ ele (`MIGRATIONS_DATABASE_URL` segue no owner).
