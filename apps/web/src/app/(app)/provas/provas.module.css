@@ -1,0 +1,399 @@
+/* Provas digitais (W2-C07) — MESMO estilo de tabela do Gerenciador de Usuários
+   (C04 / DP-1: replicado, não extraído): card raio --app-card-radius, colunas
+   centralizadas com divisores como segmentos, scrollbar fina, pitch 56px, pills
+   de ação. A barra de filtros é de DUAS linhas (4 campos cada), fiel ao design;
+   o botão "Limpar" é o pill preto. */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(108 * var(--u)) 28px calc(25 * var(--u));
+}
+
+.titulo {
+  font-size: calc(64 * var(--u));
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+  flex: none;
+}
+
+/* -------------------------------------------------- barra de filtros (2 linhas) */
+.filtros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(26 * var(--u)) 15px;
+  margin-top: calc(56 * var(--u));
+  align-items: end;
+  flex: none;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+  min-width: 0;
+}
+
+.rotuloCampo {
+  font-size: calc(20 * var(--u));
+  color: var(--app-ink);
+}
+
+/* Slot dos controles em pill (input/date/dropdown) — mesma altura do design. */
+.controle {
+  position: relative;
+  height: calc(60 * var(--u));
+}
+
+.input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-field);
+  color: var(--app-text-gray);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  padding: 0 28px;
+}
+
+.input::placeholder {
+  color: var(--app-text-gray);
+}
+
+/* Date nativo dentro do pill (placeholder dd/mm/aaaa vem do browser). */
+.inputData {
+  color: var(--app-text-gray);
+}
+
+.inputData::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+/* "Limpar": pill preto, sem rótulo, alinhado à base/direita da própria célula. */
+.botaoLimpar {
+  justify-self: end;
+  align-self: end;
+  height: calc(60 * var(--u));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-ink);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  padding: 0 calc(64 * var(--u));
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoLimpar:hover {
+  opacity: 0.9;
+}
+
+/* -------------------------------------------------- tabela (desktop) */
+.card {
+  margin-top: calc(30 * var(--u));
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+/* Requerimento · Nome · Cliente · Vendedor · Status · Rota · Criada em · Ver */
+.grade {
+  display: grid;
+  grid-template-columns: 150fr 232fr 150fr 150fr 168fr 110fr 162fr 132fr;
+  align-items: center;
+}
+
+.cabecalhoTabela {
+  flex: none;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.linhaCabecalho {
+  height: calc(97 * var(--u));
+  position: relative;
+}
+
+.linhaCabecalho::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 1px;
+  background: var(--app-divider);
+}
+
+.linhaCabecalho .celula {
+  font-size: calc(19 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.corpoTabela {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: 8px;
+}
+
+.corpoTabela::-webkit-scrollbar,
+.cabecalhoTabela::-webkit-scrollbar {
+  width: 6px;
+}
+
+.corpoTabela::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar);
+  border-radius: 3px;
+}
+
+.corpoTabela::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .corpoTabela {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar) transparent;
+  }
+}
+
+.linha {
+  min-height: calc(56 * var(--u));
+}
+
+.celula {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px 10px;
+  font-size: calc(16 * var(--u));
+  color: var(--app-text-gray);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.celula::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background: var(--app-divider);
+}
+
+.linhaCabecalho .celula::after {
+  top: 18px;
+}
+
+.grade > .celula:last-child::after {
+  display: none;
+}
+
+.celulaAcoes {
+  white-space: normal;
+}
+
+/* Pill "Ver" amarelo (ação primária da plataforma) — medida do design. */
+.botaoVer {
+  height: calc(34 * var(--u));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(15 * var(--u));
+  cursor: pointer;
+  padding: 0 calc(34 * var(--u));
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoVer:hover {
+  opacity: 0.85;
+}
+
+@media (pointer: coarse) {
+  .botaoVer {
+    min-height: 44px;
+  }
+}
+
+.estadoVazio {
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 18px;
+  color: var(--app-text-gray);
+}
+
+/* Célula única ocupando a linha (vazio/carregando/erro de paginação). */
+.celulaVazia {
+  grid-column: 1 / -1;
+  border-right: 0;
+  white-space: normal;
+  padding: 24px;
+  font-size: calc(16 * var(--u));
+}
+
+.tentarNovamente {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* Skeleton de carga: só opacity (GPU). */
+.skeletons {
+  display: block;
+}
+
+.skeleton {
+  height: calc(56 * var(--u));
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* -------------------------------------------------- cards (mobile) */
+.cartoes {
+  display: none;
+  list-style: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.cartao {
+  border: 1px solid var(--app-divider);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.cartaoTopo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cartaoNome {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--app-ink);
+}
+
+.cartaoReq {
+  font-size: 13px;
+  color: var(--app-text-gray);
+  white-space: nowrap;
+}
+
+.cartaoMeta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--app-text-gray);
+}
+
+.cartaoAcoes {
+  margin-top: 12px;
+  display: flex;
+}
+
+.cartaoAcoes .botaoVer {
+  flex: 1;
+  min-height: 44px;
+}
+
+.cartaoCarregarMais {
+  display: flex;
+}
+
+.botaoCarregarMais {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-radius-pill);
+  background: none;
+  color: var(--app-text-gray);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* -------------------------------------------------- responsivo */
+@media (max-width: 1100px) {
+  .filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .botaoLimpar {
+    justify-self: stretch;
+  }
+
+  .titulo {
+    font-size: clamp(28px, 4.5vw, 44px);
+  }
+}
+
+@media (max-width: 767px) {
+  .pagina {
+    padding: 20px 16px 24px;
+  }
+
+  .filtros {
+    grid-template-columns: 1fr;
+    margin-top: 20px;
+    gap: 14px;
+  }
+
+  .controle,
+  .botaoLimpar {
+    height: 52px;
+  }
+
+  .input,
+  .botaoLimpar,
+  .rotuloCampo {
+    font-size: 16px;
+  }
+
+  .card {
+    display: none; /* tabela → cards */
+  }
+
+  .cartoes {
+    display: flex;
+  }
+}
