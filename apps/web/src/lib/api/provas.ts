@@ -4,24 +4,19 @@
  * Espelho 1:1 dos schemas do backend (apps/api .../http/provas.py). Os VALORES
  * dos enums são os canônicos do glossário (CLAUDE.md §6 — lowercase); rótulos
  * de UI em ROTA_LABELS. A criação é multipart (arte JPG/PNG ≤ 10 MB — RF-001)
- * e a etiqueta chega como PDF binário gerado sob demanda (DP-7).
+ * e a etiqueta chega como PDF binário gerado sob demanda (RF-003).
  */
 import type { EstadoProva } from "@/lib/provas/status-labels";
 
 import { apiFetch, apiFetchBlob } from "./client";
 import type { Usuario } from "./usuarios";
 
-export type Rota = "matriz" | "lam_matriz" | "filial" | "lam_filial";
+// Rótulos de rota vivem em módulo próprio (DP-7), espelhando os de status; aqui
+// re-exportados para os imports já existentes (C06/C07) seguirem funcionando.
+export type { Rota } from "@/lib/provas/rota-labels";
+export { ROTA_LABELS, ROTAS_ORDEM_UI, rotuloRota } from "@/lib/provas/rota-labels";
 
-export const ROTA_LABELS: Record<Rota, string> = {
-  matriz: "Matriz",
-  lam_matriz: "Lam. Matriz",
-  filial: "Filial",
-  lam_filial: "Lam. Filial",
-};
-
-/** Ordem do segmented control no design: Matriz · Filial · Lam. Matriz · Lam. Filial. */
-export const ROTAS_ORDEM_UI: Rota[] = ["matriz", "filial", "lam_matriz", "lam_filial"];
+import type { Rota } from "@/lib/provas/rota-labels";
 
 /** Contrato da arte (RF-001) — validado no client E no server. */
 export const ARTE_TIPOS = ["image/jpeg", "image/png"] as const;
@@ -137,6 +132,39 @@ export function listarProvas(
 /** Vendedores em escopo (distintos das provas visíveis) — popula o dropdown. */
 export function listarVendedoresProvas(signal?: AbortSignal): Promise<VendedorRef[]> {
   return apiFetch<VendedorRef[]>("/provas/vendedores", { signal });
+}
+
+// ---------------------------------------------------------------------------
+// Detalhe (W2-C08) — espelho de ProvaDetalheOut do backend (GET /provas/{id}).
+// ---------------------------------------------------------------------------
+export type ProvaDetalhe = {
+  id: string;
+  codigo: string;
+  nome: string;
+  requerimento: string;
+  cliente: string;
+  vendedor_id: string;
+  /** Resolvido pela projeção SECURITY DEFINER (DP-7); `null` no caso degenerado. */
+  vendedor_nome: string | null;
+  rota: Rota;
+  status: EstadoProva;
+  /** Ciclo de revisão (DP-1): nasce 1, incrementado pelo C15. */
+  ciclo_atual: number;
+  created_at: string | null;
+  /** Carimbo terminal (populado pelo C11); `null` até lá. */
+  finalizada_em: string | null;
+};
+
+/** Detalhe de uma prova; 404 (ApiError.status) = inexistente OU fora do escopo
+ * (mesmo caso — anti-enumeração). O ESCOPO de dado é da RLS, no servidor. */
+export function obterProva(id: string, signal?: AbortSignal): Promise<ProvaDetalhe> {
+  return apiFetch<ProvaDetalhe>(`/provas/${id}`, { signal });
+}
+
+/** Arte da prova como blob, via PROXY do backend (DP-5): a key do R2 nunca é
+ * exposta e não há URL pública. Para exibir: `URL.createObjectURL(blob)`. */
+export function baixarArte(id: string, signal?: AbortSignal): Promise<Blob> {
+  return apiFetchBlob(`/provas/${id}/arte`, { signal, timeoutMs: 30_000 });
 }
 
 /**

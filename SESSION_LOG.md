@@ -32,6 +32,34 @@
 
 ---
 
+## Sessão 11 — 2026-06-15 — [Wave 2 / Componente C08] Visualização de Prova (Detalhe)
+
+**Objetivo:** Página de detalhe da prova (`/provas/[id]`): arte, metadados completos, rota/status, ciclo atual, ações de etiqueta (visualizar/baixar) e o histórico em empty state — universal, com escopo pela RLS e redirect sem vazar existência.
+
+**Feito:**
+- **Recon (workflow de 5 agentes)** confirmou o estado de C04/C05/C06/C07 e revelou divergências do prompt: `useAuthorization` **não existe** (C05 = `access-matrix`+proxy+`RbacFlash`); a etiqueta do C06 era **admin-only** (colidia com o detalhe universal); não havia `GET /provas/{id}`; a `StoragePort` **não tem URL pré-assinada**; rótulos de rota viviam em `lib/api/provas.ts`.
+- **Backend:** migration **`0012`** (`provas.ciclo_atual` NOT NULL default 1 — DP-1); `ProvasConsultaService` ganhou `obter`/`obter_arte`/`gerar_etiqueta` (+ deps opcionais `storage`/`etiqueta`); `ProvasService` perdeu a etiqueta (só criação). Endpoints `GET /provas/{id}` (detalhe), `GET /provas/{id}/arte` (**proxy** do R2 — DP-5) e etiqueta migrada para o serviço **universal RLS-escopado** (DP-8) — os três por `get_provas_consulta_service`; fora-do-escopo == inexistente == **mesmo 404** (anti-enumeração §11).
+- **Frontend:** `/provas/[id]` (server fino `key={id}` + `ProvaDetalheView` client): busca `obterProva`; 404 → toast + `router.replace('/provas')`; arte por proxy (blob→objectURL→`<img>`); "Visualizar etiqueta" em `MotionModal`, "Baixar" via blob; "Voltar" = `router.back()`+fallback; histórico em empty state. Módulo **`lib/provas/rota-labels.ts`** (DP-7); `ProvaDetalhe`/`obterProva`/`baixarArte`; token `--app-card-white`.
+- **Revisão adversarial (workflow de 14 agentes, 4 dimensões × verificadores céticos):** 10 achados, **5 confirmados (todos baixos)**, corrigidos: arte ausente no R2 de prova visível → **404** (não 503) + log de órfã; **vazamento do objectURL** da etiqueta no unmount com modal aberto → efeito de cleanup; 2 docstrings-fóssil (topo de `http/provas.py`; `(DP-7)`→`(RF-003)` em `provas.ts`).
+
+**Decisões (ADRs):**
+- **ADR-046** (DP-1..DP-8): `ciclo_atual` (0012, incrementado pelo C15); histórico empty state (fronteira C11/C13); sem botões Cancelar/Reiniciar (C14/C15); preview de etiqueta em modal; **arte por proxy** (rejeitada a pré-assinada); 404 idêntico + Voltar=back+fallback; módulo de rótulos de rota; **etiqueta universal-em-escopo** (deixou de ser admin-only). Reconciliações de design na CLAUDE.md §2.1.
+
+**Testes / cobertura:**
+- api: **263 offline / 395 com `@db`** (`REQUIRE_DB_TESTS=1`, PG 17 local 5433) — novos `test_provas_detalhe.py` (serviço: detalhe/arte/etiqueta, 404 genérico, arte-antes-do-storage, arte ausente→404, fallback `-`) e `test_provas_detalhe_endpoints.py` (@db: **escopo por perfil**, **anti-vazamento** fora-do-escopo==inexistente com mensagem idêntica, `ciclo_atual`/`vendedor_nome`, proxy da arte, etiqueta universal); `test_provas_endpoints.py` (etiqueta acessível ao vendedor dono); `test_migrations.py` (head 0012). `ruff`/`ruff format`/`mypy --strict` limpos.
+- web: **113 verdes** (`prova-detalhe-view.test.tsx`: render fiel, arte por proxy, 404→toast+redirect, baixar/visualizar etiqueta, Voltar, erro+retry, revogação do objectURL no unmount); E2E `e2e/prova-detalhe.spec.ts` (proteção + live opt-in). `pnpm lint`/`format:check`/`build` limpos.
+
+**Pendências / em aberto:**
+- [ ] Aplicar a migration **`0012`** no Supabase real (`alembic upgrade head` → `alembic_version=0012`) — não aplicada nesta sessão (validada só no PG local). As demais pendências de operação do C06/C07 (vars `R2_*`, role de runtime, advisor de leaked-password) seguem em `DECISIONS.md`.
+- [ ] Rodar `pnpm test:e2e` com `E2E_LIVE=1` quando houver stack + sessão (suite live opt-in).
+
+**Próximo passo:**
+- **W2-C09 · Tela de Configurações do Sistema** (parametrização da etiqueta — RN-011 — e demais ajustes).
+
+**Definition of Done:** ✅ atendida (testes ≥80% domínio/serviço; integração @db verde; migration versionada/up-down; escopo por perfil + anti-vazamento testados; arte sem URL pública; error boundary do grupo; animações com `prefers-reduced-motion`; sem segredos versionados; gates verdes). ⚠️ migration `0012` ainda **não aplicada em produção** (pendência acima).
+
+---
+
 ## Sessão 10 — 2026-06-15 — [Wave 2 / Componente C07] Listagem, Pesquisa e Filtros de Provas
 
 **Objetivo:** Entregar a tela de **operação diária** — listar/buscar/filtrar provas com paginação server-side, escopo por perfil (UI + RLS), tabela igual à do C04.

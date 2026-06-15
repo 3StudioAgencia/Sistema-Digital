@@ -13,7 +13,7 @@ mantendo a sincronização Python ↔ PG do glossário (CLAUDE.md §6).
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, ForeignKey, MetaData, String, Uuid, text
+from sqlalchemy import Boolean, ForeignKey, Integer, MetaData, String, Uuid, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -110,6 +110,9 @@ class ProvaRow(Base):
         nullable=False,
         server_default=text("'criada'"),
     )
+    # Ciclo de revisão (migration 0012 — W2-C08/DP-1): nasce 1 (server default) e
+    # é incrementado pelo C15. eager_defaults traz o valor no RETURNING do INSERT.
+    ciclo_atual: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     arte_key: Mapped[str] = mapped_column(String(255), nullable=False)
     arte_content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

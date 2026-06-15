@@ -9,7 +9,6 @@ import datetime as dt
 import logging
 
 import pytest
-from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
     FiltrosProvas,
@@ -34,7 +33,6 @@ from src.domain.provas import (
     CriacaoDivergenteError,
     EstadoProva,
     Prova,
-    ProvaNaoEncontradaError,
     Rota,
     VendedorInvalidoError,
     validar_codigo,
@@ -117,11 +115,6 @@ class FakeUow(UnitOfWork):
         self.rollbacks += 1
 
 
-class FakeEtiqueta(EtiquetaPort):
-    def gerar_pdf(self, prova: Prova, vendedor_nome: str) -> bytes:
-        return b"%PDF-fake " + prova.codigo.encode() + b" " + vendedor_nome.encode()
-
-
 class StorageComDeleteQuebrado(FakeStorage):
     def delete(self, key: str) -> None:
         raise RuntimeError("delete indisponível")
@@ -155,7 +148,6 @@ def _montar(
         repo=repo,
         usuarios_repo=usuarios,
         storage=storage,
-        etiqueta=FakeEtiqueta(),
         uow=uow,
         relogio=lambda: QUANDO,
     )
@@ -354,23 +346,3 @@ async def test_corrida_de_idempotencia_no_insert_converge_sem_compensar_a_arte()
 
     assert prova is existente
     assert existente.arte_key in storage._objects  # compensação NÃO rodou
-
-
-# ---------------------------------------------------------------------------
-# Etiqueta (DP-7)
-# ---------------------------------------------------------------------------
-async def test_gerar_etiqueta_devolve_pdf_e_codigo() -> None:
-    service, _, _, _, _ = _montar(_vendedor())
-    prova = await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
-
-    pdf, codigo = await service.gerar_etiqueta(prova.id)
-
-    assert codigo == prova.codigo
-    assert pdf.startswith(b"%PDF")
-    assert b"Renan Petrim" in pdf  # nome do vendedor resolvido via repo
-
-
-async def test_gerar_etiqueta_de_prova_inexistente_e_404_generico() -> None:
-    service, _, _, _, _ = _montar(_vendedor())
-    with pytest.raises(ProvaNaoEncontradaError, match=r"Prova não encontrada\."):
-        await service.gerar_etiqueta("00000000-0000-0000-0000-000000000099")

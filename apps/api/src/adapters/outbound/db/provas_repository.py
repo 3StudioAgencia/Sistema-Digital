@@ -34,6 +34,7 @@ def _para_dominio(row: ProvaRow) -> Prova:
         vendedor_id=row.vendedor_id,
         rota=Rota(row.rota),
         status=EstadoProva(row.status),
+        ciclo_atual=row.ciclo_atual,
         arte_key=row.arte_key,
         arte_content_type=row.arte_content_type,
         created_at=row.created_at,
@@ -79,9 +80,10 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
             if "provas_pkey" in texto or "pk_provas" in texto:
                 raise ProvaJaExisteError(prova.id) from exc
             raise
-        # eager_defaults: created_at/updated_at vêm no RETURNING do INSERT.
+        # eager_defaults: created_at/updated_at/ciclo_atual vêm no RETURNING do INSERT.
         prova.created_at = row.created_at
         prova.updated_at = row.updated_at
+        prova.ciclo_atual = row.ciclo_atual
 
     async def get(self, prova_id: str) -> Prova | None:
         row = await self._session.get(ProvaRow, prova_id)

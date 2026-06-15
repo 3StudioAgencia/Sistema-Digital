@@ -38,7 +38,7 @@ from src.application.ports.provas_repository import (
     ProvaJaExisteError,
     ProvasRepositoryPort,
 )
-from src.application.ports.storage import StoragePort
+from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import UsuariosRepositoryPort
 from src.domain.provas import (
@@ -94,14 +94,12 @@ class ProvasService:
         repo: ProvasRepositoryPort,
         usuarios_repo: UsuariosRepositoryPort,
         storage: StoragePort,
-        etiqueta: EtiquetaPort,
         uow: UnitOfWork,
         relogio: Callable[[], datetime] | None = None,
     ) -> None:
         self._repo = repo
         self._usuarios_repo = usuarios_repo
         self._storage = storage
-        self._etiqueta = etiqueta
         self._uow = uow
         self._relogio = relogio or (lambda: datetime.now(UTC))
 
@@ -230,26 +228,9 @@ class ProvasService:
                 extra={"event": "compensacao_arte_falhou", "arte_key": arte_key},
             )
 
-    # ---------------------------------------------------------------- etiqueta
-    async def gerar_etiqueta(self, prova_id: str) -> tuple[bytes, str]:
-        """Etiqueta PDF sob demanda (DP-7) — stateless, nada é armazenado.
-
-        Devolve ``(pdf, codigo)``; o código nomeia o arquivo no download.
-        Prova fora do escopo da RLS e prova inexistente são o MESMO 404
-        (anti-enumeração — CLAUDE.md §11).
-        """
-        prova = await self._repo.get(prova_id)
-        if prova is None:
-            raise ProvaNaoEncontradaError()
-        vendedor = await self._usuarios_repo.get(prova.vendedor_id)
-        # Fallback ASCII: "-" (um travessão aqui derrubaria fontes core latin-1).
-        vendedor_nome = vendedor.nome if vendedor is not None else "-"
-        pdf = await asyncio.to_thread(self._etiqueta.gerar_pdf, prova, vendedor_nome)
-        return pdf, prova.codigo
-
 
 # ---------------------------------------------------------------------------
-# Leitura / listagem (W2-C07)
+# Leitura / listagem (W2-C07) + detalhe/arte/etiqueta (W2-C08)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class VendedorRef:
@@ -280,17 +261,93 @@ class PaginaProvasListagem:
 
 
 class ProvasConsultaService:
-    """Casos de uso de LEITURA de provas (W2-C07) — listagem e filtros do dropdown.
+    """Casos de uso de LEITURA de provas (W2-C07 listagem + W2-C08 detalhe/arte/etiqueta).
 
-    Página acessível a QUALQUER perfil ativo (Matriz §7: ``provas`` universal); o
-    ESCOPO de dado (Vendedor as próprias, Motorista as "Em Trânsito") é da RLS de
-    ``provas`` (C06) — NÃO reimplementado aqui. O serviço só compõe a página com o
-    nome do vendedor (resolvido fora da RLS de ``usuarios`` — DP-7), em consulta
-    única e sem N+1 (uma resolução de nomes por página, não por linha).
+    Página/detalhe acessíveis a QUALQUER perfil ativo (Matriz §7: ``provas``
+    universal); o ESCOPO de dado (Vendedor as próprias, Motorista as "Em Trânsito")
+    é da RLS de ``provas`` (C06) — NÃO reimplementado aqui. Prova fora do escopo e
+    prova inexistente são o MESMO 404 (anti-enumeração — CLAUDE.md §11).
+
+    ``storage``/``etiqueta`` só são exigidos pelos caminhos de arte/etiqueta (C08);
+    são opcionais para manter os testes de listagem (que só usam ``listar``/
+    ``vendedores``) sem dublês de IO. A injeção real (DI) sempre os fornece.
     """
 
-    def __init__(self, repo: ProvasRepositoryPort) -> None:
+    def __init__(
+        self,
+        repo: ProvasRepositoryPort,
+        storage: StoragePort | None = None,
+        etiqueta: EtiquetaPort | None = None,
+    ) -> None:
         self._repo = repo
+        self._storage = storage
+        self._etiqueta = etiqueta
+
+    # ----------------------------------------------------------------- detalhe
+    async def obter(self, prova_id: str) -> ProvaListagem:
+        """Detalhe de UMA prova (C08): a prova + o nome do vendedor (DP-7).
+
+        Escopada pela RLS (claims propagados): fora do escopo / inexistente → o
+        MESMO ``ProvaNaoEncontradaError`` (404 genérico — anti-enumeração)."""
+        prova = await self._repo.get(prova_id)
+        if prova is None:
+            raise ProvaNaoEncontradaError()
+        nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
+        return ProvaListagem(prova=prova, vendedor_nome=nomes.get(prova.vendedor_id))
+
+    async def obter_arte(self, prova_id: str) -> tuple[bytes, str]:
+        """Bytes da arte + content-type, para o PROXY de imagem do C08 (DP-5).
+
+        A prova é resolvida (e escopada pela RLS) ANTES de tocar o storage — fora
+        do escopo / inexistente → 404 genérico, sem revelar a key do R2. O objeto
+        nunca é exposto por URL pública: o backend lê do R2 e streama."""
+        prova = await self._repo.get(prova_id)
+        if prova is None:
+            raise ProvaNaoEncontradaError()
+        storage = self._storage_obrigatorio()
+        try:
+            dados = await asyncio.to_thread(storage.download, prova.arte_key)
+        except StorageObjectNotFound as exc:
+            # Prova VISÍVEL pela RLS mas objeto ausente no R2 = inconsistência de
+            # dado (arte órfã/perdida — a criação é atômica, RNF-017). Vira 404
+            # (anti-enumeração: mesmo 404 do inexistente), NUNCA o 503
+            # "storage_indisponivel" — que faria o cliente retentar em loop um
+            # arquivo que não voltará. Logado para limpeza manual (RNF-024).
+            logger.error(
+                "arte ausente no R2 para prova visível",
+                extra={"event": "arte_ausente", "prova_id": prova.id, "arte_key": prova.arte_key},
+            )
+            raise ProvaNaoEncontradaError() from exc
+        return dados, prova.arte_content_type
+
+    # ---------------------------------------------------------------- etiqueta
+    async def gerar_etiqueta(self, prova_id: str) -> tuple[bytes, str]:
+        """Etiqueta PDF sob demanda (RF-003) — stateless, nada é armazenado (DP-8).
+
+        Servida pelo caminho UNIVERSAL (qualquer perfil em escopo que enxerga a
+        prova pode imprimir a etiqueta dela). Devolve ``(pdf, codigo)``; o código
+        nomeia o arquivo no download. Nome do vendedor resolvido por
+        ``nomes_de_vendedores`` (DP-7) — funciona para qualquer perfil em escopo;
+        fallback ASCII "-" (um travessão derrubaria as fontes core latin-1).
+        Prova fora do escopo / inexistente → 404 genérico (anti-enumeração)."""
+        prova = await self._repo.get(prova_id)
+        if prova is None:
+            raise ProvaNaoEncontradaError()
+        etiqueta = self._etiqueta_obrigatoria()
+        nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
+        vendedor_nome = nomes.get(prova.vendedor_id) or "-"
+        pdf = await asyncio.to_thread(etiqueta.gerar_pdf, prova, vendedor_nome)
+        return pdf, prova.codigo
+
+    def _storage_obrigatorio(self) -> StoragePort:
+        if self._storage is None:  # pragma: no cover — a DI sempre injeta
+            raise RuntimeError("StoragePort não configurada no serviço de consulta de provas.")
+        return self._storage
+
+    def _etiqueta_obrigatoria(self) -> EtiquetaPort:
+        if self._etiqueta is None:  # pragma: no cover — a DI sempre injeta
+            raise RuntimeError("EtiquetaPort não configurada no serviço de consulta de provas.")
+        return self._etiqueta
 
     async def listar(self, filtros: FiltrosProvas) -> PaginaProvasListagem:
         pagina = await self._repo.listar(filtros.saneados())

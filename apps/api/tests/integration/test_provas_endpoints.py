@@ -298,8 +298,14 @@ async def test_etiqueta_de_prova_inexistente_e_404_generico(ctx: tuple[Any, ...]
     assert resp.json()["error"]["message"] == "Prova não encontrada."
 
 
-async def test_etiqueta_negada_a_nao_admin(ctx: tuple[Any, ...]) -> None:
+async def test_etiqueta_acessivel_ao_vendedor_dono(ctx: tuple[Any, ...]) -> None:
+    """DP-8 (W2-C08): a etiqueta deixou de ser admin-only — qualquer perfil que
+    ENXERGA a prova (RLS) pode imprimi-la. O vendedor dono (a prova é criada com
+    ``vendedor_id`` dele) recebe 200. O caso fora-de-escopo (→ 404 genérico,
+    anti-enumeração) é coberto em test_provas_detalhe_endpoints.py."""
     client, _, _ = ctx
     body = await _criar_ok(client)
     resp = await client.get(f"/provas/{body['id']}/etiqueta.pdf", headers=_auth_vendedor())
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content.startswith(b"%PDF")

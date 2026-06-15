@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0011", (
-        "head deve registrar a revisão 0011 (nomes_de_vendedores em schema privado — W2-C07)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0012", (
+        "head deve registrar a revisão 0012 (ciclo_atual em provas — W2-C08)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -130,6 +130,15 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 0
     ), "0011 deve mover nomes_de_vendedores para fora do schema public (exposto)"
+    # W2-C08: coluna ciclo_atual (DP-1), NOT NULL com default 1.
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.columns WHERE table_name = 'provas' "
+            "AND column_name = 'ciclo_atual' AND is_nullable = 'NO'",
+        )
+        == 1
+    ), "0012 deve adicionar provas.ciclo_atual NOT NULL (DP-1)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"

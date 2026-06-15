@@ -31,6 +31,7 @@
   --app-sidebar-field: #181818;
   --app-sidebar-muted: #868686;
   --app-shell-bg: #eaeaea;
+  --app-card-white: #ffffff; /* card de detalhe (W2-C08) sobre o shell cinza */
   --app-shell-radius: 40px;
   --app-accent: var(--auth-accent); /* #ffcb5c — mesmo amarelo do login */
   --app-danger: #ff5959; /* botão "Desativar" */

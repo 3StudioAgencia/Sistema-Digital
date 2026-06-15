@@ -92,16 +92,16 @@ async def get_provas_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> AsyncIterator[ProvasService]:
-    """Serviço de provas por requisição, JÁ gateado por ``CRIAR_PROVA`` (W2-C06).
+    """Serviço de CRIAÇÃO de provas por requisição, JÁ gateado por ``CRIAR_PROVA``.
 
     Autorização e serviço compartilham UMA sessão RLS (em vez de empilhar
     ``requer_acesso`` + serviço, que abririam duas conexões com NullPool —
     RNF-020): a linha do próprio ator é legível pela policy
     ``usuarios_select_self``, então o gate funciona dentro da mesma sessão.
     Mensagem única de negação (anti-enumeração — mesma do ``requer_acesso``).
-    Ambos os endpoints do C06 (criar + etiqueta) são exclusivos do admin
-    (Matriz §7, "Criar Prova"); quando o C07 trouxer leituras universais,
-    cria-se a dependência própria com o recurso adequado.
+    Só a CRIAÇÃO (``POST /provas``) é exclusiva do admin (Matriz §7, "Criar
+    Prova"); detalhe/arte/etiqueta (W2-C08) são UNIVERSAIS-em-escopo e usam
+    ``get_provas_consulta_service`` (DP-8).
     """
     factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
     if factory is None:  # boot sem banco (testes offline sem override explícito)
@@ -110,7 +110,6 @@ async def get_provas_service(
             detail="Persistência não configurada.",
         )
     storage: StoragePort = request.app.state.storage
-    etiqueta: EtiquetaPort = request.app.state.etiqueta_generator
     async with abrir_sessao_rls(factory, user.claims) as session:
         usuarios_repo = SqlAlchemyUsuariosRepository(session)
         ator = await usuarios_repo.get(user.sub)
@@ -123,7 +122,6 @@ async def get_provas_service(
             repo=SqlAlchemyProvasRepository(session),
             usuarios_repo=usuarios_repo,
             storage=storage,
-            etiqueta=etiqueta,
             uow=SqlAlchemyUnitOfWork(session),
         )
 
@@ -132,20 +130,23 @@ async def get_provas_consulta_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> AsyncIterator[ProvasConsultaService]:
-    """Serviço de LEITURA de provas (W2-C07) — listagem/filtros da página universal.
+    """Serviço de LEITURA de provas (W2-C07 listagem + W2-C08 detalhe/arte/etiqueta).
 
     Diferente de ``get_provas_service`` (gate ``CRIAR_PROVA``, admin): a Matriz §7
     torna ``provas`` ACESSÍVEL A QUALQUER perfil ativo; o que muda por perfil é o
     ESCOPO de dado, garantido pela RLS de ``provas`` (C06) — não pela borda. Mesma
-    sessão RLS fail-closed por requisição (ADR-008/ADR-034), sem ``storage``/
-    ``etiqueta`` (caminho só de leitura). Negação ÚNICA para sem-linha/inativo/
-    não-autorizado (anti-enumeração — CLAUDE.md §11)."""
+    sessão RLS fail-closed por requisição (ADR-008/ADR-034). ``storage``/``etiqueta``
+    injetados aqui (C08): servem o proxy da arte (DP-5) e a etiqueta universal-em-
+    escopo (DP-8); a listagem/detalhe não os tocam. Negação ÚNICA para sem-linha/
+    inativo/não-autorizado (anti-enumeração — CLAUDE.md §11)."""
     factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
     if factory is None:  # boot sem banco (testes offline sem override explícito)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Persistência não configurada.",
         )
+    storage: StoragePort = request.app.state.storage
+    etiqueta: EtiquetaPort = request.app.state.etiqueta_generator
     async with abrir_sessao_rls(factory, user.claims) as session:
         ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
         if ator is None or not autorizar(ator, Recurso.PROVAS):
@@ -153,7 +154,11 @@ async def get_provas_consulta_service(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Acesso negado.",
             )
-        yield ProvasConsultaService(repo=SqlAlchemyProvasRepository(session))
+        yield ProvasConsultaService(
+            repo=SqlAlchemyProvasRepository(session),
+            storage=storage,
+            etiqueta=etiqueta,
+        )
 
 
 __all__ = [

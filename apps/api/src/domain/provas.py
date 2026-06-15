@@ -208,6 +208,9 @@ class Prova:
     arte_key: str
     arte_content_type: str
     status: EstadoProva = EstadoProva.CRIADA
+    # Ciclo de revisão (DP-1 do C08): nasce 1 na criação e é INCREMENTADO pelo
+    # C15 (Reinício de Ciclo). Metadado mutável — fora da identidade (compare=False).
+    ciclo_atual: int = field(default=1, compare=False)
     created_at: datetime | None = field(default=None, compare=False)
     updated_at: datetime | None = field(default=None, compare=False)
     # Carimbo dos estados TERMINAIS (recebida na clicheria / cancelada). Nasce

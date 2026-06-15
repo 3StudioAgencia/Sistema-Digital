@@ -1,11 +1,17 @@
-"""Endpoints de provas digitais (W2-C06) — RF-001/002/003, RN-007, US-001.
+"""Endpoints de provas digitais (W2-C06/C07/C08) — RF-001/002/003, RN-007, US-001.
 
-Ambos os endpoints são EXCLUSIVOS do Administrador (Matriz §7, "Criar Prova"):
-a etiqueta pertence ao fluxo de criação. O gate é aplicado dentro de
-``get_provas_service`` (uma única sessão RLS por requisição — RNF-020).
+Gate por endpoint (Matriz §7):
+- **CRIAÇÃO** (``POST /provas``) é EXCLUSIVA do Administrador ("Criar Prova"):
+  gate ``CRIAR_PROVA`` dentro de ``get_provas_service`` (uma sessão RLS por
+  requisição — RNF-020).
+- **LEITURA** — listagem (``GET /provas``), dropdown (``/provas/vendedores``),
+  detalhe (``/provas/{id}``), arte (``/provas/{id}/arte``) e etiqueta
+  (``/provas/{id}/etiqueta.pdf``) — é UNIVERSAL-em-escopo via
+  ``get_provas_consulta_service`` (gate ``Recurso.PROVAS``); o ESCOPO de dado é
+  da RLS de ``provas`` (W2-C08/DP-8: a etiqueta deixou de ser admin-only).
 
-NÃO há endpoint de update nesta wave (DP-5): a rota é imutável (RN-007) e as
-transições de status são do C11 — qualquer PATCH/PUT responde 405 por ausência.
+NÃO há endpoint de update nesta wave (DP-5 do C06): a rota é imutável (RN-007) e
+as transições de status são do C11 — qualquer PATCH/PUT responde 405 por ausência.
 """
 
 import uuid
@@ -110,6 +116,44 @@ class VendedorRefOut(BaseModel):
     nome: str
 
 
+class ProvaDetalheOut(BaseModel):
+    """Detalhe da prova (W2-C08): ``ProvaListagemOut`` + ``ciclo_atual`` (DP-1).
+
+    A arte NÃO vem aqui — é servida pelo proxy ``GET /provas/{id}/arte`` (DP-5),
+    para não trafegar imagem dentro do JSON nem expor a key do R2."""
+
+    id: str
+    codigo: str
+    nome: str
+    requerimento: str
+    cliente: str
+    vendedor_id: str
+    vendedor_nome: str | None
+    rota: Rota
+    status: EstadoProva
+    ciclo_atual: int
+    created_at: datetime | None
+    finalizada_em: datetime | None
+
+    @classmethod
+    def de_dominio(cls, item: ProvaListagem) -> Self:
+        p = item.prova
+        return cls(
+            id=p.id,
+            codigo=p.codigo,
+            nome=p.nome,
+            requerimento=p.requerimento,
+            cliente=p.cliente,
+            vendedor_id=p.vendedor_id,
+            vendedor_nome=item.vendedor_nome,
+            rota=p.rota,
+            status=p.status,
+            ciclo_atual=p.ciclo_atual,
+            created_at=p.created_at,
+            finalizada_em=p.finalizada_em,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -205,15 +249,50 @@ async def criar(
     return ProvaOut.de_dominio(prova)
 
 
+@router.get("/{prova_id}", response_model=ProvaDetalheOut)
+async def detalhe(
+    prova_id: uuid.UUID,
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
+) -> ProvaDetalheOut:
+    """Detalhe de UMA prova (W2-C08) — página UNIVERSAL escopada pela RLS.
+
+    Acessível a qualquer perfil ativo; o ESCOPO é da RLS de ``provas`` (claims
+    propagados — ADR-008). Prova inexistente e prova fora do escopo retornam o
+    MESMO 404 genérico (anti-enumeração — CLAUDE.md §11): a UI redireciona para a
+    listagem e mostra um toast, sem revelar se a prova existe.
+    """
+    return ProvaDetalheOut.de_dominio(await service.obter(str(prova_id)))
+
+
+@router.get("/{prova_id}/arte")
+async def arte(
+    prova_id: uuid.UUID,
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
+) -> Response:
+    """PROXY da arte do R2 privado (W2-C08/DP-5) — escopado pela RLS.
+
+    O backend lê o objeto do R2 e streama os bytes: a key do R2 NUNCA é exposta
+    ao cliente e não há URL pública. Fora do escopo / inexistente → MESMO 404
+    genérico (a prova é resolvida antes de tocar o storage). ``Cache-Control:
+    private`` permite cache só no navegador do próprio usuário."""
+    dados, content_type = await service.obter_arte(str(prova_id))
+    return Response(
+        content=dados,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
 @router.get("/{prova_id}/etiqueta.pdf")
 async def etiqueta(
     prova_id: uuid.UUID,
-    service: Annotated[ProvasService, Depends(get_provas_service)],
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
 ) -> Response:
-    """Etiqueta PDF sob demanda (DP-7) — 95 x 55 mm, com o código em destaque.
+    """Etiqueta PDF sob demanda (RF-003) — 95 x 55 mm, com o código em destaque.
 
-    Prova inexistente e prova fora do escopo retornam o MESMO 404 genérico
-    (anti-enumeração — a RLS não distingue e a borda também não).
+    UNIVERSAL-em-escopo (DP-8): qualquer perfil que ENXERGA a prova (RLS) pode
+    imprimir a etiqueta dela. Prova inexistente e prova fora do escopo retornam o
+    MESMO 404 genérico (anti-enumeração — a RLS não distingue e a borda também não).
     """
     pdf, codigo = await service.gerar_etiqueta(str(prova_id))
     return Response(

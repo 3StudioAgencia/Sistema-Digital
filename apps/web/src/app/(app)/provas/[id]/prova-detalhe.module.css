@@ -1,0 +1,344 @@
+/* Detalhe da prova (W2-C08) — fiel ao design: dentro do shell cinza, "← Voltar"
+   no topo, card BRANCO (arte + metadados + ações de etiqueta) e card PRETO
+   "Histórico de movimentações" (empty state). Mesma linguagem visual do C04/C07:
+   escala --u, tokens --app-*, raios e pills da plataforma. */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(28 * var(--u));
+  padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+}
+
+/* "← Voltar": pill claro com borda discreta, alinhado à esquerda no topo. */
+.voltar {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  height: calc(56 * var(--u));
+  padding: 0 calc(34 * var(--u));
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-card-white);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.voltar:hover {
+  opacity: 0.85;
+}
+
+.voltar:focus-visible,
+.btnPrimario:focus-visible,
+.btnSecundario:focus-visible,
+.linkRetry:focus-visible,
+.modalFechar:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------- card de detalhe (branco) */
+.cardDetalhe {
+  display: grid;
+  grid-template-columns: minmax(0, calc(420 * var(--u))) 1fr;
+  gap: calc(48 * var(--u));
+  padding: calc(40 * var(--u));
+  background: var(--app-card-white);
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-card-radius);
+}
+
+.arteCol {
+  min-width: 0;
+}
+
+/* Arte quadrada (placeholder do design é quadrado) — só transform/opacity. */
+.arte,
+.artePlaceholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: calc(20 * var(--u));
+  object-fit: cover;
+  display: block;
+}
+
+.artePlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-field);
+  color: var(--app-text-gray);
+  font-size: calc(18 * var(--u));
+  text-align: center;
+  padding: 16px;
+}
+
+.arteSkeleton {
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.requerimento {
+  font-size: calc(20 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.nome {
+  margin-top: calc(6 * var(--u));
+  font-size: calc(56 * var(--u));
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.divisor {
+  margin: calc(28 * var(--u)) 0;
+  border: 0;
+  border-top: 1px solid var(--app-divider);
+}
+
+/* Grade de campos: Cliente · Rota · Criada em / Vendedor · Ciclo Atual · Status */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(28 * var(--u)) calc(24 * var(--u));
+  margin: 0;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6 * var(--u));
+  min-width: 0;
+}
+
+.campoRotulo {
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.campoValor {
+  margin: 0;
+  font-size: calc(26 * var(--u));
+  color: var(--app-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Ações de etiqueta: amarelo (visualizar) + preto (baixar). */
+.acoes {
+  margin-top: calc(40 * var(--u));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(24 * var(--u));
+}
+
+.btnPrimario,
+.btnSecundario {
+  height: calc(68 * var(--u));
+  border: 0;
+  border-radius: 14px;
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.btnPrimario {
+  background: var(--app-accent);
+  color: var(--app-ink);
+}
+
+.btnSecundario {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+.btnPrimario:hover,
+.btnSecundario:hover {
+  opacity: 0.9;
+}
+
+.btnPrimario:disabled,
+.btnSecundario:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* -------------------------------------------------- histórico (preto, vazio) */
+.historico {
+  background: var(--app-ink);
+  border-radius: var(--app-card-radius);
+  padding: calc(44 * var(--u));
+  min-height: calc(320 * var(--u));
+  display: flex;
+  flex-direction: column;
+}
+
+.historicoTitulo {
+  font-size: calc(40 * var(--u));
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.historicoVazio {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--u));
+  text-align: center;
+  color: var(--app-sidebar-muted);
+  font-size: calc(22 * var(--u));
+}
+
+.historicoVazioSub {
+  font-size: calc(18 * var(--u));
+}
+
+/* -------------------------------------------------- estados de carga/erro */
+.skeletonCard {
+  min-height: calc(420 * var(--u));
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+}
+
+.erro {
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 18px;
+  color: var(--app-text-gray);
+}
+
+.linkRetry {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arteSkeleton,
+  .skeletonCard {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* -------------------------------------------------- modal de etiqueta (DP-4) */
+.modalEtiqueta {
+  width: min(calc(820 * var(--u)), 100%);
+  padding: calc(24 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+}
+
+.modalCabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modalTitulo {
+  font-size: calc(26 * var(--u));
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.modalFechar {
+  height: calc(44 * var(--u));
+  padding: 0 calc(24 * var(--u));
+  border: 1px solid var(--auth-text-muted);
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--auth-text);
+  font: inherit;
+  font-size: calc(16 * var(--u));
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.modalFechar:hover {
+  opacity: 0.85;
+}
+
+.iframeEtiqueta {
+  width: 100%;
+  height: min(70vh, 520px);
+  border: 0;
+  border-radius: calc(12 * var(--u));
+  background: #fff;
+}
+
+/* -------------------------------------------------- responsivo */
+@media (max-width: 1100px) {
+  .nome {
+    font-size: clamp(28px, 4.5vw, 44px);
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .pagina {
+    padding: 20px 16px 24px;
+    gap: 16px;
+  }
+
+  .cardDetalhe {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .arte,
+  .artePlaceholder {
+    aspect-ratio: 4 / 3;
+  }
+
+  .acoes {
+    grid-template-columns: 1fr;
+  }
+
+  .btnPrimario,
+  .btnSecundario,
+  .voltar {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .historicoTitulo {
+    font-size: 24px;
+  }
+
+  .historicoVazio {
+    font-size: 16px;
+  }
+}
