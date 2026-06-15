@@ -57,9 +57,14 @@
 - RLS de provas validada célula a célula @db (vendedor só as suas; motorista só os 3 "Em Trânsito" via fixtures de status; studio/clicheria/admin todas; fantasma → **0**; INSERT só admin com invariantes; UPDATE sem grant; trigger rejeita rota até para owner) + **equivalência anti-drift** domínio↔sql↔migration.
 - web: **94 verdes** (era 85; 17 arquivos); `eslint`/`prettier --check`/`next build` limpos; Playwright **9 verdes** (+ specs live gateados).
 
+**Refinos pós-merge + deploy de infra (mesma sessão):**
+- **UI (feedback do dono ao vivo):** tela `/provas/nova` sem scroll no desktop (cartão preenche o shell; folga inferior = lateral) + tipografia reduzida; folga da pílula no segmented de Rota; **etiqueta** com contornos afinados (~2px) e "Aponte a câmera para o QR CODE" centralizado sobre o QR. Commits `a21ac41`, `edc0cd4`, `09d6891`.
+- **Infra via MCP:** migrations `0007`→`0008`→`0009` aplicadas no **Supabase real** (`rastreio-provas-digitais`/`wmpxxrzbzqgsorjwczvz`) — `alembic_version=0009`, sem drift (SQL de `alembic upgrade --sql` com os `UPDATE alembic_version`); estado verificado (provas/enums/trigger/6 policies/role runtime) + advisors de segurança sem achado sobre `provas`. Bucket **R2 `rastreio-provas-artes`** já existia (nada a criar).
+
 **Pendências / em aberto:**
-- [ ] **Dono (operação, pós-C06):** `alembic upgrade head` no Supabase real (aplica 0007/0008); criar **bucket R2** + 4 vars `R2_*` no ambiente da api; ativar o role de runtime (`ALTER ROLE rastreio_runtime LOGIN PASSWORD ...`) e apontar `DATABASE_URL` p/ ele (`MIGRATIONS_DATABASE_URL` segue no owner).
-- [ ] Itens herdados que permanecem: `KEEPALIVE_DATABASE_URL` (W0-A-001), TTL do access token (DP-3 do C03), leaked-password/política de senha no dashboard (W1-A-011), W1-A-006 (outbox), sink real de erros (C19/C20).
+- [x] **Infra aplicada (sessão 09):** Supabase em `0009`; bucket R2 confirmado.
+- [ ] **Dono (só segredos/dashboard):** 4 vars `R2_*` no ambiente da api (`R2_BUCKET=rastreio-provas-artes` + endpoint/keys via API token do Cloudflare); **(opcional)** ativar o role de runtime (`ALTER ROLE rastreio_runtime LOGIN PASSWORD ...` + `DATABASE_URL`); habilitar leaked-password protection (Auth — W1-A-011).
+- [ ] Itens herdados que permanecem: `KEEPALIVE_DATABASE_URL` (W0-A-001), TTL do access token (DP-3 do C03), W1-A-006 (outbox), sink real de erros (C19/C20).
 - [ ] C07 estende `ProvasRepositoryPort` com listagem paginada/filtros; C08 serve a arte (decidir bytes-via-backend vs presigned URL — a porta de storage não tem presigned hoje).
 
 **Próximo passo:**
