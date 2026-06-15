@@ -161,6 +161,8 @@
   color: var(--app-ink);
   cursor: pointer;
   min-width: 0;
+  /* Respiro horizontal maior em ambos os estados (Padrão e Personalizado). */
+  padding: 0 calc(40 * var(--u));
 }
 
 .segmentoItem:focus-visible {

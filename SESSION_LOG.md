@@ -45,6 +45,7 @@
 - **Frontend:** `/configuracoes` (server fino → `ConfiguracoesView` client): cards **Tempo de atraso** e **Template de etiqueta** com **Salvar por card**, validação em tempo real, estados carregando/erro(retry)/**restrito (403)**, toast; `lib/api/configuracoes.ts`. Segmented Modo com pílula `layoutId` + teclado WAI-ARIA; reveal por `AnimatePresence`; reduced-motion. `nav-items.ts` sem o marcador placeholder.
 - **Revisão adversarial (workflow de 14 agentes, 4 dimensões × verificadores céticos):** **7 confirmados** (2 médios, 5 baixos), todos corrigidos — **`qr_zona_quieta_modulos`** ignorado (lia `self._t`, não o template efetivo) → fix + teste por bytes; segmented sem teclado → navegação WAI-ARIA; save-padrão gravava dimensões antigas → grava defaults; `toastRef` morto removido; +testes (save-padrão, teclado, reduced-motion, payload completo).
 - **Deploy:** migration **`0013`** aplicada no **Supabase real** via MCP (tabela + RLS + 3 policies + bump `alembic_version=0013`); advisors de segurança sem achados novos.
+- **Refino pós-entrega (a pedido do dono):** padding horizontal maior no segmented de **Modo** (`.segmentoItem`) — vale para "Padrão" e "Personalizado".
 - **Docs:** `docs/configuracoes.md`; **ADR-047 a ADR-051**; CLAUDE.md §9.
 
 **Testes / cobertura:**
