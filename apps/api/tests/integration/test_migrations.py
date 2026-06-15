@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0012", (
-        "head deve registrar a revisão 0012 (ciclo_atual em provas — W2-C08)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0013", (
+        "head deve registrar a revisão 0013 (system_settings — W2-C09)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -139,6 +139,18 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0012 deve adicionar provas.ciclo_atual NOT NULL (DP-1)"
+    # W2-C09: tabela system_settings (0013) + RLS (leitura authenticated, escrita admin).
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")
+        == 1
+    ), "0013 deve criar a tabela system_settings"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_policies WHERE tablename = 'system_settings'",
+        )
+        == 3
+    ), "0013 deve criar as 3 policies de system_settings (1 SELECT + INSERT + UPDATE)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -183,6 +195,10 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores'")
         == 0
     ), "downgrade da 0010 deve remover a função nomes_de_vendedores"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")
+        == 0
+    ), "downgrade da 0013 deve remover a tabela system_settings"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

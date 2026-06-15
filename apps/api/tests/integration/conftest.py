@@ -40,11 +40,12 @@ async def usuarios_engine(usuarios_schema: str) -> AsyncIterator[AsyncEngine]:
     """Engine por teste (loop é por função no pytest-asyncio) + tabelas limpas.
 
     ``provas`` entra no TRUNCATE junto (W2-C06): a FK ``provas.vendedor_id``
-    impediria truncar ``usuarios`` isoladamente.
+    impediria truncar ``usuarios`` isoladamente. ``system_settings`` (W2-C09) entra
+    no mesmo TRUNCATE para isolar os testes de configuração (sem FK — independente).
     """
     engine = create_async_engine(usuarios_schema, poolclass=NullPool)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE provas, usuarios"))
+        await conn.execute(text("TRUNCATE provas, usuarios, system_settings"))
     try:
         yield engine
     finally:

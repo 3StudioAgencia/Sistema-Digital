@@ -35,7 +35,7 @@ export const NAV_PRINCIPAL: NavItem[] = [
 ];
 
 export const NAV_SECUNDARIA: NavItem[] = [
-  { href: "/configuracoes", rotulo: "Configurações", icone: Settings, componente: "C09" },
+  { href: "/configuracoes", rotulo: "Configurações", icone: Settings },
   { href: "/informacoes", rotulo: "Informações", icone: Info },
 ];
 

@@ -38,6 +38,7 @@ from src.application.ports.provas_repository import (
     ProvaJaExisteError,
     ProvasRepositoryPort,
 )
+from src.application.ports.settings_repository import SettingsRepositoryPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import UsuariosRepositoryPort
@@ -51,6 +52,7 @@ from src.domain.provas import (
     validar_arte,
     validar_vendedor,
 )
+from src.domain.settings import CHAVE_ETIQUETA, ConfiguracaoEtiqueta, efetivar_config_etiqueta
 
 logger = logging.getLogger("rastreio.provas")
 
@@ -271,6 +273,8 @@ class ProvasConsultaService:
     ``storage``/``etiqueta`` só são exigidos pelos caminhos de arte/etiqueta (C08);
     são opcionais para manter os testes de listagem (que só usam ``listar``/
     ``vendedores``) sem dublês de IO. A injeção real (DI) sempre os fornece.
+    ``settings_repo`` (W2-C09) alimenta a etiqueta com a configuração do template
+    (RN-011); ausente → template padrão (degradação graciosa).
     """
 
     def __init__(
@@ -278,10 +282,12 @@ class ProvasConsultaService:
         repo: ProvasRepositoryPort,
         storage: StoragePort | None = None,
         etiqueta: EtiquetaPort | None = None,
+        settings_repo: SettingsRepositoryPort | None = None,
     ) -> None:
         self._repo = repo
         self._storage = storage
         self._etiqueta = etiqueta
+        self._settings_repo = settings_repo
 
     # ----------------------------------------------------------------- detalhe
     async def obter(self, prova_id: str) -> ProvaListagem:
@@ -336,8 +342,26 @@ class ProvasConsultaService:
         etiqueta = self._etiqueta_obrigatoria()
         nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
         vendedor_nome = nomes.get(prova.vendedor_id) or "-"
-        pdf = await asyncio.to_thread(etiqueta.gerar_pdf, prova, vendedor_nome)
+        # W2-C09 (RN-011): a etiqueta passa a respeitar a configuração salva do
+        # template (padrão/personalizado). Lida na MESMA sessão RLS (leitura
+        # authenticated — DP-2); falha na leitura cai no padrão (uma etiqueta
+        # sempre sai — mesma filosofia da degradação cp1252 do C06).
+        config = await self._config_etiqueta()
+        pdf = await asyncio.to_thread(etiqueta.gerar_pdf, prova, vendedor_nome, config)
         return pdf, prova.codigo
+
+    async def _config_etiqueta(self) -> ConfiguracaoEtiqueta | None:
+        if self._settings_repo is None:
+            return None  # caminhos sem settings (testes) → template padrão
+        try:
+            registro = await self._settings_repo.obter(CHAVE_ETIQUETA)
+        except Exception:
+            logger.warning(
+                "config da etiqueta indisponível — usando template padrão",
+                extra={"event": "config_etiqueta_indisponivel"},
+            )
+            return None
+        return efetivar_config_etiqueta(registro.valor if registro is not None else None)
 
     def _storage_obrigatorio(self) -> StoragePort:
         if self._storage is None:  # pragma: no cover — a DI sempre injeta

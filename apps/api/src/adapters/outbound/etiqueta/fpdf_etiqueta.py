@@ -22,6 +22,7 @@ from fpdf import FPDF
 
 from src.application.ports.etiqueta import EtiquetaPort
 from src.domain.provas import Prova, Rota
+from src.domain.settings import ConfiguracaoEtiqueta
 
 _ASSETS = Path(__file__).parent / "assets"
 
@@ -67,9 +68,26 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
     def __init__(self, template: EtiquetaTemplate | None = None) -> None:
         self._t = template or EtiquetaTemplate()
 
+    def _template_efetivo(self, config: ConfiguracaoEtiqueta | None) -> EtiquetaTemplate:
+        """Resolve o template da geração (W2-C09 — RN-011/DP-5).
+
+        ``config`` ``personalizado`` sobrescreve os 5 parâmetros do template;
+        ``None``/``padrao`` mantém o template padrão injetado (``self._t``)."""
+        if config is None or not config.personalizado:
+            return self._t
+        return EtiquetaTemplate(
+            largura=config.largura,
+            altura=config.altura,
+            margem=config.margem,
+            fonte=config.fonte,
+            qr_zona_quieta_modulos=config.qr_zona_quieta_modulos,
+        )
+
     # ------------------------------------------------------------------ público
-    def gerar_pdf(self, prova: Prova, vendedor_nome: str) -> bytes:
-        t = self._t
+    def gerar_pdf(
+        self, prova: Prova, vendedor_nome: str, config: ConfiguracaoEtiqueta | None = None
+    ) -> bytes:
+        t = self._template_efetivo(config)
         pdf = FPDF(unit="mm", format=(t.largura, t.altura))
         # Fontes core com cp1252 (cobre acentos PT-BR, travessão, aspas curvas,
         # €): o default latin-1 do fpdf2 LEVANTA para esses caracteres — e nome/
@@ -147,6 +165,7 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
             x=qr_box_x + (qr_box_l - lado_qr) / 2,
             y=qr_box_y + 2.6,
             lado=lado_qr,
+            quieta=t.qr_zona_quieta_modulos,
         )
 
         # Código alfanumérico em DESTAQUE, fonte grande abaixo do QR (DP-1/RF-003)
@@ -180,16 +199,20 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
             texto = texto[:-1]
         return texto + "..."
 
-    def _desenhar_qr(self, pdf: FPDF, conteudo: str, x: float, y: float, lado: float) -> None:
+    def _desenhar_qr(
+        self, pdf: FPDF, conteudo: str, x: float, y: float, lado: float, quieta: int
+    ) -> None:
         """QR vetorial: um retângulo preenchido por módulo escuro da matriz.
 
-        O leve overlap (+0,02 mm) evita fendas brancas entre módulos adjacentes
-        em rasterizadores de visualização; irrelevante na impressão.
+        ``quieta`` (zona quieta em módulos) vem do template EFETIVO da geração
+        (W2-C09/DP-5): assim a sobrescrita ``personalizado`` deste campo vale,
+        em vez de ler o default da instância. O leve overlap (+0,02 mm) evita
+        fendas brancas entre módulos adjacentes em rasterizadores de visualização;
+        irrelevante na impressão.
         """
         qr = segno.make_qr(conteudo, error="m")
         matriz = [bytes(linha) for linha in qr.matrix]
         n = len(matriz)
-        quieta = self._t.qr_zona_quieta_modulos
         modulo = lado / (n + 2 * quieta)
         origem_x = x + quieta * modulo
         origem_y = y + quieta * modulo

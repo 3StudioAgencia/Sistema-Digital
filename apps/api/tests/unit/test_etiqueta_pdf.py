@@ -15,6 +15,7 @@ import segno
 from src.adapters.outbound.etiqueta import fpdf_etiqueta
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import EtiquetaTemplate, FpdfEtiquetaGenerator
 from src.domain.provas import Prova, Rota
+from src.domain.settings import ConfiguracaoEtiqueta
 
 MM_PARA_PT = 72 / 25.4
 
@@ -110,6 +111,55 @@ def test_template_parametrizavel_muda_o_tamanho_fisico() -> None:
     assert m is not None
     assert float(m.group(1)) == pytest.approx(100 * MM_PARA_PT, abs=0.05)
     assert float(m.group(2)) == pytest.approx(60 * MM_PARA_PT, abs=0.05)
+
+
+def _media_box(pdf: bytes) -> tuple[float, float]:
+    m = re.search(rb"/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]", pdf)
+    assert m is not None
+    return float(m.group(1)), float(m.group(2))
+
+
+def test_config_default_espelha_o_template_padrao_do_c06() -> None:
+    """W2-C09/DP-5: os defaults do domínio não podem driftar do EtiquetaTemplate."""
+    c = ConfiguracaoEtiqueta()
+    t = EtiquetaTemplate()
+    assert (c.largura, c.altura, c.margem, c.fonte, c.qr_zona_quieta_modulos) == (
+        t.largura,
+        t.altura,
+        t.margem,
+        t.fonte,
+        t.qr_zona_quieta_modulos,
+    )
+
+
+def test_config_personalizado_sobrescreve_o_template() -> None:
+    """W2-C09 (RN-011): config 'personalizado' muda a etiqueta gerada (C06)."""
+    config = ConfiguracaoEtiqueta(modo="personalizado", largura=100.0, altura=60.0)
+    largura, altura = _media_box(FpdfEtiquetaGenerator().gerar_pdf(_prova(), "V", config))
+    assert largura == pytest.approx(100 * MM_PARA_PT, abs=0.05)
+    assert altura == pytest.approx(60 * MM_PARA_PT, abs=0.05)
+
+
+def test_config_padrao_ignora_sobrescritas() -> None:
+    """'padrao' usa o template padrão mesmo com campos sobrescritos no objeto."""
+    config = ConfiguracaoEtiqueta(modo="padrao", largura=100.0, altura=60.0)
+    largura, altura = _media_box(FpdfEtiquetaGenerator().gerar_pdf(_prova(), "V", config))
+    assert largura == pytest.approx(95 * MM_PARA_PT, abs=0.05)
+    assert altura == pytest.approx(55 * MM_PARA_PT, abs=0.05)
+
+
+def test_config_personalizado_aplica_zona_quieta_do_qr() -> None:
+    """W2-C09/DP-5: a sobrescrita de qr_zona_quieta_modulos DEVE valer (o QR muda).
+
+    Sem o tamanho físico mudar (mesma largura/altura), o único efeito é a zona
+    quieta — então os bytes do PDF precisam diferir do padrão (módulo=2)."""
+    padrao = FpdfEtiquetaGenerator().gerar_pdf(
+        _prova(), "V", ConfiguracaoEtiqueta(modo="personalizado", qr_zona_quieta_modulos=2)
+    )
+    custom = FpdfEtiquetaGenerator().gerar_pdf(
+        _prova(), "V", ConfiguracaoEtiqueta(modo="personalizado", qr_zona_quieta_modulos=8)
+    )
+    assert padrao != custom
 
 
 def test_pdf_e_deterministico_para_a_mesma_prova() -> None:

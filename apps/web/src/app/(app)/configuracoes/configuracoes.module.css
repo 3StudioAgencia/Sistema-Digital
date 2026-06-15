@@ -1,0 +1,273 @@
+/* Configurações do sistema (W2-C09) — fiel ao padrão do design: título 64px +
+   sequência de cartões brancos (raio 30), cada um com título, descrição, campos
+   e um botão "Salvar" amarelo próprio (save granular). Mesma régua fluida (--u)
+   e tokens das demais páginas (C04/C06/C08). */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(108 * var(--u)) 28px 28px;
+  overflow-y: auto;
+}
+
+.titulo {
+  font-size: calc(64 * var(--u));
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+  flex: none;
+}
+
+.lista {
+  margin-top: calc(40 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(28 * var(--u));
+}
+
+/* -------------------------------------------------- cartão de configuração */
+.card {
+  background: var(--app-card-white);
+  border-radius: var(--app-card-radius);
+  padding: calc(40 * var(--u)) calc(44 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(40 * var(--u));
+}
+
+.cardMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitulo {
+  font-size: calc(36 * var(--u));
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.cardDescricao {
+  margin-top: calc(8 * var(--u));
+  max-width: 64ch;
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.cardCampos {
+  margin-top: calc(28 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(20 * var(--u));
+}
+
+.cardAcao {
+  flex: none;
+}
+
+/* -------------------------------------------------- campos */
+.campo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rotulo {
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+  margin-bottom: calc(10 * var(--u));
+}
+
+.entrada {
+  width: 100%;
+  max-width: calc(220 * var(--u));
+  height: calc(56 * var(--u));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-shell-bg);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(18 * var(--u));
+  padding: 0 24px;
+}
+
+.entrada:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+.entrada[aria-invalid="true"] {
+  outline: 2px solid var(--app-danger);
+  outline-offset: 0;
+}
+
+.erro {
+  margin-top: calc(8 * var(--u));
+  font-size: calc(14 * var(--u));
+  color: var(--app-danger);
+}
+
+.slotSelect {
+  position: relative;
+  height: calc(56 * var(--u));
+  max-width: calc(220 * var(--u));
+}
+
+/* -------------------------------------------------- botão Salvar (por card) */
+.botaoSalvar {
+  flex: none;
+  height: calc(56 * var(--u));
+  padding: 0 calc(56 * var(--u));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoSalvar:hover {
+  opacity: 0.9;
+}
+
+.botaoSalvar:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* -------------------------------------------------- segmented (Modo) */
+.segmento {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(calc(140 * var(--u)), 1fr));
+  background: var(--app-shell-bg);
+  border-radius: var(--app-radius-pill);
+  height: calc(56 * var(--u));
+  padding: calc(5 * var(--u));
+  width: fit-content;
+}
+
+.segmentoItem {
+  position: relative;
+  border: 0;
+  background: none;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: calc(18 * var(--u));
+  color: var(--app-ink);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.segmentoItem:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+/* Pílula preta animada por transform (layoutId) — GPU only. */
+.segmentoPill {
+  position: absolute;
+  inset: 0;
+  background: var(--app-ink);
+  border-radius: var(--app-radius-pill);
+}
+
+.segmentoRotulo {
+  position: relative;
+  z-index: 1;
+}
+
+.segmentoItem[data-ativa] .segmentoRotulo {
+  color: #ffffff;
+}
+
+/* -------------------------------------------------- grade do template */
+.gradeEtiqueta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: calc(40 * var(--u));
+  row-gap: calc(20 * var(--u));
+}
+
+/* -------------------------------------------------- estados auxiliares */
+.skeleton {
+  min-height: calc(180 * var(--u));
+  opacity: 0.6;
+}
+
+.aviso {
+  margin-top: calc(40 * var(--u));
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+}
+
+.linkRetry {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* -------------------------------------------------- responsivo (≤768px) */
+@media (max-width: 768px) {
+  .pagina {
+    padding: 24px 16px;
+  }
+
+  .titulo {
+    font-size: 32px;
+  }
+
+  .lista {
+    margin-top: 20px;
+    gap: 16px;
+  }
+
+  .card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+    padding: 20px 16px;
+  }
+
+  .cardTitulo {
+    font-size: 24px;
+  }
+
+  .cardDescricao,
+  .rotulo,
+  .segmentoItem {
+    font-size: 15px;
+  }
+
+  .entrada,
+  .slotSelect {
+    max-width: none;
+    height: 48px;
+    font-size: 15px;
+  }
+
+  .segmento {
+    width: 100%;
+    height: 48px;
+  }
+
+  .gradeEtiqueta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .botaoSalvar {
+    width: 100%;
+    height: 48px;
+    font-size: 16px;
+    padding: 0;
+  }
+}

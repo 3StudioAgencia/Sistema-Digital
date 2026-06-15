@@ -21,6 +21,7 @@ from src.application.ports.provas_repository import (
 from src.application.ports.storage import StorageObjectNotFound
 from src.application.provas import ProvasConsultaService
 from src.domain.provas import EstadoProva, Prova, ProvaNaoEncontradaError, Rota
+from src.domain.settings import ConfiguracaoEtiqueta
 
 from tests.conftest import FakeStorage
 
@@ -68,13 +69,18 @@ class FakeRepo(ProvasRepositoryPort):
 
 
 class FakeEtiqueta(EtiquetaPort):
-    """Captura o nome recebido — prova que o fallback/projetor chegou ao gerador."""
+    """Captura o nome/config recebidos — prova que o fallback/projetor e a
+    configuração (W2-C09) chegaram ao gerador."""
 
     def __init__(self) -> None:
         self.ultimo_nome: str | None = None
+        self.ultima_config: ConfiguracaoEtiqueta | None = None
 
-    def gerar_pdf(self, prova: Prova, vendedor_nome: str) -> bytes:
+    def gerar_pdf(
+        self, prova: Prova, vendedor_nome: str, config: ConfiguracaoEtiqueta | None = None
+    ) -> bytes:
         self.ultimo_nome = vendedor_nome
+        self.ultima_config = config
         return b"%PDF-fake " + prova.codigo.encode()
 
 

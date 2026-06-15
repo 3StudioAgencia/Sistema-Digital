@@ -84,6 +84,8 @@ pnpm dev                                  # http://localhost:3000
 > **Listagem de provas (W2-C07):** `uv run alembic upgrade head` chega à **`0011`** — `0010` adiciona `provas.finalizada_em` (nullable, populada pelo C11) + a função que resolve o nome do vendedor na listagem; `0011` move essa função para o schema **`private`** não exposto pela Data API (remediação dos advisors de RPC). **Já aplicadas no Supabase real** (`alembic_version=0011`). A tela **`/provas`** lista/busca/filtra com escopo por perfil (RLS) e estado de filtros na **URL**; o botão "Ver" leva ao detalhe. Detalhes em [`docs/provas-listagem.md`](./docs/provas-listagem.md).
 >
 > **Detalhe de provas (W2-C08):** `uv run alembic upgrade head` chega à **`0012`** (`provas.ciclo_atual` NOT NULL default 1 — incrementado pelo C15). A tela **`/provas/[id]`** mostra arte (servida por **proxy** do backend, sem URL pública), metadados, **ciclo atual**, rota/status, ações de etiqueta (**visualizar** em modal / **baixar**) e o **histórico** em empty state (timeline no C13). Página **universal** com escopo pela RLS: acesso fora do escopo **redireciona** sem revelar se a prova existe. A etiqueta deixou de ser admin-only (universal-em-escopo). Detalhes em [`docs/provas-detalhe.md`](./docs/provas-detalhe.md).
+>
+> **Configurações (W2-C09 — fecha a Wave 2):** `uv run alembic upgrade head` chega à **`0013`** (tabela **`system_settings`** chave-valor + RLS: leitura `authenticated`, escrita admin-only; **já aplicada no Supabase real**, `alembic_version=0013`). A tela **`/configuracoes`** (exclusiva do 3Studio) configura o **tempo de atraso** (horas úteis, padrão 48 — aplicado de imediato, sem cache) e o **template de etiqueta** (padrão/personalizado), com **"Salvar" por card**. O template salvo é respeitado pela geração da etiqueta (C06). Nada novo obrigatório de operação (a tela funciona com os defaults). Detalhes em [`docs/configuracoes.md`](./docs/configuracoes.md).
 
 ---
 
@@ -126,7 +128,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | --- | --- | --- |
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
-| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Config | **Em andamento** 🔄 |
+| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |

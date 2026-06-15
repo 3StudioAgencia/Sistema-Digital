@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 12 — 2026-06-15 — [Wave 2 / Componente C09] Tela de Configurações do Sistema (FECHA A WAVE 2)
+
+**Objetivo:** Configurações do sistema (RF-022), exclusivas do 3Studio: tempo de atraso (RN-008/US-016) e template de etiqueta (RN-011), persistidos em `system_settings` com RLS, consumíveis server-side (etiqueta C06 agora; dashboard C16 depois). Último componente da Wave 2.
+
+**Decisões (respostas dos Pontos de Decisão §4 — tudo conforme recomendado):**
+- **DP-1** modelo **chave-valor** (`system_settings`) + registro de domínio (defaults/validação por chave). **DP-2** RLS **leitura `authenticated`** / **escrita admin-only** (valores não-sigilosos alimentam C16/C06 na própria sessão RLS — sem SECURITY DEFINER). **DP-3** página **3Studio-only** pelo flag `administrador` (proxy C05 + gate `Recurso.CONFIGURACOES` + RLS). **DP-4** **sem cache** — leitura fresca = imediato (US-016). **DP-5** "personalizado" = sobrescrita dos **5 campos do `EtiquetaTemplate`** do C06 (o gerador só passa a **ler** a config). **DP-6** settings desta sessão = **tempo de atraso + template**, **save por card**.
+
+**Feito:**
+- **Recon (workflow de 7 agentes)** confirmou o estado real e divergências do prompt: o recurso/rota/nav **`configuracoes` já existiam** (C05, admin-only); **não há cache** no `apps/api`; o `EtiquetaTemplate` do C06 expõe **só 5 campos**; prefixo HTTP real é **sem `/api`**; próxima migration **0013**; próximo ADR **047**.
+- **Backend:** migration **`0013`** (`system_settings` chave-valor + RLS: SELECT authenticated, INSERT/UPDATE admin, sem DELETE) + espelhos `migrations/rls/system_settings_*.sql`. Domínio `domain/settings.py` (registro de chaves: defaults/validação + `ConfiguracaoEtiqueta` + `efetivar_*`); `SettingsRepositoryPort`/`SqlAlchemySettingsRepository` (upsert idempotente, sem commit); `SettingsService` (`listar`/`salvar`/`obter_config_etiqueta`); router `/settings` (`GET`+`PUT/{chave}`) gateado por `get_settings_service`. **Integração C06:** `EtiquetaPort.gerar_pdf(... , config)`; `_template_efetivo`; `ProvasConsultaService.gerar_etiqueta` lê a config na mesma sessão RLS.
+- **Frontend:** `/configuracoes` (server fino → `ConfiguracoesView` client): cards **Tempo de atraso** e **Template de etiqueta** com **Salvar por card**, validação em tempo real, estados carregando/erro(retry)/**restrito (403)**, toast; `lib/api/configuracoes.ts`. Segmented Modo com pílula `layoutId` + teclado WAI-ARIA; reveal por `AnimatePresence`; reduced-motion. `nav-items.ts` sem o marcador placeholder.
+- **Revisão adversarial (workflow de 14 agentes, 4 dimensões × verificadores céticos):** **7 confirmados** (2 médios, 5 baixos), todos corrigidos — **`qr_zona_quieta_modulos`** ignorado (lia `self._t`, não o template efetivo) → fix + teste por bytes; segmented sem teclado → navegação WAI-ARIA; save-padrão gravava dimensões antigas → grava defaults; `toastRef` morto removido; +testes (save-padrão, teclado, reduced-motion, payload completo).
+- **Deploy:** migration **`0013`** aplicada no **Supabase real** via MCP (tabela + RLS + 3 policies + bump `alembic_version=0013`); advisors de segurança sem achados novos.
+- **Docs:** `docs/configuracoes.md`; **ADR-047 a ADR-051**; CLAUDE.md §9.
+
+**Testes / cobertura:**
+- api: **461 verdes (offline + `@db`, PG 17 local 5433), cobertura 95%** — `test_settings_dominio.py`, `test_settings_service.py`, `test_equivalencia_rls_system_settings.py`, `test_etiqueta_pdf.py` (config + qr), `test_settings_endpoints.py` (@db: defaults, delay imediato, 422, **403 não-3Studio**, etiqueta padrão×personalizado), `test_rls_system_settings.py` (@db: escrita admin-only, leitura authenticated, sem DELETE), `test_migrations.py` (head `0013`). `ruff`/`ruff format`/`mypy --strict` limpos.
+- web: **122 verdes** (`configuracoes-view.test.tsx`: render, salvar delay+toast, validação sem API, personalizado revela+salva objeto completo, save-padrão, teclado, reduced-motion, 403→restrito, erro→retry); E2E `e2e/configuracoes.spec.ts` (proteção + live opt-in). `pnpm lint`/`build` limpos.
+
+**Pendências / em aberto:**
+- [x] **Migration `0013` aplicada no Supabase real** (via MCP): `alembic_version=0013`, `system_settings` + RLS (3 policies); advisors sem achados novos (os 2 pré-existentes — RLS-no-policy do `alembic_version` lockado e leaked-password — permanecem).
+- [ ] **Responsável (operação):** nada novo obrigatório p/ o C09 (a página funciona com os defaults; o admin salva quando quiser). Pendências antigas seguem (R2_*, política de senha, leaked-password protection).
+- [ ] **Wave 2 concluída** — sugerir **auditoria da Wave 2** (C06→C09) antes da Wave 3, como na Wave 1.
+
+**Próximo passo:**
+- **W3-C10 · Escaneamento por Câmera + Fallback Manual (Mobile-First)** — abre a Wave 3 (fluxo de movimentação). Sugerido **auditar a Wave 2** antes.
+
+**Definition of Done:** ✅ atendida (code review adversarial + remediação; testes ≥80% domínio/serviço; migration+RLS versionadas e aplicadas; acesso negado a não-3Studio em middleware **e** RLS; sem erros de console/log; docs do módulo; error boundary do grupo `(app)`; animações com reduced-motion; sem segredos versionados).
+
+---
+
 ## Sessão 11 — 2026-06-15 — [Wave 2 / Componente C08] Visualização de Prova (Detalhe)
 
 **Objetivo:** Página de detalhe da prova (`/provas/[id]`): arte, metadados completos, rota/status, ciclo atual, ações de etiqueta (visualizar/baixar) e o histórico em empty state — universal, com escopo pela RLS e redirect sem vazar existência.

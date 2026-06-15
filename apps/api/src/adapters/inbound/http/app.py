@@ -23,6 +23,7 @@ from src.adapters.inbound.http.middleware import (
     RequestIdMiddleware,
 )
 from src.adapters.inbound.http.provas import router as provas_router
+from src.adapters.inbound.http.settings import router as settings_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
 from src.adapters.outbound.identity.supabase_admin import UnconfiguredIdentityProvider
@@ -100,6 +101,7 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(usuarios_router)
     app.include_router(provas_router)
+    app.include_router(settings_router)
     return app
 
 

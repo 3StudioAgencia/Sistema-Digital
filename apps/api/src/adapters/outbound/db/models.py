@@ -12,6 +12,7 @@ mantendo a sincronização Python ↔ PG do glossário (CLAUDE.md §6).
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Integer, MetaData, String, Uuid, text
 from sqlalchemy.dialects import postgresql
@@ -128,4 +129,26 @@ class ProvaRow(Base):
     )
 
 
-__all__ = ["NAMING_CONVENTION", "Base", "ProvaRow", "UsuarioRow", "metadata"]
+class SystemSettingRow(Base):
+    """Linha da tabela ``system_settings`` (migration 0013 — W2-C09).
+
+    Modelo chave-valor (DP-1): ``value`` JSONB guarda o valor da chave conhecida
+    (escalar como ``delay_horas_uteis`` ou objeto como ``etiqueta_template``),
+    validado pelo registro de domínio (``src/domain/settings.py``). RLS: leitura
+    ``authenticated``, escrita admin-only (DP-2/DP-3). ``updated_by`` é o UUID do
+    admin que salvou (auditoria leve — sem FK, ``usuarios`` nunca é deletado).
+    """
+
+    __tablename__ = "system_settings"
+    # RETURNING do updated_at (server default) no upsert — sem SELECT extra (RNF-020).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[Any] = mapped_column(postgresql.JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+
+
+__all__ = ["NAMING_CONVENTION", "Base", "ProvaRow", "SystemSettingRow", "UsuarioRow", "metadata"]
