@@ -288,7 +288,11 @@ async def test_update_como_authenticated_nao_tem_grant(cenario: dict[str, Any]) 
 # ---------------------------------------------------------------------------
 async def test_update_de_rota_e_rejeitado_pelo_trigger(cenario: dict[str, Any]) -> None:
     engine: AsyncEngine = cenario["engine"]
-    alvo = next(iter(cenario["todas"]))
+    # `de_v1` só tem provas em 'matriz'/'lam_matriz' — assim `SET rota='filial'` é
+    # SEMPRE uma mudança real (o `todas` inclui uma prova já 'filial'; como é um set
+    # de UUIDs aleatórios, `next(iter())` podia escolhê-la, tornando o UPDATE um
+    # no-op e o trigger `IS DISTINCT FROM` não dispararia — flaky pré-C08).
+    alvo = next(iter(cenario["de_v1"]))
     with pytest.raises(DBAPIError, match="imutavel"):
         async with engine.begin() as conn:  # owner: RLS/grants não se aplicam
             await conn.execute(
