@@ -50,13 +50,15 @@
 - web: **113 verdes** (`prova-detalhe-view.test.tsx`: render fiel, arte por proxy, 404→toast+redirect, baixar/visualizar etiqueta, Voltar, erro+retry, revogação do objectURL no unmount); E2E `e2e/prova-detalhe.spec.ts` (proteção + live opt-in). `pnpm lint`/`format:check`/`build` limpos.
 
 **Pendências / em aberto:**
-- [ ] Aplicar a migration **`0012`** no Supabase real (`alembic upgrade head` → `alembic_version=0012`) — não aplicada nesta sessão (validada só no PG local). As demais pendências de operação do C06/C07 (vars `R2_*`, role de runtime, advisor de leaked-password) seguem em `DECISIONS.md`.
-- [ ] Rodar `pnpm test:e2e` com `E2E_LIVE=1` quando houver stack + sessão (suite live opt-in).
+- [x] **Migration `0012` aplicada no Supabase real** (via MCP, **pós-entrega**, ao diagnosticar a listagem quebrada — ver abaixo): `alembic_version=0012`, coluna `ciclo_atual` NOT NULL default 1; advisors de segurança sem achados novos.
+- [ ] Rodar `pnpm test:e2e` com `E2E_LIVE=1` quando houver stack + sessão (suite live opt-in). Demais pendências de operação do C06/C07 (vars `R2_*`, role de runtime, leaked-password) seguem em `DECISIONS.md`.
+
+**Incidente pós-entrega (mesma sessão):** a tela `/provas` (listagem do C07) parou de carregar ("Não foi possível carregar as provas"). **Causa:** o C08 adicionou `ciclo_atual` ao modelo ORM **compartilhado** `ProvaRow`, então `select(ProvaRow)` (listagem E detalhe) passou a projetar `provas.ciclo_atual`; como a `0012` ainda **não** estava aplicada no Supabase real (estava em `0011`), a query batia em coluna inexistente → 500. **Mesmo padrão do C07** (a `0010` que faltava derrubou a listagem). **Fix:** aplicada a `0012` em produção (SQL de `alembic upgrade 0011:0012 --sql` + bump do `alembic_version`); listagem volta a carregar. **Lição:** migration que altera o modelo ORM compartilhado precisa ir a produção **junto** com o deploy do código (a `0012` deveria ter sido aplicada no encerramento, como C06/C07 fizeram com 0009/0011).
 
 **Próximo passo:**
 - **W2-C09 · Tela de Configurações do Sistema** (parametrização da etiqueta — RN-011 — e demais ajustes).
 
-**Definition of Done:** ✅ atendida (testes ≥80% domínio/serviço; integração @db verde; migration versionada/up-down; escopo por perfil + anti-vazamento testados; arte sem URL pública; error boundary do grupo; animações com `prefers-reduced-motion`; sem segredos versionados; gates verdes). ⚠️ migration `0012` ainda **não aplicada em produção** (pendência acima).
+**Definition of Done:** ✅ atendida (testes ≥80% domínio/serviço; integração @db verde; migration versionada/up-down **e aplicada em produção**; escopo por perfil + anti-vazamento testados; arte sem URL pública; error boundary do grupo; animações com `prefers-reduced-motion`; sem segredos versionados; gates verdes).
 
 ---
 
