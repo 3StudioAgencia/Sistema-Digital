@@ -166,7 +166,6 @@ async def vendedores(
     return [VendedorRefOut(id=v.id, nome=v.nome) for v in await service.vendedores()]
 
 
-
 @router.post("", response_model=ProvaOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     service: Annotated[ProvasService, Depends(get_provas_service)],

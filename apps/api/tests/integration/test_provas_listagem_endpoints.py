@@ -15,6 +15,7 @@ Exercita o caminho HTTP inteiro como em produção (``SET LOCAL ROLE authenticat
 """
 
 import datetime as dt
+import json
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -22,7 +23,9 @@ from typing import Any
 import httpx
 import jwt
 import pytest
-from sqlalchemy import event, text
+from sqlalchemy import bindparam, event, text
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.ext.asyncio import AsyncEngine
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.domain.provas import gerar_codigo
@@ -67,8 +70,14 @@ async def _seed_usuario(
                 "INSERT INTO usuarios (id, nome, email, setor, localizacao, administrador) "
                 "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
             ),
-            {"id": uid, "nome": nome, "email": f"{uid}@x.z", "setor": setor, "loc": loc,
-             "adm": administrador},
+            {
+                "id": uid,
+                "nome": nome,
+                "email": f"{uid}@x.z",
+                "setor": setor,
+                "loc": loc,
+                "adm": administrador,
+            },
         )
     return uid
 
@@ -125,23 +134,37 @@ async def ctx(
     base = dt.datetime(2026, 4, 9, 12, 0, tzinfo=dt.UTC)
     p_criada_reg = await _seed_prova(engine, vendedor_id=regiane, created_at=base)
     p_ida_reg = await _seed_prova(
-        engine, vendedor_id=regiane, status="com_motorista_ida_laminacao",
-        rota="lam_matriz", created_at=base + dt.timedelta(hours=1),
+        engine,
+        vendedor_id=regiane,
+        status="com_motorista_ida_laminacao",
+        rota="lam_matriz",
+        created_at=base + dt.timedelta(hours=1),
     )
     p_aprovada_pack = await _seed_prova(
-        engine, vendedor_id=packon, status="aprovada_vendedor", rota="filial",
-        cliente="Cocatrel", nome="Embalagem premium", requerimento="998877",
+        engine,
+        vendedor_id=packon,
+        status="aprovada_vendedor",
+        rota="filial",
+        cliente="Cocatrel",
+        nome="Embalagem premium",
+        requerimento="998877",
         created_at=base + dt.timedelta(hours=2),
     )
     p_clicheria_pack = await _seed_prova(
-        engine, vendedor_id=packon, status="recebida_clicheria",
+        engine,
+        vendedor_id=packon,
+        status="recebida_clicheria",
         created_at=base + dt.timedelta(hours=3),
         finalizada_em=dt.datetime(2026, 4, 12, 9, 0, tzinfo=dt.UTC),
     )
 
     ids = {
-        "admin": admin, "studio": studio, "clicheria": clicheria, "motorista": motorista,
-        "regiane": regiane, "packon": packon,
+        "admin": admin,
+        "studio": studio,
+        "clicheria": clicheria,
+        "motorista": motorista,
+        "regiane": regiane,
+        "packon": packon,
         "todas": {p_criada_reg, p_ida_reg, p_aprovada_pack, p_clicheria_pack},
         "de_regiane": {p_criada_reg, p_ida_reg},
         "de_packon": {p_aprovada_pack, p_clicheria_pack},
@@ -150,7 +173,9 @@ async def ctx(
         "p_clicheria_pack": p_clicheria_pack,
     }
     client = make_client(
-        settings, FakeStorage(), ping_ok,
+        settings,
+        FakeStorage(),
+        ping_ok,
         jwt_verifier=JwtVerifier(hs256_secret=HS256_SECRET),
         session_factory=create_request_session_factory(engine),
     )
@@ -252,8 +277,10 @@ async def test_filtro_cliente_contains(ctx: tuple[Any, ...]) -> None:
 async def test_filtro_finalizada_em_exclui_sem_carimbo(ctx: tuple[Any, ...]) -> None:
     client, _, ids = ctx
     body = await _listar(
-        client, _auth(ids["admin"], "studio", True),
-        finalizada_de="2026-04-12", finalizada_ate="2026-04-12",
+        client,
+        _auth(ids["admin"], "studio", True),
+        finalizada_de="2026-04-12",
+        finalizada_ate="2026-04-12",
     )
     assert _ids(body) == {ids["p_clicheria_pack"]}  # só a finalizada nesse dia
 
@@ -307,6 +334,56 @@ async def test_vendedores_endpoint_para_vendedor_so_ele_mesmo(ctx: tuple[Any, ..
     client, _, ids = ctx
     resp = await client.get("/provas/vendedores", headers=_auth(ids["regiane"], "vendedor"))
     assert [v["nome"] for v in resp.json()] == ["Regiane"]
+
+
+async def _nomes_de_vendedores_como(
+    engine: AsyncEngine, *, sub: str, setor: str, admin: bool, ids: list[str]
+) -> dict[str, str]:
+    """Chama a funcao SECURITY DEFINER como o perfil dado (simula RPC direto)."""
+    claims = json.dumps(
+        {
+            "sub": sub,
+            "user_id": sub,
+            "setor": setor,
+            "administrador": admin,
+            "role": "authenticated",
+            "aud": "authenticated",
+        }
+    )
+    stmt = text("SELECT id, nome FROM public.nomes_de_vendedores(:ids)").bindparams(
+        bindparam("ids", value=ids, type_=ARRAY(PgUuid(as_uuid=False)))
+    )
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        try:
+            await conn.execute(
+                text("SELECT set_config('request.jwt.claims', :c, true)"), {"c": claims}
+            )
+            await conn.execute(text("SET LOCAL ROLE authenticated"))
+            rows = (await conn.execute(stmt)).all()
+        finally:
+            await trans.rollback()
+    return {str(r.id): r.nome for r in rows}
+
+
+async def test_nomes_de_vendedores_respeita_escopo_do_chamador_via_rpc(
+    ctx: tuple[Any, ...],
+) -> None:
+    """DP-7 (defesa em profundidade): chamada DIRETA da funcao (estilo PostgREST
+    RPC) com ids arbitrarios so resolve nomes de vendedores VISIVEIS ao chamador —
+    o predicado de provas re-aplicado fecha o vazamento cross-escopo."""
+    _, engine, ids = ctx
+    alvo = [ids["regiane"], ids["packon"]]
+    # Admin ve ambos.
+    como_admin = await _nomes_de_vendedores_como(
+        engine, sub=ids["admin"], setor="studio", admin=True, ids=alvo
+    )
+    assert como_admin == {ids["regiane"]: "Regiane", ids["packon"]: "Packon"}
+    # Vendedor Regiane: mesmo passando o id de Packon, so resolve o PROPRIO nome.
+    como_reg = await _nomes_de_vendedores_como(
+        engine, sub=ids["regiane"], setor="vendedor", admin=False, ids=alvo
+    )
+    assert como_reg == {ids["regiane"]: "Regiane"}  # leak fechado
 
 
 async def test_listagem_sem_token_e_401(ctx: tuple[Any, ...]) -> None:

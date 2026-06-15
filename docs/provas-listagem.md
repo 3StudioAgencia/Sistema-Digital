@@ -86,7 +86,12 @@ nome)`** (migration `0010`, espelho em `migrations/rls/nomes_de_vendedores.sql`)
 - **SECURITY DEFINER** (roda como owner → vê todas as linhas), `SET search_path
   = ''`, corpo schema-qualificado (blindagem W1-A-004);
 - projeta o **mínimo**: só `id`+`nome`, **só de vendedores** (`setor='vendedor'`);
-- `EXECUTE` revogado de `PUBLIC` e concedido só a `authenticated`.
+- `EXECUTE` revogado de `PUBLIC` e concedido só a `authenticated`;
+- **re-aplica o escopo do chamador** (defesa em profundidade): como `public` é
+  exposta pela Data API/PostgREST, a função é chamável direto por RPC — por isso
+  o corpo só resolve nomes de vendedores presentes em provas **visíveis** ao
+  chamador (`EXISTS` espelhando as policies `provas_select_*` via os helpers
+  `app_*`). Mesmo por RPC direto, ninguém resolve nome fora do seu escopo.
 
 ## 5. Escopo por perfil — UI × RLS
 

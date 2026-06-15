@@ -63,8 +63,11 @@ class FakeProvasRepo(ProvasRepositoryPort):
 async def test_listar_resolve_nome_do_vendedor_uma_vez_por_pagina() -> None:
     """Sem N+1: a página com 3 linhas de 2 vendedores faz UMA resolução de nomes."""
     pagina = PaginaProvas(
-        items=[_prova("v1", codigo="PRV-2026-06-AAAAAA"), _prova("v2", codigo="PRV-2026-06-BBBBBB"),
-               _prova("v1", codigo="PRV-2026-06-CCCCCC")],
+        items=[
+            _prova("v1", codigo="PRV-2026-06-AAAAAA"),
+            _prova("v2", codigo="PRV-2026-06-BBBBBB"),
+            _prova("v1", codigo="PRV-2026-06-CCCCCC"),
+        ],
         total=3,
         page=1,
         page_size=20,

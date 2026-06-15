@@ -94,6 +94,15 @@
   opacity: 0.9;
 }
 
+/* Foco visível consistente com o restante da plataforma (login/usuarios). */
+.input:focus-visible,
+.botaoVer:focus-visible,
+.botaoLimpar:focus-visible,
+.tentarNovamente:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
 /* -------------------------------------------------- tabela (desktop) */
 .card {
   margin-top: calc(30 * var(--u));

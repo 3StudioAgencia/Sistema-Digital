@@ -12,6 +12,14 @@
 -- function_search_path_mutable, W1-A-004). Idempotente (CREATE OR REPLACE).
 -- EXECUTE revogado de PUBLIC e concedido so a `authenticated` (privilegio minimo).
 --
+-- DEFESA EM PROFUNDIDADE: `public` e exposta pela Data API/PostgREST, entao a
+-- funcao seria chamavel direto via RPC com ids arbitrarios. Por isso o corpo
+-- RE-APLICA o escopo do chamador: so resolve nomes de vendedores que aparecem em
+-- provas VISIVEIS a ele (espelha as policies `provas_select_*` via os helpers
+-- `app_*`, que leem request.jwt.claims). Mesmo por RPC direto, um Vendedor ou
+-- Motorista nao resolve o nome de quem esta fora do seu escopo. (Drift: este
+-- predicado acompanha a RLS de `provas` — mantenha-os em sincronia.)
+--
 -- Espelho 1:1 da migration 0010 (reaplicar apos qualquer DROP/recriacao).
 
 CREATE OR REPLACE FUNCTION public.nomes_de_vendedores(p_ids uuid[])
@@ -24,7 +32,20 @@ AS $$
     SELECT u.id, u.nome
     FROM public.usuarios u
     WHERE u.setor = 'vendedor'
-      AND u.id = ANY(p_ids);
+      AND u.id = ANY(p_ids)
+      AND EXISTS (
+          SELECT 1 FROM public.provas p
+          WHERE p.vendedor_id = u.id AND (
+              public.app_is_admin()
+              OR public.app_setor() IN ('studio', 'clicheria')
+              OR (public.app_setor() = 'vendedor'
+                  AND p.vendedor_id = public.app_current_user_id())
+              OR (public.app_setor() = 'motorista' AND p.status IN (
+                  'com_motorista_ida_laminacao',
+                  'com_motorista_volta_laminacao',
+                  'com_motorista_entrega_final'))
+          )
+      );
 $$;
 
 REVOKE ALL ON FUNCTION public.nomes_de_vendedores(uuid[]) FROM PUBLIC;

@@ -44,9 +44,11 @@ function formatarData(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${d.getFullYear()}`;
+  // Em UTC para casar com o limite de dia do filtro (o backend compara o dia em
+  // UTC); evita a prova filtrada em "09/04" aparecer como "08/04" na coluna.
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${d.getUTCFullYear()}`;
 }
 
 export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
@@ -301,7 +303,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="123456"
-              aria-label="Buscar por nome ou requerimento"
               className={styles.input}
             />
           </span>
@@ -315,7 +316,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
               value={cliente}
               onChange={(e) => setCliente(e.target.value)}
               placeholder="Nome do cliente"
-              aria-label="Filtrar por cliente"
               className={styles.input}
             />
           </span>
@@ -345,7 +345,7 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
           </span>
         </div>
 
-        {mostrarFiltroVendedor && (
+        {mostrarFiltroVendedor ? (
           <div className={styles.campo}>
             <span className={styles.rotuloCampo}>Vendedor:</span>
             <span className={styles.controle}>
@@ -357,6 +357,10 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
               />
             </span>
           </div>
+        ) : (
+          // Espaçador: mantém "Limpar" na 4ª coluna da 2ª linha quando o filtro
+          // Vendedor está escondido (escopo "as próprias").
+          <div aria-hidden />
         )}
 
         <label className={styles.campo}>
@@ -366,7 +370,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
               type="date"
               value={searchParams.get("criada") ?? ""}
               onChange={(e) => aplicarParam({ criada: e.target.value || undefined })}
-              aria-label="Filtrar por data de criação"
               className={`${styles.input} ${styles.inputData}`}
             />
           </span>
@@ -379,7 +382,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
               type="date"
               value={searchParams.get("finalizada") ?? ""}
               onChange={(e) => aplicarParam({ finalizada: e.target.value || undefined })}
-              aria-label="Filtrar por data de finalização"
               className={`${styles.input} ${styles.inputData}`}
             />
           </span>

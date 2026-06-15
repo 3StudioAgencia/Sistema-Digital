@@ -6,6 +6,8 @@
  * usuário não provisionado, env ausente): o shell renderiza com fallback em
  * vez de derrubar a árvore inteira (RNF-014/016).
  */
+import { cache } from "react";
+
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 import type { Usuario } from "./usuarios";
@@ -16,7 +18,11 @@ import type { Usuario } from "./usuarios";
 // para o fallback de e-mail.
 const TIMEOUT_MS = 2_000;
 
-export async function fetchUsuarioAtual(): Promise<Usuario | null> {
+// Memoizado por REQUISIÇÃO com React `cache()`: o layout do grupo `(app)` e uma
+// página que também precise do perfil (ex.: `/provas`, que deriva o escopo —
+// W2-C07) compartilham UMA única ida ao `/usuarios/me` por render, em vez de
+// duas idênticas em sequência (mínimo de requisições — RNF-020).
+export const fetchUsuarioAtual = cache(async (): Promise<Usuario | null> => {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!base) return null;
 
@@ -40,4 +46,4 @@ export async function fetchUsuarioAtual(): Promise<Usuario | null> {
   } catch {
     return null;
   }
-}
+});

@@ -15,6 +15,14 @@ Aditiva e nao destrutiva (greenfield; sem dados legados — CLAUDE.md §2.1):
   email/setor/flag) e so de vendedores, sem ampliar a Matriz §7 (nenhuma policy
   nova em usuarios). ``SET search_path = ''`` + corpo schema-qualificado: mesma
   blindagem dos helpers de RLS (W1-A-004). EXECUTE so para ``authenticated``.
+  **Escopo do CHAMADOR re-aplicado no corpo** (defesa em profundidade): como
+  ``public`` e exposta pela Data API/PostgREST, a funcao seria chamavel direto
+  via RPC com ids arbitrarios; por isso ela so resolve nomes de vendedores que
+  aparecem em provas VISIVEIS ao chamador — re-aplicando as policies
+  ``provas_select_*`` (C06) atraves dos helpers ``app_*`` que leem
+  ``request.jwt.claims``. Assim, mesmo por RPC direto, um Vendedor/Motorista nao
+  resolve o nome de quem esta fora do seu escopo. (Drift: se a RLS de ``provas``
+  mudar, este predicado precisa acompanhar — vive junto da policy aqui.)
 
 Espelho versionado 1:1 em ``migrations/rls/nomes_de_vendedores.sql`` (DAT §2;
 reaplicar apos recriacao). Instrucoes SEPARADAS (asyncpg nao aceita multiplos
@@ -48,7 +56,22 @@ AS $$
     SELECT u.id, u.nome
     FROM public.usuarios u
     WHERE u.setor = 'vendedor'
-      AND u.id = ANY(p_ids);
+      AND u.id = ANY(p_ids)
+      -- So nomes de vendedores VISIVEIS ao chamador: re-aplica as policies
+      -- provas_select_* (C06) via os helpers app_* (leem request.jwt.claims).
+      AND EXISTS (
+          SELECT 1 FROM public.provas p
+          WHERE p.vendedor_id = u.id AND (
+              public.app_is_admin()
+              OR public.app_setor() IN ('studio', 'clicheria')
+              OR (public.app_setor() = 'vendedor'
+                  AND p.vendedor_id = public.app_current_user_id())
+              OR (public.app_setor() = 'motorista' AND p.status IN (
+                  'com_motorista_ida_laminacao',
+                  'com_motorista_volta_laminacao',
+                  'com_motorista_entrega_final'))
+          )
+      );
 $$
 """
 # Privilegio minimo: revoga o EXECUTE default de PUBLIC e concede so a

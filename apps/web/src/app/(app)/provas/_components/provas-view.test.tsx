@@ -103,7 +103,7 @@ describe("ProvasView (W2-C07)", () => {
       expect(mocks.listarProvas).toHaveBeenCalledTimes(1); // só a 1ª página no mount
       nav.replace.mockClear();
 
-      const campo = screen.getByLabelText("Buscar por nome ou requerimento");
+      const campo = screen.getByLabelText(/Buscar nome ou requerimento/);
       fireEvent.change(campo, { target: { value: "gra" } });
       fireEvent.change(campo, { target: { value: "granola" } });
 
@@ -135,7 +135,7 @@ describe("ProvasView (W2-C07)", () => {
         page: 1,
       }),
     );
-    expect(screen.getByLabelText("Buscar por nome ou requerimento")).toHaveValue("granola");
+    expect(screen.getByLabelText(/Buscar nome ou requerimento/)).toHaveValue("granola");
   });
 
   it("filtro de Status escreve o valor do enum na URL", async () => {
@@ -167,12 +167,12 @@ describe("ProvasView (W2-C07)", () => {
     nav.search = "busca=granola";
     render(<ProvasView escopo="todas" />);
     await screen.findByText("Moacyr");
-    expect(screen.getByLabelText("Buscar por nome ou requerimento")).toHaveValue("granola");
+    expect(screen.getByLabelText(/Buscar nome ou requerimento/)).toHaveValue("granola");
 
     await user.click(screen.getByRole("button", { name: "Limpar" }));
 
     expect(nav.replace).toHaveBeenCalledWith("/provas", { scroll: false }); // sem query
-    expect(screen.getByLabelText("Buscar por nome ou requerimento")).toHaveValue("");
+    expect(screen.getByLabelText(/Buscar nome ou requerimento/)).toHaveValue("");
   });
 
   it("'Ver' navega para o detalhe /provas/{id} (placeholder até o C08 — DP-6)", async () => {
