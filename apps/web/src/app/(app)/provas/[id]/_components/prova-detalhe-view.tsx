@@ -34,7 +34,7 @@ import {
   type ProvaDetalhe,
 } from "@/lib/api/provas";
 import { useReducedMotion } from "@/lib/motion/hooks";
-import { DURATION, EASING } from "@/lib/motion/tokens";
+import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { rotuloRota } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
 
@@ -170,12 +170,21 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
   }
 
   const duracao = reduced ? DURATION.instant : DURATION.medium;
+  // Entrada suave dos cartões (opacity + leve y), com pequeno stagger entre eles;
+  // instantânea sob prefers-reduced-motion. Só transform/opacity (GPU — §3.4).
+  const entrada = (delay: number) => ({
+    initial: { opacity: 0, y: reduced ? 0 : 8 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: duracao, ease: EASING.emphasized, delay: reduced ? 0 : delay },
+  });
+  // Feedback tátil de toque nas ações (mola única da plataforma — C03/SPRING).
+  const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   return (
     <section className={styles.pagina} aria-label="Detalhe da prova">
-      <button type="button" className={styles.voltar} onClick={voltar}>
+      <motion.button type="button" className={styles.voltar} onClick={voltar} {...toque}>
         <span aria-hidden>←</span> Voltar
-      </button>
+      </motion.button>
 
       {estado === "carregando" ? (
         <div className={`${styles.cardDetalhe} ${styles.skeletonCard}`} aria-hidden />
@@ -195,16 +204,20 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
         </p>
       ) : prova ? (
         <>
-          <motion.article
-            className={styles.cardDetalhe}
-            initial={{ opacity: 0, y: reduced ? 0 : 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: duracao, ease: EASING.emphasized }}
-          >
+          <motion.article className={styles.cardDetalhe} {...entrada(0)}>
             <div className={styles.arteCol}>
               {arteUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- blob de proxy autenticado (DP-5), não otimizável pelo next/image
-                <img src={arteUrl} alt={`Arte da prova ${prova.nome}`} className={styles.arte} />
+                <motion.img
+                  src={arteUrl}
+                  alt={`Arte da prova ${prova.nome}`}
+                  className={styles.arte}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{
+                    duration: reduced ? DURATION.instant : DURATION.short,
+                    ease: EASING.standard,
+                  }}
+                />
               ) : arteFalhou ? (
                 <div className={styles.artePlaceholder} role="img" aria-label="Arte indisponível">
                   Arte indisponível
@@ -230,28 +243,34 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
               </dl>
 
               <div className={styles.acoes}>
-                <button
+                <motion.button
                   type="button"
                   className={styles.btnPrimario}
                   onClick={visualizar}
                   disabled={visualizando}
+                  {...toque}
                 >
                   {visualizando ? "Abrindo…" : "Visualizar etiqueta"}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   type="button"
                   className={styles.btnSecundario}
                   onClick={baixar}
                   disabled={baixando}
+                  {...toque}
                 >
                   {baixando ? "Baixando…" : "Baixar etiqueta"}
-                </button>
+                </motion.button>
               </div>
             </div>
           </motion.article>
 
           {/* Histórico (DP-2): empty state agora; timeline do C13 pluga aqui. */}
-          <section className={styles.historico} aria-label="Histórico de movimentações">
+          <motion.section
+            className={styles.historico}
+            aria-label="Histórico de movimentações"
+            {...entrada(0.07)}
+          >
             <h2 className={styles.historicoTitulo}>Histórico de movimentações</h2>
             <div className={styles.historicoVazio}>
               <p>Esta prova ainda não teve movimentações.</p>
@@ -259,7 +278,7 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
                 A timeline visual fica disponível quando a prova for escaneada pela primeira vez.
               </p>
             </div>
-          </section>
+          </motion.section>
 
           <MotionModal
             open={modalAberto}
