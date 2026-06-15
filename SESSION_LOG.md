@@ -53,7 +53,7 @@
 - **web 104 verdes** (lint 0 erros — 2 warnings pré-existentes em C04/C06; `build`/`format:check` ok): `provas-view.test.tsx` (render fiel, debounce, hidratação da URL, filtro→URL, adaptação por perfil, "Limpar", "Ver", vazio/erro/403). E2E `provas-listagem.spec.ts` (proteção offline + live opt-in).
 
 **Pendências / em aberto:**
-- [ ] **Operação:** aplicar a migration `0010` no Supabase real (deploy de infra; mesmo passo das `0007-0009`).
+- [x] **Operação (feito nesta sessão):** migrations `0010`→`0011` aplicadas no Supabase real (`alembic_version=0011`, sem drift). O dono reportou a listagem em 500 → diagnóstico via MCP (prod estava em `0009`, sem `finalizada_em`/função); `0010` desbloqueou; os **advisors** flagraram a função SECURITY DEFINER em `public` como chamável por RPC (DEFAULT PRIVILEGES do Supabase) → **`0011`** move `nomes_de_vendedores` para o schema **`private`** (não exposto), revoga `anon`, concede só a `authenticated`. **Advisors limpos**, listagem funcional (admin vê as 2 provas; nome resolve via `private.nomes_de_vendedores`).
 - [ ] O filtro **"Finalizada em"** só retorna resultados após o **C11** popular `finalizada_em` (por design).
 - [ ] **C08** consome a rota `/provas/[id]` (hoje placeholder) e pode reusar `ProvaListagem`/rótulos/`status-labels`.
 - [ ] (Opcional) Se o C08+ precisar do `usuario` no cliente, considerar um contexto no app shell para evitar o 2º `GET /usuarios/me` da página de provas.

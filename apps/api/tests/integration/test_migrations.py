@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0010", (
-        "head deve registrar a revisão 0010 (listagem de provas — W2-C07)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0011", (
+        "head deve registrar a revisão 0011 (nomes_de_vendedores em schema privado — W2-C07)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -115,9 +115,21 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         == 1
     ), "0010 deve adicionar a coluna provas.finalizada_em"
     assert (
-        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores'")
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE p.proname = 'nomes_de_vendedores' AND n.nspname = 'private'",
+        )
         == 1
-    ), "0010 deve criar a função SECURITY DEFINER nomes_de_vendedores (DP-7)"
+    ), "0010+0011 devem deixar nomes_de_vendedores no schema private (DP-7)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE p.proname = 'nomes_de_vendedores' AND n.nspname = 'public'",
+        )
+        == 0
+    ), "0011 deve mover nomes_de_vendedores para fora do schema public (exposto)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"

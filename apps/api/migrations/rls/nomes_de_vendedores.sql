@@ -7,22 +7,25 @@
 -- por um JOIN sob a propria sessao (viria NULL). Esta funcao resolve o nome SEM
 -- ampliar a Matriz §7: projeta o MINIMO (apenas id+nome, apenas de vendedores).
 --
--- SECURITY DEFINER (roda como owner, que ve todas as linhas) + `SET search_path
--- = ''` + corpo schema-qualificado: mesma blindagem dos helpers de RLS (advisor
--- function_search_path_mutable, W1-A-004). Idempotente (CREATE OR REPLACE).
--- EXECUTE revogado de PUBLIC e concedido so a `authenticated` (privilegio minimo).
+-- SCHEMA `private` (NAO exposto pela Data API/PostgREST — migrations 0010 criou
+-- em public, 0011 moveu para private): a funcao e um resolvedor INTERNO chamado
+-- pelo backend, nao um RPC publico. Mover para fora do schema exposto elimina o
+-- vetor de RPC (advisors 0028/0029) — as DEFAULT PRIVILEGES do Supabase so
+-- concedem EXECUTE as roles de API para objetos de `public`. So `authenticated`
+-- recebe USAGE no schema + EXECUTE na funcao (privilegio minimo; `anon` nao).
 --
--- DEFESA EM PROFUNDIDADE: `public` e exposta pela Data API/PostgREST, entao a
--- funcao seria chamavel direto via RPC com ids arbitrarios. Por isso o corpo
--- RE-APLICA o escopo do chamador: so resolve nomes de vendedores que aparecem em
--- provas VISIVEIS a ele (espelha as policies `provas_select_*` via os helpers
--- `app_*`, que leem request.jwt.claims). Mesmo por RPC direto, um Vendedor ou
--- Motorista nao resolve o nome de quem esta fora do seu escopo. (Drift: este
--- predicado acompanha a RLS de `provas` — mantenha-os em sincronia.)
+-- SECURITY DEFINER (roda como owner, ve todas as linhas) + `SET search_path=''`
+-- + corpo schema-qualificado (blindagem W1-A-004). DEFESA EM PROFUNDIDADE: o
+-- corpo RE-APLICA o escopo do chamador (so resolve nomes de vendedores em provas
+-- VISIVEIS a ele — espelha as policies `provas_select_*` via os helpers `app_*`).
+-- (Drift: este predicado acompanha a RLS de `provas` — mantenha-os em sincronia.)
 --
--- Espelho 1:1 da migration 0010 (reaplicar apos qualquer DROP/recriacao).
+-- Idempotente. Espelho 1:1 das migrations 0010+0011 (reaplicar apos DROP).
 
-CREATE OR REPLACE FUNCTION public.nomes_de_vendedores(p_ids uuid[])
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION private.nomes_de_vendedores(p_ids uuid[])
 RETURNS TABLE (id uuid, nome text)
 LANGUAGE sql
 STABLE
@@ -48,12 +51,16 @@ AS $$
       );
 $$;
 
-REVOKE ALL ON FUNCTION public.nomes_de_vendedores(uuid[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.nomes_de_vendedores(uuid[]) FROM PUBLIC;
 
 DO $$
 BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        REVOKE ALL ON FUNCTION private.nomes_de_vendedores(uuid[]) FROM anon;
+    END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-        GRANT EXECUTE ON FUNCTION public.nomes_de_vendedores(uuid[]) TO authenticated;
+        GRANT USAGE ON SCHEMA private TO authenticated;
+        GRANT EXECUTE ON FUNCTION private.nomes_de_vendedores(uuid[]) TO authenticated;
     END IF;
 END
 $$;

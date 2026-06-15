@@ -350,7 +350,7 @@ async def _nomes_de_vendedores_como(
             "aud": "authenticated",
         }
     )
-    stmt = text("SELECT id, nome FROM public.nomes_de_vendedores(:ids)").bindparams(
+    stmt = text("SELECT id, nome FROM private.nomes_de_vendedores(:ids)").bindparams(
         bindparam("ids", value=ids, type_=ARRAY(PgUuid(as_uuid=False)))
     )
     async with engine.connect() as conn:

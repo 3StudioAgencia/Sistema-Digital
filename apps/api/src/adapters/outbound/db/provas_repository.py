@@ -121,8 +121,10 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         if not ids:
             return {}
         # Projeção SECURITY DEFINER (DP-7): resolve nomes fora da RLS de usuarios,
-        # expondo só id+nome de vendedores. Param tipado como uuid[] (asyncpg).
-        stmt = text("SELECT id, nome FROM public.nomes_de_vendedores(:ids)").bindparams(
+        # expondo só id+nome de vendedores (e só os do escopo do chamador). Vive no
+        # schema ``private`` (não exposto pela Data API — migration 0011). Param
+        # tipado como uuid[] (asyncpg).
+        stmt = text("SELECT id, nome FROM private.nomes_de_vendedores(:ids)").bindparams(
             bindparam("ids", value=ids, type_=ARRAY(PgUuid(as_uuid=False)))
         )
         rows = (await self._session.execute(stmt)).all()

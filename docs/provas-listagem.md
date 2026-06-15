@@ -80,18 +80,20 @@ A coluna/dropdown **Vendedor** mostra o **nome**, mas `provas` guarda só
 `vendedor_id`. A RLS de `usuarios` (C05) só deixa **admin/self** lerem outras
 linhas — um **3Studio/Clicheria não-admin** ou um **Motorista** (que veem provas
 de vários vendedores) não conseguiriam resolver o nome num JOIN. Solução **sem
-ampliar a Matriz §7**: a função **`public.nomes_de_vendedores(uuid[]) → (id,
-nome)`** (migration `0010`, espelho em `migrations/rls/nomes_de_vendedores.sql`):
+ampliar a Matriz §7**: a função **`private.nomes_de_vendedores(uuid[]) → (id,
+nome)`** (migration `0010` cria, `0011` move para o schema **`private`** não
+exposto pela Data API; espelho em `migrations/rls/nomes_de_vendedores.sql`):
 
 - **SECURITY DEFINER** (roda como owner → vê todas as linhas), `SET search_path
   = ''`, corpo schema-qualificado (blindagem W1-A-004);
 - projeta o **mínimo**: só `id`+`nome`, **só de vendedores** (`setor='vendedor'`);
-- `EXECUTE` revogado de `PUBLIC` e concedido só a `authenticated`;
-- **re-aplica o escopo do chamador** (defesa em profundidade): como `public` é
-  exposta pela Data API/PostgREST, a função é chamável direto por RPC — por isso
-  o corpo só resolve nomes de vendedores presentes em provas **visíveis** ao
-  chamador (`EXISTS` espelhando as policies `provas_select_*` via os helpers
-  `app_*`). Mesmo por RPC direto, ninguém resolve nome fora do seu escopo.
+- vive no schema **`private`** (não exposto pela Data API/PostgREST — `0011`):
+  não é um RPC público, e sim um resolvedor interno do backend. `anon` sem nada;
+  só `authenticated` tem `USAGE` no schema + `EXECUTE` (advisors 0028/0029
+  limpos);
+- **re-aplica o escopo do chamador** (defesa em profundidade): o corpo só resolve
+  nomes de vendedores presentes em provas **visíveis** ao chamador (`EXISTS`
+  espelhando as policies `provas_select_*` via os helpers `app_*`).
 
 ## 5. Escopo por perfil — UI × RLS
 
