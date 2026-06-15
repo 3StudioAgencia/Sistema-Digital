@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 10 — 2026-06-15 — [Wave 2 / Componente C07] Listagem, Pesquisa e Filtros de Provas
+
+**Objetivo:** Entregar a tela de **operação diária** — listar/buscar/filtrar provas com paginação server-side, escopo por perfil (UI + RLS), tabela igual à do C04.
+
+**Grounding (antes de codar):** investigação multi-agente do estado real (C04/C05/C06) que **corrigiu 3 premissas do prompt**: (1) **não existe** `useAuthorization(...).scope` — C05 só entregou RBAC de página (`can`/`podeAcessarRota`); (2) o prefixo real é **`/provas`**, não `/api/provas`; (3) **descoberto** que a coluna "Vendedor" quebraria sob a RLS de `usuarios` para 3Studio/Clicheria não-admin e Motorista.
+
+**Decisões do dono (Pontos de Decisão, 1 rodada):** DP-1 = **Replicar** a tabela do C04 (não extrair `<DataTable>`); DP-5 = **scroll infinito + filtros na URL**; DP-4 = **rótulos curtos por estado (14)**; DP-7 (descoberto) = **função SECURITY DEFINER id→nome**. DP-2/DP-3/DP-6 = recomendações (adaptar barra por escopo; adicionar `finalizada_em`; `GET /provas` sem gate de admin, "Ver"→`/provas/[id]`). → ADR-041 a ADR-045.
+
+**Feito:**
+- **Backend:** migration **`0010_listagem_provas`** (`provas.finalizada_em timestamptz NULL` + índice parcial; função **`public.nomes_de_vendedores(uuid[])`** SECURITY DEFINER + espelho `migrations/rls/`). Porta `ProvasRepositoryPort` estendida (`FiltrosProvas`/`PaginaProvas`, `listar`/`vendedor_ids_distintos`/`nomes_de_vendedores`); `ProvasConsultaService`; dependência **`get_provas_consulta_service`** (universal, sessão RLS fail-closed); endpoints **`GET /provas`** (busca+filtros+paginação, ordem `created_at desc`, sem N+1) e **`GET /provas/vendedores`** (dropdown escopado).
+- **Frontend:** `/provas` real (`ProvasView` replicando a tabela do C04 — C04 intocado), barra de filtros de 2 linhas, **estado na URL** (debounce 300ms, "Limpar"), **adaptação por perfil** (esconde Vendedor no escopo "as próprias"), "Ver"→`/provas/[id]` (placeholder **C08**); módulo `lib/provas/status-labels.ts` (14 rótulos); `escopoDeProvas`/`listarProvas`/`listarVendedoresProvas`. Animações por tokens; cards no mobile; loading/vazio/erro.
+
+**Decisões (ADRs):** ADR-041 (replicar tabela + listagem universal), ADR-042 (filtros na URL + scroll infinito), ADR-043 (rótulos curtos/14), ADR-044 (`finalizada_em` aditiva, populada pelo C11), ADR-045 (nome do vendedor via SECURITY DEFINER) — todas **Aceitas**.
+
+**Testes / cobertura:**
+- **api 376 verdes** (`ruff`/`mypy --strict` limpos): escopo por perfil @db incl. **3Studio não-admin e Motorista resolvendo o nome** (DP-7); filtros combináveis; busca nome/requerimento; períodos; paginação+ordenação; **contador de SELECTs provando ausência de N+1**; dropdown escopado; 401/403; `0010` up/down em `test_migrations`.
+- **web 104 verdes** (lint 0 erros — 2 warnings pré-existentes em C04/C06; `build`/`format:check` ok): `provas-view.test.tsx` (render fiel, debounce, hidratação da URL, filtro→URL, adaptação por perfil, "Limpar", "Ver", vazio/erro/403). E2E `provas-listagem.spec.ts` (proteção offline + live opt-in).
+
+**Pendências / em aberto:**
+- [ ] **Operação:** aplicar a migration `0010` no Supabase real (deploy de infra; mesmo passo das `0007-0009`).
+- [ ] O filtro **"Finalizada em"** só retorna resultados após o **C11** popular `finalizada_em` (por design).
+- [ ] **C08** consome a rota `/provas/[id]` (hoje placeholder) e pode reusar `ProvaListagem`/rótulos/`status-labels`.
+- [ ] (Opcional) Se o C08+ precisar do `usuario` no cliente, considerar um contexto no app shell para evitar o 2º `GET /usuarios/me` da página de provas.
+
+**Próximo passo:**
+- **W2-C08 · Visualização de Prova (Detalhe)** — comando: cole `PROMPTS/W2-C08-...md` no Claude Code com os arquivos de contexto + a imagem do design da tela de detalhe.
+
+**Definition of Done:** ✅ atendida — testes (escopo por perfil, sem N+1, migration `0010` versionada/up-down, render/estados, `prefers-reduced-motion`), error boundary do grupo `(app)`, docs (`docs/provas-listagem.md`), sem segredos versionados, R$ 0.
+
+---
+
 ## Sessão 09 — 2026-06-12 — [Wave 2 / Componente C06] Cadastro de Prova + Rota + Etiqueta
 
 **Objetivo:** Abrir a Wave 2 com a porta de entrada do domínio: criação de provas com seleção manual de rota (imutável), código `PRV-AAAA-MM-NNNNNN`, QR, etiqueta PDF 95×55 e a RLS de `provas` que fecha a pendência do C05.

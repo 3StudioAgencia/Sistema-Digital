@@ -262,6 +262,36 @@
 - **Status:** **Aceita** (W2-C06). Achados de severidade ajustada **baixa** sem ação além de doc (drift `/api`, "nanoid"→`secrets` no glossário) também corrigidos.
 - **Consequências:** Etiqueta nunca falha por caractere; criação idempotente de verdade; superfície de upload protegida na borda e no banco. Testes: `test_body_limit.py`, idempotência em `test_provas_service.py`/`test_provas_endpoints.py`, WITH CHECK em `test_rls_provas.py`, Unicode em `test_etiqueta_pdf.py`, roving tabindex em `nova-prova-view.test.tsx`.
 
+## ADR-041 — Tabela de provas REPLICADA do C04 (não extraída) + listagem universal (W2-C07 / DP-1)
+- **Contexto:** O dono pediu a tabela de provas "exatamente igual" à de Usuários (C04). O componente do C04 (`usuarios-view.tsx`) é monolítico e acoplado ao domínio Usuario; extrair um `<DataTable>` genérico seria refatoração de alto risco sobre a Wave 1 **auditada (GO)**. Opções: (A) extrair `<DataTable>` e migrar C04; (B) extrair só a casca de apresentação + hook; (C) **replicar** o markup/CSS num novo `ProvasView`.
+- **Decisão:** **Opção C (escolha do dono): REPLICAR sem extrair.** Novo `provas-view.tsx` + `provas.module.css` espelham 1:1 o padrão do C04 (card raio `--app-card-radius`, divisores como segmentos, scrollbar fina, pílulas, scroll infinito por `IntersectionObserver`, debounce 300ms, estado derivado da chave de filtros) parametrizados para as **8 colunas** de provas (Requerimento·Nome·Cliente·Vendedor·Status·Rota·Criada em·**Ver**). **C04 fica intocado** (zero regressão — 104 testes web seguem verdes). A página é **universal** (Matriz §7), servida por **`get_provas_consulta_service`** (gate `Recurso.PROVAS`, **sem** admin) — distinta de `get_provas_service` (admin, criação/etiqueta), como o C06 já antecipava.
+- **Status:** **Aceita** (W2-C07, DP-1 do dono).
+- **Consequências:** Sem `<DataTable>` genérico no repo; eventual divergência entre as duas tabelas é risco assumido (mitigado por ambas lerem os mesmos tokens `--app-*`/`--motion-*`). Reaproveitados como genéricos: `Dropdown`, tokens de motion.
+
+## ADR-042 — Estado de filtros na URL + scroll infinito server-side (W2-C07 / DP-5)
+- **Contexto:** A listagem precisa ser refresh-safe e compartilhável (RF-014). O C04 usa scroll infinito com estado **local** (não sobrevive a refresh). Opções: (A) igual ao C04 (local); (B) scroll infinito + filtros na **URL**; (C) páginas numeradas + URL.
+- **Decisão:** **Opção B.** A **query da URL é a fonte da verdade** dos filtros aplicados (`useSearchParams`); busca/cliente têm estado local com **debounce ≥300ms** que escreve na URL; dropdowns/datas escrevem na hora (`router.replace`, `scroll:false`); **"Limpar"** zera a query. Paginação por **scroll infinito** server-side (`page`/`page_size`, teto 100 — RNF-019), reset à página 1 quando a chave (a query) muda. Backend ordena por `created_at desc, id` (desempate estável). O "Criada em"/"Finalizada em" do design é **um único dia** → o front manda `_de = _ate = dia`.
+- **Status:** **Aceita** (W2-C07, DP-5 do dono).
+- **Consequências:** Filtros sobrevivem a refresh/back-forward e são linkáveis; introduz o primeiro uso de `useSearchParams` (a página vive sob `<Suspense>`). Inputs de texto hidratam da URL no mount (back/forward live-atualiza dropdowns/datas; texto fica no load — tradeoff aceito).
+
+## ADR-043 — Rótulos de status curtos por estado (14), módulo reutilizável (W2-C07 / DP-4)
+- **Contexto:** A UI precisa de `status_prova_enum → rótulo`. O design mostra 6 rótulos curtos ("Aprovada", "Reprovada", "Na 3Studio", "Na clicheria", "Retirada", "Cancelada") que **não** mapeiam 1:1 nos 14 estados (§6); o requisito é o filtro/coluna **suportarem os 14**. Opções: (A) **um rótulo curto por estado** (14); (B) nomes canônicos §6; (C) só os 6 do design (agrupados).
+- **Decisão:** **Opção A.** Módulo reutilizável `apps/web/src/lib/provas/status-labels.ts` (`EstadoProva`, `STATUS_PROVA_LABELS`, `STATUS_PROVA_ORDEM`, `rotuloStatus`): um rótulo conciso por estado, adotando a grafia do design onde há amostra e formas curtas para os demais (ex.: `de_volta_studio`→"Na 3Studio", `de_volta_studio_pos_laminacao`→"Na 3Studio (pós-laminação)"). O filtro de Status lista os **14 + "Todos"** na ordem canônica do fluxo. C08/C13/C16 reusam.
+- **Status:** **Aceita** (W2-C07, DP-4 do dono).
+- **Consequências:** Fonte única de rótulos no front; o backend devolve o **valor** do enum (rotulagem é da UI). A coluna Status é texto simples (sem chip colorido — fiel ao design).
+
+## ADR-044 — `finalizada_em` aditiva nullable, populada pelo C11 (W2-C07 / DP-3)
+- **Contexto:** O filtro "Finalizada em" exige um carimbo de finalização; `provas` (C06) não tem essa coluna. Opções: (A) **adicionar `finalizada_em` agora** (aditiva, nullable), populada pelo C11; (B) adiar o filtro para o C11; (C) derivar de `updated_at` em estados terminais (frágil).
+- **Decisão:** **Opção A.** Migration `0010` adiciona `finalizada_em timestamptz NULL` + **índice parcial** `ix_provas_finalizada_em` (só as NOT NULL — RNF-019). O **C11 popula** nas transições terminais (`recebida_clicheria`/`cancelada`); o C07 só **lê e filtra** (range que naturalmente exclui NULL). Reflexo no domínio (`Prova.finalizada_em`, `compare=False`) e no `ProvaRow`.
+- **Status:** **Aceita** (W2-C07, DP-3 do dono).
+- **Consequências:** Até o C11, o filtro "Finalizada em" retorna vazio (documentado, não bug). Schema pronto sem `ALTER` futuro; downgrade da `0010` remove coluna/índice/função.
+
+## ADR-045 — Nome do vendedor via função SECURITY DEFINER `nomes_de_vendedores` (W2-C07 / DP-7, descoberta na sessão)
+- **Contexto:** A coluna/dropdown **Vendedor** mostra o **nome**, mas `provas` guarda só `vendedor_id`, e a RLS de `usuarios` (C05) só deixa **admin/self** lerem outras linhas. Logo, um **3Studio/Clicheria não-admin** (setor×admin ortogonais — ADR-023) ou um **Motorista** — que veem provas de vários vendedores — teriam a coluna **em branco** num JOIN. Gap **não previsto** pelo prompt (que assumia o JOIN funcionando). Opções: (A) **função SECURITY DEFINER id→nome**; (B) denormalizar `vendedor_nome` na prova (snapshot, defasável, altera o caminho de criação do C06); (C) ampliar a RLS de `usuarios` (mexe na Matriz §7 — regra do PR único — e amplia exposição).
+- **Decisão:** **Opção A (escolha do dono).** Migration `0010` cria `public.nomes_de_vendedores(uuid[]) → (id, nome)`: **SECURITY DEFINER** (roda como owner → vê todas as linhas), `SET search_path=''` + corpo schema-qualificado (blindagem W1-A-004), projeta o **mínimo** (só `id`+`nome`, só `setor='vendedor'`), `EXECUTE` revogado de `PUBLIC` e concedido só a `authenticated`. O repositório resolve os nomes da página em **uma** chamada (sem N+1); `GET /provas/vendedores` usa a mesma função sobre os `vendedor_id` distintos **em escopo** (RLS) para o dropdown. **Não** altera a Matriz §7 nem o caminho de criação.
+- **Status:** **Aceita** (W2-C07, DP-7 do dono).
+- **Consequências:** Nomes sempre frescos e normalizados, com exposição mínima e auditável (uma função SECURITY DEFINER a mais, no padrão dos helpers `app_*`). Validado @db: 3Studio não-admin e Motorista resolvem o nome; contador de SELECTs prova ausência de N+1.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)

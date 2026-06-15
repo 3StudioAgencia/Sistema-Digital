@@ -80,6 +80,8 @@ pnpm dev                                  # http://localhost:3000
 > **RBAC (W1-C05):** rode `uv run alembic upgrade head` (cria o **Custom Access Token Hook** e a RLS de `usuarios`) e **habilite o hook** no dashboard: Authentication → Hooks → *Customize Access Token (JWT) Claims* → `public.custom_access_token_hook`. Sem isso o JWT não carrega `setor`/`administrador` no topo e a RLS/proxy tratam todos como menor privilégio. A Matriz §7 é fonte única (`apps/web/src/lib/access-matrix.ts` + RLS em `apps/api/migrations/rls/`) — toda mudança exige **PR único** cobrindo as duas camadas. Detalhes em [`docs/rbac.md`](./docs/rbac.md).
 >
 > **Provas (W2-C06):** `uv run alembic upgrade head` cria a tabela **`provas`** (rota imutável via trigger), a **RLS por perfil** e o role de runtime `rastreio_runtime` (migrations `0007`–`0009`; **já aplicadas no Supabase real**, `alembic_version=0009`). O upload da **arte** usa o bucket R2 **`rastreio-provas-artes`** (já existe) e exige as 4 vars **`R2_*`** no ambiente da api (`R2_BUCKET=rastreio-provas-artes` + endpoint/keys via API token do Cloudflare; sem elas a criação responde 503 com erro claro). A **etiqueta PDF** (95×55 mm, QR + código `PRV-AAAA-MM-NNNNNN`) é gerada sob demanda — libs novas da api: `segno`, `fpdf2`, `python-multipart` (entram no `uv sync`). Fluxo local: api de pé → web `/provas/nova` (admin). Em produção, ative o role de runtime não-owner (passo de operação — [`docs/provas.md`](./docs/provas.md) §6).
+>
+> **Listagem de provas (W2-C07):** `uv run alembic upgrade head` agora chega à **`0010`** (adiciona `provas.finalizada_em` nullable — populada pelo C11 — e a função `public.nomes_de_vendedores` que resolve o nome do vendedor na listagem; **aplicar no Supabase real** é passo de operação, como as `0007`–`0009`). A tela **`/provas`** lista/busca/filtra com escopo por perfil (RLS) e estado de filtros na **URL**; o botão "Ver" leva ao detalhe (placeholder até o C08). Detalhes em [`docs/provas-listagem.md`](./docs/provas-listagem.md).
 
 ---
 
@@ -122,7 +124,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | --- | --- | --- |
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
-| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem · 08 Detalhe · 09 Config | **Em andamento** 🔄 |
+| **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe · 09 Config | **Em andamento** 🔄 |
 | **3 · Fluxo** | 10 Escaneamento · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | ⬜ |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |
