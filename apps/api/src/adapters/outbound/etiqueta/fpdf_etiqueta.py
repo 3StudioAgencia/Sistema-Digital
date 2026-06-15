@@ -88,20 +88,25 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
         pdf.set_fill_color(0)
 
         x0, x1 = t.margem, t.largura - t.margem
+        # Geometria do QR definida aqui (reusada pelo caption acima dele, para
+        # "Aponte a câmera..." ficar CENTRADO sobre o QR — mesmo x-range).
+        qr_box_x, qr_box_y, qr_box_l, qr_box_a = 60.0, 14.5, 31.0, 28.0
 
-        # Réguas horizontais (topo/rodapé do design)
-        pdf.rect(x0, 2.8, x1 - x0, 0.9, style="F")
-        pdf.rect(x0, 51.6, x1 - x0, 0.9, style="F")
+        # Réguas horizontais (topo/rodapé do design) — linha FINA (~2px ≈ 0,5mm)
+        pdf.rect(x0, 3.0, x1 - x0, 0.5, style="F")
+        pdf.rect(x0, 51.8, x1 - x0, 0.5, style="F")
 
         # Cabeçalho: wordmark 3STUDIO + logo studio&ART! (fixas — DP-2)
         pdf.image(str(_ASSETS / "logo_3studio.svg"), x=4.0, y=6.8, h=4.6)
         pdf.image(str(_ASSETS / "logo_studio_art.svg"), x=28.6, y=5.0, h=8.2)
 
-        # "Aponte a câmera para o QR CODE" (topo-direita)
-        self._caixa_pontilhada(pdf, 58.5, 4.8, x1 - 58.5, 9.0)
-        pdf.set_xy(60.2, 5.8)
+        # "Aponte a câmera para o QR CODE" — centrado SOBRE o QR (mesmo x-range)
+        self._caixa_pontilhada(pdf, qr_box_x, 4.8, qr_box_l, 9.0)
+        pdf.set_xy(qr_box_x, 5.8)
         pdf.set_font(t.fonte, "", 8.5)
-        pdf.multi_cell(30.5, 3.6, "Aponte a câmera\npara o **QR CODE**", markdown=True)
+        pdf.multi_cell(
+            qr_box_l, 3.6, "Aponte a câmera\npara o **QR CODE**", markdown=True, align="C"
+        )
 
         # Barra divisória (parcial, como no design)
         pdf.rect(x0, 14.4, 49.5, 2.0, style="F")
@@ -133,10 +138,8 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
             pdf.cell(restante, 4.2, self._ajustar(pdf, valor_texto, restante))
             y += 5.4
 
-        # QR Code (direita) em moldura arredondada
-        qr_box_x, qr_box_y, qr_box_l = 60.0, 14.5, 31.0
-        qr_box_a = 28.0
-        pdf.set_line_width(1.0)
+        # QR Code (direita) em moldura arredondada — contorno FINO (~2px ≈ 0,5mm)
+        pdf.set_line_width(0.5)
         pdf.rect(qr_box_x, qr_box_y, qr_box_l, qr_box_a, round_corners=True, corner_radius=3.5)
         pdf.set_line_width(0.2)
         lado_qr = qr_box_a - 5.2
