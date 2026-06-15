@@ -12,6 +12,8 @@ import pytest
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
+    FiltrosProvas,
+    PaginaProvas,
     ProvaJaExisteError,
     ProvasRepositoryPort,
 )
@@ -65,6 +67,16 @@ class FakeProvasRepository(ProvasRepositoryPort):
 
     async def get(self, prova_id: str) -> Prova | None:
         return self.provas.get(prova_id)
+
+    # Métodos de leitura do C07: o serviço de CRIAÇÃO não os usa.
+    async def listar(self, filtros: FiltrosProvas) -> PaginaProvas:  # pragma: no cover
+        raise NotImplementedError
+
+    async def vendedor_ids_distintos(self) -> list[str]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def nomes_de_vendedores(self, ids: list[str]) -> dict[str, str]:  # pragma: no cover
+        raise NotImplementedError
 
 
 class FakeUsuariosRepository(UsuariosRepositoryPort):

@@ -210,6 +210,10 @@ class Prova:
     status: EstadoProva = EstadoProva.CRIADA
     created_at: datetime | None = field(default=None, compare=False)
     updated_at: datetime | None = field(default=None, compare=False)
+    # Carimbo dos estados TERMINAIS (recebida na clicheria / cancelada). Nasce
+    # NULL e é populado pelo C11 nas transições terminais — o C07 só lê/filtra
+    # por ele ("Finalizada em"). compare=False: metadado, fora da identidade.
+    finalizada_em: datetime | None = field(default=None, compare=False)
 
 
 __all__ = [

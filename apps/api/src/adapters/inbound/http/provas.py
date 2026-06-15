@@ -9,14 +9,27 @@ transições de status são do C11 — qualquer PATCH/PUT responde 405 por ausê
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Self
 
-from fastapi import APIRouter, Depends, Form, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, status
 from pydantic import BaseModel
 
-from src.adapters.inbound.http.dependencies import get_provas_service
-from src.application.provas import CriarProva, ProvasService
+from src.adapters.inbound.http.dependencies import (
+    get_provas_consulta_service,
+    get_provas_service,
+)
+from src.application.ports.provas_repository import (
+    PAGE_SIZE_MAXIMO,
+    PAGE_SIZE_PADRAO,
+    FiltrosProvas,
+)
+from src.application.provas import (
+    CriarProva,
+    ProvaListagem,
+    ProvasConsultaService,
+    ProvasService,
+)
 from src.domain.provas import ARTE_TAMANHO_MAXIMO, EstadoProva, Prova, Rota
 
 router = APIRouter(prefix="/provas", tags=["provas"])
@@ -51,9 +64,109 @@ class ProvaOut(BaseModel):
         )
 
 
+class ProvaListagemOut(BaseModel):
+    """Linha da listagem (W2-C07): acrescenta o NOME do vendedor (resolvido pela
+    projeção SECURITY DEFINER — DP-7) e ``finalizada_em`` ao ``ProvaOut``."""
+
+    id: str
+    codigo: str
+    nome: str
+    requerimento: str
+    cliente: str
+    vendedor_id: str
+    vendedor_nome: str | None
+    rota: Rota
+    status: EstadoProva
+    created_at: datetime | None
+    finalizada_em: datetime | None
+
+    @classmethod
+    def de_dominio(cls, item: ProvaListagem) -> Self:
+        p = item.prova
+        return cls(
+            id=p.id,
+            codigo=p.codigo,
+            nome=p.nome,
+            requerimento=p.requerimento,
+            cliente=p.cliente,
+            vendedor_id=p.vendedor_id,
+            vendedor_nome=item.vendedor_nome,
+            rota=p.rota,
+            status=p.status,
+            created_at=p.created_at,
+            finalizada_em=p.finalizada_em,
+        )
+
+
+class PaginaProvasOut(BaseModel):
+    items: list[ProvaListagemOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class VendedorRefOut(BaseModel):
+    id: str
+    nome: str
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+@router.get("", response_model=PaginaProvasOut)
+async def listar(
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
+    # Busca (RF-013): nome E/OU requerimento. Filtros combináveis (RF-014).
+    busca: Annotated[str | None, Query(max_length=200)] = None,
+    cliente: Annotated[str | None, Query(max_length=200)] = None,
+    status_filtro: Annotated[EstadoProva | None, Query(alias="status")] = None,
+    rota: Rota | None = None,
+    vendedor_id: uuid.UUID | None = None,
+    criada_de: date | None = None,
+    criada_ate: date | None = None,
+    finalizada_de: date | None = None,
+    finalizada_ate: date | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAXIMO)] = PAGE_SIZE_PADRAO,
+) -> PaginaProvasOut:
+    """Listagem paginada server-side (RNF-019), ordenada por ``created_at`` desc.
+
+    Acessível a todos os perfis; o ESCOPO de dado (Vendedor as próprias, Motorista
+    as "Em Trânsito") é da RLS de ``provas`` (claims propagados — ADR-008). Query
+    fora do escopo retorna simplesmente 0 registros (anti-enumeração)."""
+    pagina = await service.listar(
+        FiltrosProvas(
+            busca=busca,
+            cliente=cliente,
+            status=status_filtro,
+            rota=rota,
+            vendedor_id=str(vendedor_id) if vendedor_id is not None else None,
+            criada_de=criada_de,
+            criada_ate=criada_ate,
+            finalizada_de=finalizada_de,
+            finalizada_ate=finalizada_ate,
+            page=page,
+            page_size=page_size,
+        )
+    )
+    return PaginaProvasOut(
+        items=[ProvaListagemOut.de_dominio(i) for i in pagina.items],
+        total=pagina.total,
+        page=pagina.page,
+        page_size=pagina.page_size,
+    )
+
+
+@router.get("/vendedores", response_model=list[VendedorRefOut])
+async def vendedores(
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
+) -> list[VendedorRefOut]:
+    """Vendedores em escopo (distintos das provas visíveis) para o dropdown de
+    filtro — alimenta o "Vendedor: Todos" sem vazar nomes fora do escopo."""
+    return [VendedorRefOut(id=v.id, nome=v.nome) for v in await service.vendedores()]
+
+
+
 @router.post("", response_model=ProvaOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     service: Annotated[ProvasService, Depends(get_provas_service)],

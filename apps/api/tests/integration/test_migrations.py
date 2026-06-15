@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0009", (
-        "head deve registrar a revisão 0009 (WITH CHECK de provas endurecido — W2-C06)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0010", (
+        "head deve registrar a revisão 0010 (listagem de provas — W2-C07)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -105,6 +105,19 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0008 deve criar o role de runtime não-owner (NOBYPASSRLS — ADR-034)"
+    # W2-C07: coluna finalizada_em (DP-3) + projetor de nomes de vendedor (DP-7).
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.columns "
+            "WHERE table_name = 'provas' AND column_name = 'finalizada_em'",
+        )
+        == 1
+    ), "0010 deve adicionar a coluna provas.finalizada_em"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores'")
+        == 1
+    ), "0010 deve criar a função SECURITY DEFINER nomes_de_vendedores (DP-7)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -145,6 +158,10 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'provas_rota_imutavel'")
         == 0
     ), "downgrade da 0007 deve remover a função do trigger"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores'")
+        == 0
+    ), "downgrade da 0010 deve remover a função nomes_de_vendedores"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

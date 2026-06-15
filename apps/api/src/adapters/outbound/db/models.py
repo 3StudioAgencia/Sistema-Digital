@@ -118,6 +118,11 @@ class ProvaRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
+    # Carimbo terminal (migration 0010 — W2-C07): NULL até o C11 popular nas
+    # transições terminais; alimenta o filtro "Finalizada em" da listagem.
+    finalizada_em: Mapped[datetime | None] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=True
+    )
 
 
 __all__ = ["NAMING_CONVENTION", "Base", "ProvaRow", "UsuarioRow", "metadata"]

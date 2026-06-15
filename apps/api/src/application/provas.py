@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
+    FiltrosProvas,
     ProvaJaExisteError,
     ProvasRepositoryPort,
 )
@@ -247,9 +248,80 @@ class ProvasService:
         return pdf, prova.codigo
 
 
+# ---------------------------------------------------------------------------
+# Leitura / listagem (W2-C07)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class VendedorRef:
+    """Vendedor para o dropdown de filtro (id + nome resolvido)."""
+
+    id: str
+    nome: str
+
+
+@dataclass(frozen=True)
+class ProvaListagem:
+    """Linha da listagem: a prova + o NOME do vendedor (join de apresentação).
+
+    ``vendedor_nome`` é resolvido por ``nomes_de_vendedores`` (DP-7) e pode ser
+    ``None`` no caso impossível-mas-seguro de o vendedor sumir do projetor.
+    """
+
+    prova: Prova
+    vendedor_nome: str | None
+
+
+@dataclass(frozen=True)
+class PaginaProvasListagem:
+    items: list[ProvaListagem]
+    total: int
+    page: int
+    page_size: int
+
+
+class ProvasConsultaService:
+    """Casos de uso de LEITURA de provas (W2-C07) — listagem e filtros do dropdown.
+
+    Página acessível a QUALQUER perfil ativo (Matriz §7: ``provas`` universal); o
+    ESCOPO de dado (Vendedor as próprias, Motorista as "Em Trânsito") é da RLS de
+    ``provas`` (C06) — NÃO reimplementado aqui. O serviço só compõe a página com o
+    nome do vendedor (resolvido fora da RLS de ``usuarios`` — DP-7), em consulta
+    única e sem N+1 (uma resolução de nomes por página, não por linha).
+    """
+
+    def __init__(self, repo: ProvasRepositoryPort) -> None:
+        self._repo = repo
+
+    async def listar(self, filtros: FiltrosProvas) -> PaginaProvasListagem:
+        pagina = await self._repo.listar(filtros.saneados())
+        ids = list({p.vendedor_id for p in pagina.items})
+        # UMA ida ao projetor de nomes para a página inteira (sem N+1 — RNF-022).
+        nomes = await self._repo.nomes_de_vendedores(ids) if ids else {}
+        items = [
+            ProvaListagem(prova=p, vendedor_nome=nomes.get(p.vendedor_id)) for p in pagina.items
+        ]
+        return PaginaProvasListagem(
+            items=items, total=pagina.total, page=pagina.page, page_size=pagina.page_size
+        )
+
+    async def vendedores(self) -> list[VendedorRef]:
+        """Vendedores em escopo para o dropdown — distintos das provas visíveis."""
+        ids = await self._repo.vendedor_ids_distintos()
+        if not ids:
+            return []
+        nomes = await self._repo.nomes_de_vendedores(ids)
+        refs = [VendedorRef(id=i, nome=nomes[i]) for i in ids if i in nomes]
+        refs.sort(key=lambda v: v.nome.lower())
+        return refs
+
+
 __all__ = [
     "MAX_TENTATIVAS_CODIGO",
     "CriarProva",
     "GeracaoDeCodigoEsgotadaError",
+    "PaginaProvasListagem",
+    "ProvaListagem",
+    "ProvasConsultaService",
     "ProvasService",
+    "VendedorRef",
 ]

@@ -21,7 +21,7 @@ from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepos
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
-from src.application.provas import ProvasService
+from src.application.provas import ProvasConsultaService, ProvasService
 from src.application.usuarios import UsuariosService
 from src.domain.rbac import Recurso, autorizar
 from src.domain.usuarios import Usuario
@@ -128,4 +128,38 @@ async def get_provas_service(
         )
 
 
-__all__ = ["get_admin_corrente", "get_provas_service", "get_usuarios_service", "requer_acesso"]
+async def get_provas_consulta_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[ProvasConsultaService]:
+    """Serviço de LEITURA de provas (W2-C07) — listagem/filtros da página universal.
+
+    Diferente de ``get_provas_service`` (gate ``CRIAR_PROVA``, admin): a Matriz §7
+    torna ``provas`` ACESSÍVEL A QUALQUER perfil ativo; o que muda por perfil é o
+    ESCOPO de dado, garantido pela RLS de ``provas`` (C06) — não pela borda. Mesma
+    sessão RLS fail-closed por requisição (ADR-008/ADR-034), sem ``storage``/
+    ``etiqueta`` (caminho só de leitura). Negação ÚNICA para sem-linha/inativo/
+    não-autorizado (anti-enumeração — CLAUDE.md §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.PROVAS):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield ProvasConsultaService(repo=SqlAlchemyProvasRepository(session))
+
+
+__all__ = [
+    "get_admin_corrente",
+    "get_provas_consulta_service",
+    "get_provas_service",
+    "get_usuarios_service",
+    "requer_acesso",
+]
