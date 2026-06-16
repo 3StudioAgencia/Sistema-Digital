@@ -17,7 +17,8 @@ import re
 from pathlib import Path
 from types import ModuleType
 
-from src.domain.provas import CODIGO_ALFABETO, ESTADOS_EM_TRANSITO, EstadoProva, Rota
+from src.domain.provas import CODIGO_ALFABETO, EstadoProva, Rota
+from src.domain.state_machine.rules import ESTADOS_ESCOPO_MOTORISTA
 
 _API = Path(__file__).resolve().parents[2]
 _RLS = _API / "migrations" / "rls"
@@ -43,15 +44,21 @@ def test_enums_da_migration_0007_espelham_o_dominio() -> None:
     assert tuple(mig.ESTADOS) == tuple(e.value for e in EstadoProva)
 
 
-def test_policy_motorista_usa_exatamente_os_estados_em_transito() -> None:
-    """Matriz §7 ("Em Trânsito") = ESTADOS_EM_TRANSITO do domínio, nos dois espelhos."""
-    esperados = {e.value for e in ESTADOS_EM_TRANSITO}
-    for fonte in (
-        (_RLS / "provas_select_motorista.sql").read_text(encoding="utf-8"),
-        (_VERSIONS / "0008_rls_provas_e_runtime_role.py").read_text(encoding="utf-8"),
-    ):
-        bloco = fonte[fonte.index("provas_select_motorista") :]
-        achados = set(re.findall(r"'(com_motorista_\w+)'", bloco))
+def test_policy_motorista_usa_o_escopo_operacional_derivado_da_maquina() -> None:
+    """W3-C11: o Motorista vê o escopo OPERACIONAL (origens das suas transições +
+    Em Trânsito), DERIVADO da §6 (``ESTADOS_ESCOPO_MOTORISTA``), nos dois espelhos
+    da ampliação (SQL + migration 0015). Pega drift entre a máquina e a RLS."""
+    esperados = {e.value for e in ESTADOS_ESCOPO_MOTORISTA}
+    assert len(esperados) == 6  # 3 origens + 3 Em Trânsito
+    estados_validos = {e.value for e in EstadoProva}
+    fontes = (
+        ((_RLS / "provas_select_motorista.sql").read_text(encoding="utf-8"), "select_motorista"),
+        ((_RLS / "provas_update_motorista.sql").read_text(encoding="utf-8"), "update_motorista"),
+        ((_VERSIONS / "0015_movimentacoes.py").read_text(encoding="utf-8"), "_MOTORISTA_SCOPE"),
+    )
+    for fonte, marcador in fontes:
+        bloco = fonte[fonte.index(marcador) :]
+        achados = set(re.findall(r"'(\w+)'", bloco)) & estados_validos
         assert achados == esperados
 
 
@@ -72,7 +79,8 @@ def test_migrations_aplicam_as_mesmas_policies_dos_espelhos_sql() -> None:
             p for p in _policies_de(versao.read_text(encoding="utf-8")) if p.startswith("provas_")
         }
     assert de_arquivos == das_migrations
-    # cobertura mínima da Matriz: 5 escopos de SELECT + INSERT exclusivo de admin
+    # Matriz §7: 5 escopos de SELECT + INSERT admin (C06) + 5 escopos de UPDATE da
+    # transição (W3-C11). Espelho 1:1 entre migrations e migrations/rls/.
     assert de_arquivos == {
         "provas_select_studio",
         "provas_select_clicheria",
@@ -80,6 +88,11 @@ def test_migrations_aplicam_as_mesmas_policies_dos_espelhos_sql() -> None:
         "provas_select_vendedor",
         "provas_select_motorista",
         "provas_insert_admin",
+        "provas_update_studio",
+        "provas_update_clicheria",
+        "provas_update_admin",
+        "provas_update_vendedor",
+        "provas_update_motorista",
     }
 
 

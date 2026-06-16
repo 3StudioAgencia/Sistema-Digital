@@ -14,11 +14,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, MetaData, String, Uuid, text
+from sqlalchemy import Boolean, ForeignKey, Integer, MetaData, String, Text, Uuid, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from src.domain.provas import EstadoProva, Rota
+from src.domain.state_machine.enums import Acao
 from src.domain.usuarios import Localizacao, Setor
 
 # Convenção de nomes determinística: constraints/índices nomeados de forma
@@ -172,9 +173,48 @@ class RateLimitContadorRow(Base):
     contador: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
+class MovimentacaoRow(Base):
+    """Linha da tabela ``movimentacoes`` (migration 0015 — W3-C11).
+
+    Log APPEND-ONLY do fluxo (RNF-006/DP-3): UMA linha por transição. Imutável —
+    o trigger ``trg_movimentacoes_append_only`` bloqueia UPDATE/DELETE e não há
+    GRANT para eles. ``idempotency_key`` é UNIQUE (RNF-015): reenvio da mesma
+    transição converge, não duplica. ``assinatura_ref`` é nullable (DP-1): o C12
+    adiciona a tabela ``signatures`` + a FK. ``acao`` usa ``acao_enum``
+    (sincronizado com ``domain/state_machine/enums.py`` — DAT §4.5).
+    """
+
+    __tablename__ = "movimentacoes"
+    # RETURNING de id/created_at (server defaults) no próprio INSERT (RNF-020).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    prova_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("provas.id"), nullable=False
+    )
+    estado_origem: Mapped[EstadoProva] = mapped_column(
+        _pg_enum(EstadoProva, "status_prova_enum"), nullable=False
+    )
+    estado_destino: Mapped[EstadoProva] = mapped_column(
+        _pg_enum(EstadoProva, "status_prova_enum"), nullable=False
+    )
+    acao: Mapped[Acao] = mapped_column(_pg_enum(Acao, "acao_enum"), nullable=False)
+    ator_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    ciclo: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assinatura_ref: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 __all__ = [
     "NAMING_CONVENTION",
     "Base",
+    "MovimentacaoRow",
     "ProvaRow",
     "RateLimitContadorRow",
     "SystemSettingRow",

@@ -7,6 +7,8 @@ MESMO 404 genérico; e a tentativa é contada+persistida ANTES de resolver, para
 limite de 30/min valer mesmo nas tentativas que dão 404.
 """
 
+from datetime import datetime
+
 import pytest
 from src.application.ports.provas_repository import (
     FiltrosProvas,
@@ -52,6 +54,18 @@ class FakeProvasRepository(ProvasRepositoryPort):
         raise NotImplementedError
 
     async def get(self, prova_id: str) -> Prova | None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def obter_para_transicao(self, prova_id: str) -> Prova | None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def atualizar_status(
+        self,
+        prova_id: str,
+        novo_status: EstadoProva,
+        finalizada_em: datetime | None,
+        quando: datetime,
+    ) -> None:  # pragma: no cover
         raise NotImplementedError
 
     async def listar(self, filtros: FiltrosProvas) -> PaginaProvas:  # pragma: no cover

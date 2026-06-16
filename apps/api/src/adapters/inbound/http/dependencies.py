@@ -15,6 +15,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
+from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
 from src.adapters.outbound.db.rate_limiter import SqlAlchemyRateLimiter
 from src.adapters.outbound.db.settings_repository import SqlAlchemySettingsRepository
@@ -29,6 +30,7 @@ from src.application.provas import (
     ProvasService,
 )
 from src.application.settings import SettingsService
+from src.application.transicoes import ProvasTransicaoService
 from src.application.usuarios import UsuariosService
 from src.domain.rbac import Recurso, autorizar
 from src.domain.usuarios import Usuario
@@ -205,6 +207,42 @@ async def get_identificacao_service(
         )
 
 
+async def get_transicao_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[ProvasTransicaoService]:
+    """Serviço de TRANSIÇÃO da máquina de estados (W3-C11), gateado por ``ESCANEAR``.
+
+    A página/ação é universal na Matriz §7 ("Escanear" — o fluxo identificar →
+    assinar → confirmar é de qualquer perfil ativo); a autorização FINA por ação
+    (qual setor avança o quê; Cancelar/Reiniciar só admin) é do MOTOR
+    (``avaliar_transicao``), não da borda — daí o gate amplo. Gate + serviço numa
+    ÚNICA sessão RLS fail-closed; o ``ator`` carregado para o gate é passado ao
+    motor (setor + flag administrador). ``repo``/``movs``/``uow`` compartilham a
+    sessão: ``status`` e ``movimentacoes`` caem na MESMA transação (RNF-017).
+    Negação ÚNICA para sem-linha/inativo/não-autorizado (anti-enumeração — §11).
+    """
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.ESCANEAR):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield ProvasTransicaoService(
+            repo=SqlAlchemyProvasRepository(session),
+            movs=SqlAlchemyMovimentacoesRepository(session),
+            uow=SqlAlchemyUnitOfWork(session),
+            ator=ator,
+        )
+
+
 async def get_settings_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
@@ -241,6 +279,7 @@ __all__ = [
     "get_provas_consulta_service",
     "get_provas_service",
     "get_settings_service",
+    "get_transicao_service",
     "get_usuarios_service",
     "requer_acesso",
 ]

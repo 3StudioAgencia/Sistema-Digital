@@ -29,11 +29,13 @@ from src.application.ports.identity_provider import (
 )
 from src.application.ports.storage import StorageError
 from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
+from src.domain.movimentacoes import TransicaoIdempotenciaConflitoError
 from src.domain.provas import (
     CriacaoDivergenteError,
     LimiteDeTentativasError,
     ProvaNaoEncontradaError,
 )
+from src.domain.state_machine.machine import TransicaoNaoAutorizadaError
 from src.domain.usuarios import ErroDeDominio
 from src.infrastructure.logging import request_id_var
 
@@ -103,7 +105,13 @@ def _status_de_dominio(exc: ErroDeDominio) -> int:
     casos com semântica própria têm status dedicado."""
     if isinstance(exc, UsuarioNaoEncontradoError | ProvaNaoEncontradaError):
         return status.HTTP_404_NOT_FOUND
-    if isinstance(exc, EmailJaCadastradoError | CriacaoDivergenteError):
+    # W3-C11: perfil não autorizado para a transição (rota+estado válidos) → 403,
+    # mensagem genérica que não revela qual setor poderia (RN-014/Backlog C11).
+    if isinstance(exc, TransicaoNaoAutorizadaError):
+        return status.HTTP_403_FORBIDDEN
+    if isinstance(
+        exc, EmailJaCadastradoError | CriacaoDivergenteError | TransicaoIdempotenciaConflitoError
+    ):
         return status.HTTP_409_CONFLICT
     if isinstance(exc, LimiteDeTentativasError):
         return status.HTTP_429_TOO_MANY_REQUESTS

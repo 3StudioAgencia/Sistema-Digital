@@ -9,7 +9,7 @@ de uso, nunca do repositório (RNF-017).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, datetime
 
 from src.domain.provas import EstadoProva, Prova, Rota
 
@@ -82,6 +82,29 @@ class ProvasRepositoryPort(ABC):
     @abstractmethod
     async def get(self, prova_id: str) -> Prova | None:
         """Busca pontual por id — o escopo é da RLS (sessão com claims)."""
+
+    @abstractmethod
+    async def obter_para_transicao(self, prova_id: str) -> Prova | None:
+        """Carrega a prova com LOCK PESSIMISTA (``SELECT ... FOR UPDATE``) para a
+        transição (W3-C11/DP-2). Serializa transições concorrentes da MESMA prova:
+        o segundo submit espera, relê o estado já atualizado e é avaliado contra
+        ele (idempotente/no-op gracioso). Escopada pela RLS: fora do escopo /
+        inexistente → ``None`` (o caso de uso converte no MESMO 404 genérico —
+        anti-enumeração). Participa da transação corrente do ``UnitOfWork``."""
+
+    @abstractmethod
+    async def atualizar_status(
+        self,
+        prova_id: str,
+        novo_status: EstadoProva,
+        finalizada_em: datetime | None,
+        quando: datetime,
+    ) -> None:
+        """Aplica a transição: ``status`` + ``finalizada_em`` (carimbo terminal) +
+        ``updated_at`` na transação corrente (RNF-017 — commit é do caso de uso).
+        NÃO toca ``rota`` (RN-007; o trigger do banco rejeitaria) nem
+        ``ciclo_atual`` (incremento é do C15). A RLS de UPDATE por perfil escopa a
+        escrita (defesa em profundidade)."""
 
     @abstractmethod
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:

@@ -89,6 +89,8 @@ pnpm dev                                  # http://localhost:3000
 >
 > **Escaneamento (W3-C10 — abre a Wave 3):** `uv run alembic upgrade head` chega à **`0014`** (tabela **`rate_limit_contadores`** + RLS `self` — rate limiting do endpoint de identificação; **já aplicada no Supabase real**, `alembic_version=0014`). A tela **`/escanear`** (mobile-first) identifica a prova por **QR (câmera in-app)** ou **código manual** (formato do C06) — os dois pelo mesmo `POST /provas/identificar`, **idempotente** e **escopado pela RLS**; código inválido/inexistente/fora-de-escopo dão a **mesma** mensagem (anti-enumeração) e há **rate limiting** (30/usuário/min). Câmera negada **não bloqueia** (o manual segue). Ao identificar, vai à tela de **confirmação** (`/provas/[id]/confirmar`) — placeholder onde o C11 (transição) e o C12 (assinatura) plugam. O C10 **só identifica**. Detalhes em [`docs/escaneamento.md`](./docs/escaneamento.md).
 
+> **Máquina de Estados (W3-C11 — o coração do domínio):** `uv run alembic upgrade head` chega à **`0015`** (tabela **`movimentacoes`** append-only = log de auditoria imutável + `acao_enum` + `provas` UPDATE/policies + RLS do Motorista ampliada). A **§6 inteira** (14 estados, 4 rotas) vive em **código** (`apps/api/src/domain/state_machine/`), nunca no banco. **`POST /provas/{id}/transicoes`** executa cada transição de forma **atômica** e **idempotente** (lock pessimista + `idempotency_key` UNIQUE): indefinida → 422, perfil errado → 403 (genérico), fora-de-escopo → 404, chave reusada → 409. Cada transição grava uma linha **imutável** em `movimentacoes`. Cobertura da máquina de estados **100%**. O C11 é o **motor**: quem assina é o **C12**, a timeline é o **C13**, cancelar/reiniciar (e o `ciclo_atual`) são **C14/C15** — todos invocam o motor. Detalhes em [`docs/maquina-estados.md`](./docs/maquina-estados.md).
+
 ---
 
 ## Testes
@@ -131,7 +133,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
-| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | **Em andamento** 🚧 |
+| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | **Em andamento** 🚧 |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |
 | **6 · Animações/Auditoria** | 19 Animações · 20 Log de Auditoria | ⬜ |

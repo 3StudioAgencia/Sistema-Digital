@@ -61,6 +61,18 @@ class FakeRepo(ProvasRepositoryPort):
     async def add(self, prova: Prova) -> None:  # pragma: no cover - leitura
         raise NotImplementedError
 
+    async def obter_para_transicao(self, prova_id: str) -> Prova | None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def atualizar_status(
+        self,
+        prova_id: str,
+        novo_status: EstadoProva,
+        finalizada_em: dt.datetime | None,
+        quando: dt.datetime,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
+
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:  # pragma: no cover - C10
         raise NotImplementedError
 

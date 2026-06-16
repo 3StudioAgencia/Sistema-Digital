@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0014", (
-        "head deve registrar a revisão 0014 (rate_limit_contadores — W3-C10)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0015", (
+        "head deve registrar a revisão 0015 (movimentacoes — W3-C11)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -96,8 +96,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         == 1
     ), "0007 deve criar o trigger de imutabilidade da rota (RN-007)"
     assert (
-        _scalar(database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'provas'") == 6
-    ), "0008 deve criar as 6 policies de provas (5 SELECT + 1 INSERT)"
+        _scalar(database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'provas'") == 11
+    ), "provas: 5 SELECT + 1 INSERT (C06) + 5 UPDATE da transição (W3-C11/0015)"
     assert (
         _scalar(
             database_url,
@@ -166,6 +166,27 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0014 deve criar a policy rate_limit_contadores_self (FOR ALL — ator só a própria linha)"
+    # W3-C11: tabela movimentacoes (0015) append-only + acao_enum + RLS.
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'movimentacoes'") == 1
+    ), "0015 deve criar a tabela movimentacoes"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 1
+    ), "0015 deve criar o tipo acao_enum (sincronizado com domain/state_machine)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_movimentacoes_append_only'",
+        )
+        == 1
+    ), "0015 deve criar o trigger append-only (RNF-006: imutável)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_policies WHERE tablename = 'movimentacoes'",
+        )
+        == 2
+    ), "0015 deve criar as 2 policies de movimentacoes (SELECT por prova visível + INSERT)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -195,6 +216,12 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'provas'") == 0, (
         "downgrade da 0007 deve remover a tabela provas"
     )
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'movimentacoes'") == 0
+    ), "downgrade da 0015 deve remover a tabela movimentacoes"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 0
+    ), "downgrade da 0015 deve remover o tipo acao_enum"
     assert (
         _scalar(
             database_url,

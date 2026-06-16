@@ -393,6 +393,48 @@
 - **Status:** **Aceita** (aprovado pelo dono na sessão de design).
 - **Consequências:** Telas do C10 batem com o design e são robustas em mobile/desktop. O `--motion-scan` fica disponível como token de varredura. O contrato funcional (endpoint/identificação) não mudou. → **web 139 verdes**, `lint`/`build` limpos.
 
+## ADR-059 — Fronteira da assinatura (C11↔C12) e endpoint de transição no C11 (W3-C11/DP-1)
+- **Contexto:** A transição só ocorre após a assinatura (RF-007), mas o C12 (captura da assinatura + tabela `signatures`) ainda não existe. Era preciso definir onde mora o endpoint e como `movimentacoes` referencia a assinatura sem o C12.
+- **Decisão:** O **endpoint de transição vive no C11** (`POST /provas/{prova_id}/transicoes` → `ProvaDetalheOut`); o C12 captura a assinatura e o invoca. `movimentacoes.assinatura_ref` é **`uuid` nullable agora**; o **serviço exige** valor não-nulo no contrato (`TransicaoIn.assinatura_ref` obrigatório — RN-003; os testes do C11 usam um **stub**). O C12 cria a tabela `signatures` e adiciona a **FK** (greenfield: ainda não há movimentações reais → sem backfill). Gate de página `Recurso.ESCANEAR` (universal — o fluxo identificar→assinar→confirmar é de qualquer perfil ativo); a autorização **fina** por ação é do motor.
+- **Status:** **Aceita** (W3-C11).
+- **Consequências:** O C11 entrega o motor completo e testável sem depender do C12; o C12 pluga a assinatura real trocando o stub e adicionando a FK, sem refatorar o endpoint.
+
+## ADR-060 — Idempotência e concorrência da transição: lock pessimista + chave de idempotência (W3-C11/DP-2)
+- **Contexto:** RNF-015 exige mutação idempotente ("chave de idempotência por operação"; reenvio não duplica) e RNF-017 atomicidade, sob concorrência.
+- **Decisão:** **Lock pessimista** `SELECT ... FOR UPDATE` da prova (serializa transições concorrentes da MESMA prova) + coluna **`movimentacoes.idempotency_key` UNIQUE** (chave por operação, gerada pelo cliente). Fluxo: lock → checa a chave → valida → aplica (`status` + 1 movimentação) → **commit atômico**. Reenvio da MESMA operação (mesma prova+ação) → **converge** (200, devolve a prova já no estado destino, sem reaplicar); chave reusada para operação diferente → **409** (`idempotencia_conflito`). Ação inválida a partir do novo estado (após outro ator já ter movido) → 422. O `IdempotenciaJaRegistradaError` (colisão UNIQUE que escape do lock) também converge para 409.
+- **Status:** **Aceita** (W3-C11).
+- **Consequências:** Duplo-submit (clique duplo) e reenvio após timeout não duplicam nem transicionam 2×; atomicidade garantida pelo `UnitOfWork` (falha no meio → rollback completo). Provado em `test_transicao_service` (atomicidade com falha injetada) e `test_transicoes_endpoints` (reenvio = 1 movimentação; 409).
+
+## ADR-061 — `movimentacoes` É o log de auditoria imutável (não há `audit_log` separado) (W3-C11/DP-3)
+- **Contexto:** DAT §2 e Backlog C05 (lista de RLS) **enumeram literalmente** `movimentacoes` E `audit_log` como **duas** tabelas de domínio — mas **nenhum** documento define o schema ou a diferença entre elas. A narrativa C11/C20 e a RNF-006 tratam como **um** log imutável de movimentações; o Backlog C20 diz "o log é gerado pelo Componente 11".
+- **Decisão:** **Uma** tabela `movimentacoes` (migration 0015), append-only, que **é** o log de auditoria (RNF-006). **Não** se cria `audit_log` (a enumeração DAT §2/Backlog C05 é over-modeling não diferenciado — Requisitos/Backlog narrativos prevalecem sobre a lista, CLAUDE.md §2.1). Imutabilidade em duas camadas: trigger `trg_movimentacoes_append_only` (bloqueia UPDATE/DELETE até para o owner) + ausência de GRANT. **RLS espelha o escopo de `provas`** via `EXISTS (SELECT 1 FROM provas …)` — habilita a Timeline (C13) para perfis em escopo; o "log completo" só é visível a quem vê todas as provas (RNF-006), e a página "Log de Auditoria" (C20) é gateada 3Studio-only na rota.
+- **Status:** **Aceita** (W3-C11). **Divergência registrada** (DAT §2/Backlog C05 listam duas tabelas; vale uma).
+- **Consequências:** Timeline (C13) e Log de Auditoria (C20) leem da mesma tabela; o C11 só escreve. Se um `audit_log` distinto for exigido no futuro, é nova decisão com schema próprio.
+
+## ADR-062 — C11 é o motor completo e autoritativo; split de efeitos com C12/C14/C15 (W3-C11/DP-4/5/6)
+- **Contexto:** Precisava-se delimitar o que o C11 modela/executa vs. o que C12/C14/C15 fazem.
+- **Decisão:** `TRANSITION_RULES` (em `domain/state_machine/rules.py`, **código imutável**, nunca no banco) encoda **TODAS** as transições da §6.2–6.6 (fluxos por rota + Aprovar/Reprovar + Reiniciar + Cancelar). O motor genérico (`avaliar_transicao` + `ProvasTransicaoService`) valida/executa todas e faz os **efeitos genéricos** (gravar `motivo` quando a ação exige; popular `finalizada_em` nos terminais). **Split:** a UI/gatilho de Cancelar (C14) e Reiniciar (C15) e o **incremento de `ciclo_atual`** (C15) ficam com C14/C15, que **invocam** este motor; a transição "Reprovada → Criada (novo ciclo)" é **modelada e executada** no C11. O C11 é **predominantemente backend/domínio — sem nova UI** (DP-6).
+- **Status:** **Aceita** (W3-C11).
+- **Consequências:** Uma fonte única de transições válidas; C12/C14/C15 são telas/ações que chamam o motor, sem regras próprias fora dele.
+
+## ADR-063 — Semântica de erro da transição: 404/403/422 e anti-enumeração (W3-C11/DP-7)
+- **Contexto:** Tensão entre o Backlog C11 ("perfil não autorizado → **403**, mesmo com rota e estado válidos") e RN-014/Backlog C12 (anti-enumeração: "mensagem genérica, sem revelar quem é").
+- **Decisão:** Três camadas: (1) prova **fora do escopo / inexistente / malformada** → **404 genérico** (`prova_nao_encontrada`, via RLS retornando `None` no `obter_para_transicao` — a borda não distingue); (2) prova **em escopo** mas **ator errado** para a próxima etapa → **403** (`transicao_nao_autorizada`) com corpo **genérico que NÃO nomeia o setor autorizado** (honra Backlog C11 + RN-014 "sem revelar quem é" — o ator já enxerga a prova, então não vaza existência); (3) transição **estruturalmente indefinida** (terminal / ação inválida para o estado) → **422** (`transicao_invalida`). O anti-enumeração estrito de RN-014 é satisfeito na **fronteira de escopo** (404 pela RLS); dentro do escopo, o 403 é o exigido pelo Backlog C11.
+- **Status:** **Aceita** (W3-C11).
+- **Consequências:** Critério de aceitação "perfil não autorizado → 403" demonstrável sem furar a anti-enumeração; o 403 não vira canal lateral (não nomeia o próximo ator).
+
+## ADR-064 — CANCELAR e REINICIAR_CICLO autorizados pela flag `administrador` (não pelo setor) (W3-C11)
+- **Contexto:** A §6 rotula o ator dessas transversais como "3Studio". A Matriz §7 lista "Cancelar Prova"/"Reiniciar Ciclo" como "Exclusivo 3Studio", que pela **ADR-023** chaveia pela **flag `administrador`** (ortogonal ao setor). O `rbac.py` já gateia `Recurso.CANCELAR_PROVA`/`REINICIAR_CICLO` pela flag. Conflito potencial: setor `studio` vs. flag admin.
+- **Decisão:** No motor, o normal-flow (`IDENTIFICAR_E_ASSINAR`/`APROVAR`/`REPROVAR`) chaveia pelo **setor** (RN-004); `CANCELAR`/`REINICIAR_CICLO` chaveiam pela **flag `administrador`** (qualquer setor admin), consistente com o gate de página/ação de `rbac.py`. Modelado por `Autorizacao` (4 setores + `ADMIN`) e `machine.autoriza` (`ADMIN` → `administrador`; demais → `setor`). Um Vendedor-admin cancela/reinicia; um 3Studio não-admin, não.
+- **Status:** **Aceita** (W3-C11).
+- **Consequências:** Autorização consistente entre as duas camadas (motor + `rbac.py`); um ator de setor errado **com** flag admin ainda **falha** o normal-flow (a flag só vale para as transversais admin). Provado em `test_state_machine` + `test_transicoes_endpoints`.
+
+## ADR-065 — Ampliação do escopo de RLS do Motorista (origens das transições + Em Trânsito) (W3-C11)
+- **Contexto:** O Motorista é o ator das transições a partir de `encaminhada_para_laminacao`, `laminacao_concluida` e `de_volta_studio` (§6.3/§6.5), mas a RLS `provas_select_motorista` (C06/C10) só o deixava enxergar os 3 estados "Em Trânsito" (os **destinos**, não as **origens**). Resultado: 404 ao escanear a prova que precisa pegar → travessia do Motorista **inviável**.
+- **Decisão:** Ampliar `provas_select_motorista` (e criar `provas_update_motorista`) para o **escopo operacional** = `ESTADOS_ESCOPO_MOTORISTA` (origens das transições do Motorista + Em Trânsito), **derivado da §6** (`domain/state_machine/rules.py` — fonte única; o harness de equivalência trava o drift entre a máquina e o SQL). **Conjunto de status, sem lógica de rota** (§11: regra de transição não vive no banco). A listagem do Motorista (Matriz §7) passa a mostrar também "aguardando coleta" — **divergência da §7** aceita (o Motorista ver o que vai pegar é útil; alternativa de filtrar a listagem foi descartada por espalhar perfil-awareness no C07).
+- **Status:** **Aceita** (W3-C11). **Divergência da Matriz §7 registrada** (CLAUDE.md §2.1).
+- **Consequências:** A travessia do Motorista funciona ponta-a-ponta (`test_transicoes_endpoints::test_motorista_transiciona_a_partir_de_estado_de_origem`). Exposição route-blind de `laminacao_concluida` em `lam_filial` a todos os Motoristas é tolerada (motoristas são fungíveis; o motor 403/422 qualquer ação inválida) — confirmado pela revisão adversarial como não-hole.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)

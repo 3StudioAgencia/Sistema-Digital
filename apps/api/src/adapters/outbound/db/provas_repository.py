@@ -5,9 +5,9 @@ NUNCA faz commit — a fronteira transacional é do caso de uso (RNF-017). A
 sessão vem de ``abrir_sessao_rls``: o escopo das leituras é da RLS.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from sqlalchemy import ColumnElement, Select, bindparam, func, select, text
+from sqlalchemy import ColumnElement, Select, bindparam, func, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
@@ -88,6 +88,31 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
     async def get(self, prova_id: str) -> Prova | None:
         row = await self._session.get(ProvaRow, prova_id)
         return _para_dominio(row) if row is not None else None
+
+    async def obter_para_transicao(self, prova_id: str) -> Prova | None:
+        # Lock pessimista (DP-2): serializa transições concorrentes da mesma prova.
+        # Escopado pela RLS (sessão com claims) — fora do escopo retorna None e o
+        # serviço dá o mesmo 404 do inexistente (anti-enumeração).
+        stmt = select(ProvaRow).where(ProvaRow.id == prova_id).with_for_update()
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _para_dominio(row) if row is not None else None
+
+    async def atualizar_status(
+        self,
+        prova_id: str,
+        novo_status: EstadoProva,
+        finalizada_em: datetime | None,
+        quando: datetime,
+    ) -> None:
+        # UPDATE só das colunas da transição (status/finalizada_em/updated_at) — as
+        # únicas com GRANT a authenticated (W3-C11); rota e ciclo_atual intocados.
+        # A RLS de UPDATE por perfil escopa a escrita; o commit é do caso de uso.
+        stmt = (
+            update(ProvaRow)
+            .where(ProvaRow.id == prova_id)
+            .values(status=novo_status, finalizada_em=finalizada_em, updated_at=quando)
+        )
+        await self._session.execute(stmt)
 
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:
         # Resolve por código único (índice ``uq_provas_codigo`` — RNF-019),

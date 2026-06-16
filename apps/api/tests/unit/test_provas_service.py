@@ -67,6 +67,18 @@ class FakeProvasRepository(ProvasRepositoryPort):
         return self.provas.get(prova_id)
 
     # Métodos de leitura do C07/C10: o serviço de CRIAÇÃO não os usa.
+    async def obter_para_transicao(self, prova_id: str) -> Prova | None:  # pragma: no cover
+        raise NotImplementedError
+
+    async def atualizar_status(
+        self,
+        prova_id: str,
+        novo_status: EstadoProva,
+        finalizada_em: dt.datetime | None,
+        quando: dt.datetime,
+    ) -> None:  # pragma: no cover
+        raise NotImplementedError
+
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:  # pragma: no cover
         raise NotImplementedError
 

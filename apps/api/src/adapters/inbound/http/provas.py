@@ -19,12 +19,13 @@ from datetime import date, datetime
 from typing import Annotated, Self
 
 from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.adapters.inbound.http.dependencies import (
     get_identificacao_service,
     get_provas_consulta_service,
     get_provas_service,
+    get_transicao_service,
 )
 from src.application.ports.provas_repository import (
     PAGE_SIZE_MAXIMO,
@@ -38,7 +39,9 @@ from src.application.provas import (
     ProvasIdentificacaoService,
     ProvasService,
 )
+from src.application.transicoes import ProvasTransicaoService
 from src.domain.provas import ARTE_TAMANHO_MAXIMO, EstadoProva, Prova, Rota
+from src.domain.state_machine.enums import Acao
 
 router = APIRouter(prefix="/provas", tags=["provas"])
 
@@ -169,6 +172,22 @@ class IdentificarIn(BaseModel):
     codigo: str
 
 
+class TransicaoIn(BaseModel):
+    """Entrada da transição (W3-C11). ``acao`` é a ação da §6; ``motivo`` é
+    obrigatório (validado no domínio) só para Reprovar/Cancelar.
+
+    ``assinatura_ref`` é a referência da assinatura digital (RN-003) — o C12 a
+    fornece (captura + tabela ``signatures``); no C11 é exigida pelo contrato
+    (testes usam um stub). ``idempotency_key`` é a chave por operação (RNF-015/
+    DP-2): o reenvio da MESMA transição reusa a chave e converge, sem duplicar.
+    """
+
+    acao: Acao
+    assinatura_ref: uuid.UUID
+    idempotency_key: uuid.UUID
+    motivo: str | None = Field(default=None, max_length=500)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -281,6 +300,32 @@ async def identificar(
     a prova resolvida à tela de confirmação.
     """
     return ProvaDetalheOut.de_dominio(await service.identificar(body.codigo))
+
+
+@router.post("/{prova_id}/transicoes", response_model=ProvaDetalheOut)
+async def transicionar(
+    prova_id: uuid.UUID,
+    body: TransicaoIn,
+    service: Annotated[ProvasTransicaoService, Depends(get_transicao_service)],
+) -> ProvaDetalheOut:
+    """Executa uma transição da máquina de estados (W3-C11) — o "confirmar" do
+    fluxo identificar → assinar → confirmar (§6/RF-007). ATÔMICA (RNF-017) e
+    IDEMPOTENTE (RNF-015): reenvio com a mesma ``idempotency_key`` converge.
+
+    Erros: transição não definida → 422; perfil não autorizado → 403 (genérico,
+    sem revelar o próximo ator — RN-014); prova fora do escopo / inexistente →
+    404 genérico (anti-enumeração); chave reusada para outra operação → 409.
+    Quem CAPTURA a assinatura é o C12; quem dispara Cancelar/Reiniciar pela UI é
+    o C14/C15 — todos INVOCAM este endpoint.
+    """
+    item = await service.executar(
+        prova_id=str(prova_id),
+        acao=body.acao,
+        assinatura_ref=str(body.assinatura_ref),
+        idempotency_key=str(body.idempotency_key),
+        motivo=body.motivo,
+    )
+    return ProvaDetalheOut.de_dominio(item)
 
 
 @router.get("/{prova_id}", response_model=ProvaDetalheOut)

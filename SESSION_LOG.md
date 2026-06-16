@@ -32,6 +32,36 @@
 
 ---
 
+## Sessão 14 — 2026-06-16 — [Wave 3 / Componente C11] Máquina de Estados (14 Estados, 4 Rotas) — O CORAÇÃO DO DOMÍNIO
+
+**Objetivo:** O motor de estados autoritativo do sistema — a Requisitos v1.0 §6 inteira como regra **em código** (nunca no banco), um serviço de transição **atômico e idempotente**, a tabela `movimentacoes` **imutável** com RLS, e o endpoint de transição. Predominantemente backend/domínio (sem UI — DP-6). Régua de cuidado no máximo: um erro aqui corrompe silenciosamente o estado de uma prova.
+
+**Feito:**
+- **Grounding (régua PARE E PERGUNTE):** extraídos os 3 `.docx` de origem; confrontada a §1.2 do prompt com a **§6 real** dos Requisitos — **idêntica** (revisor adversarial). Mapeado o repo (enum `status_prova_enum` já completo no C06; `Acao` inexistente; helpers RLS reais `app_setor`/`app_is_admin`/`app_current_user_id` — o prompt citava nomes antigos; head `0014`). **Pendência crítica descoberta e levada ao dono:** o Motorista atua a partir de estados de ORIGEM que a RLS (Em Trânsito) não deixava ver → 404 ao escanear. Decisão: ampliar a RLS (ADR-065).
+- **Domínio (`domain/state_machine/`):** `enums.py` (`Acao`, `Autorizacao`), `rules.py` (`TRANSITION_RULES` imutável — §6 inteira, `CANCELAR` materializado em todo ativo, `ESTADOS_ESCOPO_MOTORISTA` derivado), `machine.py` (`avaliar_transicao` pura — 422/403/motivo). `domain/movimentacoes.py` (entidade + erro de conflito).
+- **Persistência:** migration **`0015`** (`acao_enum` + `movimentacoes` append-only + trigger + RLS + `provas` UPDATE grant/policies + Motorista ampliado), espelhos `migrations/rls/movimentacoes_*.sql`/`provas_update_*.sql`; ORM `MovimentacaoRow`; portas + repos (`obter_para_transicao` FOR UPDATE, `atualizar_status`, `MovimentacoesRepository`).
+- **Serviço + borda:** `application/transicoes.py` (lock → idempotência → validação → aplica → commit), `get_transicao_service`, `POST /provas/{id}/transicoes` + `TransicaoIn`, mapeamento de erro (403/409 novos). Round-trip da migration validado (upgrade/downgrade/upgrade) no Postgres local (5433).
+
+**Decisões (ADRs):** ADR-059 (fronteira assinatura C11↔C12 + endpoint no C11), ADR-060 (idempotência: lock pessimista + chave UNIQUE), ADR-061 (`movimentacoes` = log único, **divergência** DAT/Backlog do `audit_log`), ADR-062 (motor completo + split C11/C14/C15 + sem UI), ADR-063 (erros 404/403/422 + anti-enum — DP-7), ADR-064 (Cancelar/Reiniciar pela flag admin), ADR-065 (RLS do Motorista ampliada — **divergência** §7). Detalhes em `DECISIONS.md`.
+
+**Testes / cobertura:**
+- **Máquina de estados: 100%** (`enums`/`rules`/`machine`); serviço **98%**; `movimentacoes` domínio 100%. (Adapters de DB ~71-80% — limitação conhecida de cobertura+greenlet do SQLAlchemy async, igual aos repos existentes; o código é exercido pelos @db.)
+- **640 testes verdes** (offline + @db no Postgres 5433): `test_state_machine` (118), `test_transicao_service`, `test_transicoes_endpoints` (travessia das 4 rotas, 422/403/404/409, idempotência, Motorista-origem), `test_rls_movimentacoes` (RLS + imutabilidade), equivalência + migrations atualizados.
+- **Revisão adversarial multi-agente (regras/concorrência/RLS/superfície): zero achados, todas "ship".** `ruff`/`mypy --strict` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Aplicar a migration `0015` no Supabase real** (passo de fechamento — ver resumo da sessão).
+- [ ] **Assinatura real** = C12 (substitui o stub de `assinatura_ref` + cria `signatures` + FK).
+- [ ] **Timeline** = C13 (lê `movimentacoes`, hoje em empty state no C08).
+- [ ] **UI/gatilho de Cancelar (C14) e Reiniciar + incremento de `ciclo_atual` (C15)** — chamam este motor.
+- [ ] Role de runtime `rastreio_runtime` (LOGIN/senha) segue passo de operação fora do repo.
+
+**Próximo passo:** **W3-C12 · Assinatura Digital no Fluxo de Escaneamento** — `cd apps/api && uv run uvicorn src.main:app --reload`; ler `prompts/W3-C12-*.md`.
+
+**Definition of Done:** ✅ atendida — cobertura ≥95% na máquina (100%), 403 por perfil + RLS de `movimentacoes` + atomicidade + idempotência testados, migration + RLS versionadas/documentadas, docs do módulo, sem segredos versionados. (Web não tocada — C11 é backend-only.)
+
+---
+
 ## Sessão 13 — 2026-06-16 — [Wave 3 / Componente C10] Escaneamento (Câmera + Manual, mobile-first) — ABRE A WAVE 3
 
 **Objetivo:** A ponte física→digital — identificar a prova pela leitura do QR (in-app) ou pela digitação manual, com um endpoint único e idempotente, tudo mobile-first, robusto (câmera negada → manual) e seguro (anti-enumeração + rate limiting). O C10 **só identifica**; transição é C11, assinatura é C12.
