@@ -69,7 +69,12 @@ detalhe**, para a tela de confirmação não precisar de um `GET` extra.
 | **429** | `limite_de_tentativas` | acima de **30 tentativas/usuário/minuto** |
 | 401 | `http_error` | sem Bearer válido |
 | 403 | `http_error` | sem linha `usuarios` / inativo / não autorizado (negação única) |
-| 422 | `validation_error` | corpo sem `codigo` (forma) — não enumera nada |
+| 422 | `validation_error` | corpo **sem o campo** `codigo` (forma estrutural) — não enumera nada |
+
+> **Sem limite de comprimento na borda (de propósito):** `IdentificarIn.codigo` é `str` puro. Um
+> código **vazio/curto/longo** não vira 422 — passa ao serviço, é **contado no rate limit** e
+> devolve o **mesmo 404 genérico** do malformado (sem 422 distinguível por comprimento — fecha a
+> assimetria anti-enumeração). O teto anti-DoS do corpo inteiro é do `BodyLimitMiddleware`.
 
 ### Fluxo do `ProvasIdentificacaoService.identificar`
 

@@ -19,7 +19,7 @@ from datetime import date, datetime
 from typing import Annotated, Self
 
 from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.adapters.inbound.http.dependencies import (
     get_identificacao_service,
@@ -158,12 +158,15 @@ class ProvaDetalheOut(BaseModel):
 
 class IdentificarIn(BaseModel):
     """Entrada da identificação (W3-C10): o conteúdo do QR OU o código digitado —
-    MESMO campo, MESMO caminho (o QR carrega o próprio código — C06). A
-    normalização e a validação de FORMATO são do serviço (anti-enumeração: formato
-    inválido cai no mesmo 404, não num 422 que revelaria "nem chegou a consultar").
-    ``max_length`` é só um teto anti-abuso — o código real tem ~18 caracteres."""
+    MESMO campo, MESMO caminho (o QR carrega o próprio código — C06).
 
-    codigo: Annotated[str, Field(min_length=1, max_length=100)]
+    **Sem limite de comprimento na borda, de propósito:** um código vazio, curto
+    ou longo é apenas mais um valor que NÃO resolve. Deixá-lo passar para o serviço
+    garante que ele seja CONTADO no rate limit e devolva o MESMO 404 genérico que o
+    malformado (anti-enumeração — RN-014): nenhum 422 distinguível por comprimento.
+    O teto anti-DoS do corpo inteiro é do ``BodyLimitMiddleware`` (pré-auth)."""
+
+    codigo: str
 
 
 # ---------------------------------------------------------------------------

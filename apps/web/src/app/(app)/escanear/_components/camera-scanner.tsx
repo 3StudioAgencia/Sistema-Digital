@@ -38,6 +38,11 @@ export function CameraScanner({
   const [estado, setEstado] = useState<Estado>("pronto");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const detectouRef = useRef(false);
+  // Vida do componente: um `start()` é assíncrono (1-2 s no mobile — prompt de
+  // permissão + abertura do track). Se desmontar nesse meio-tempo, este ref deixa
+  // o `iniciar()` saber que precisa PARAR o track recém-aberto (senão a câmera
+  // ficaria ligada em segundo plano) e não tocar estado morto.
+  const vivoRef = useRef(true);
 
   async function parar(): Promise<void> {
     const scanner = scannerRef.current;
@@ -55,6 +60,7 @@ export function CameraScanner({
   // render condicional no view): nunca deixa a câmera ligada em segundo plano.
   useEffect(() => {
     return () => {
+      vivoRef.current = false; // um start() que resolver após o unmount será parado
       void parar();
     };
   }, []);
@@ -80,7 +86,7 @@ export function CameraScanner({
           },
         },
         (texto) => {
-          if (detectouRef.current) return; // só a primeira leitura conta
+          if (detectouRef.current || !vivoRef.current) return; // só a 1ª leitura, e só se vivo
           detectouRef.current = true;
           void parar();
           onDetectar(texto);
@@ -89,11 +95,26 @@ export function CameraScanner({
           // callback de "frame sem QR" — silencioso (roda a cada quadro)
         },
       );
+      if (!vivoRef.current) {
+        // Desmontou durante o handshake do start(): o cleanup já chamou parar() com
+        // o scanner AINDA iniciando — o stop() de lá lança ("not running") e é
+        // engolido, então o track só foi de fato aberto AGORA. Encerra ESTE scanner
+        // diretamente (não via scannerRef, que o cleanup já zerou) — a câmera nunca
+        // fica ligada em segundo plano. Não toca estado morto.
+        scannerRef.current = null;
+        try {
+          await scanner.stop();
+          scanner.clear();
+        } catch {
+          // já parado/parando — não acionável
+        }
+        return;
+      }
       setEstado("ativo");
     } catch {
       // Permissão negada OU nenhuma câmera: degrada — o manual segue disponível.
       await parar();
-      setEstado("indisponivel");
+      if (vivoRef.current) setEstado("indisponivel");
     }
   }
 

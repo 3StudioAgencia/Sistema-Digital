@@ -373,6 +373,15 @@
 - **Status:** **Aceita**.
 - **Consequências:** Sem tabela/endpoint de "log de leituras" no C10. Quando o C13 (timeline) existir, "Ver histórico" passa a apontar para o histórico da prova.
 
+## ADR-057 — Remediação da revisão adversarial do C10 (W3-C10, pós-implementação na sessão)
+- **Contexto:** Revisão multi-agente do diff do C10 (4 dimensões × verificadores céticos) levantou 13 achados; **3 confirmados** (1 baixo, 2 médios), corrigidos na mesma sessão; os demais foram rejeitados na verificação (estilo/falso-positivo).
+- **Decisões:**
+  1. **Assimetria anti-enumeração no comprimento (baixa):** `IdentificarIn.codigo` impunha `min_length=1`/`max_length=100` (Pydantic, antes do corpo) — código **vazio ou >100 chars** virava **422** distinguível do 404 do malformado **e não era contado no rate limit**. Removidos os limites do schema (`codigo: str`); o **serviço** passa a tratar qualquer comprimento (todo valor que não casa o formato → **mesmo 404 genérico**, já contado em `registrar_e_contar`). O teto anti-DoS do corpo inteiro continua no `BodyLimitMiddleware`. (Só a **ausência** do campo `codigo` segue 422 — erro estrutural, não vaza comprimento.) Teste atualizado (`test_codigo_vazio_e_404_generico`).
+  2. **Leak de câmera em race de unmount (média):** `CameraScanner.iniciar` não tinha guarda de "montado" — desmontar **durante** o handshake do `start()` (troca p/ Manual ou navegação de sucesso) fazia o cleanup chamar `parar()` com o scanner **ainda iniciando** (o `stop()` lança "not running" e é engolido); quando o `start()` resolvia, adquiria o `MediaStream` e ninguém o encerrava → câmera ligada em segundo plano. Fix: `vivoRef` setado `false` no cleanup; ao resolver o `start()` com `!vivoRef`, **para o scanner local diretamente** (não via `scannerRef`, já zerado) e não toca estado desmontado. Teste de regressão (unmount durante start → `stop()` chamado após a resolução).
+  3. **Touch target do toggle abaixo do piso (média, a11y mobile):** o segmented Câmera/Manual ficava com **42px** úteis (< 44/48 do prompt mobile-first). Subido para **48px** (mobile e desktop).
+- **Status:** **Aceita** (W3-C10).
+- **Consequências:** Anti-enumeração sem canal lateral por comprimento e com a classe inteira sob o rate limit; a câmera nunca vaza ligada mesmo na troca rápida de modo; o controle primário de modo cumpre o mínimo de toque. → **api 486 verdes / web 137 verdes**.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)

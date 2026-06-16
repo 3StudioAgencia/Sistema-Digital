@@ -181,4 +181,28 @@ describe("EscanearView (W3-C10) — câmera + manual, mobile-first", () => {
     await waitFor(() => expect(mocks.identificarProva).toHaveBeenCalledWith(CODIGO));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/provas/p-1/confirmar"));
   });
+
+  it("trocar p/ Manual durante o start() encerra o track quando o start resolve (sem vazar câmera)", async () => {
+    let resolveStart: () => void = () => {};
+    let stopCalls = 0;
+    // 1ª chamada de stop() = cleanup com o scanner AINDA iniciando (o html5-qrcode
+    // real lança "not running"); 2ª = após o start resolver → encerra o track.
+    mocks.stop.mockImplementation(() => {
+      stopCalls += 1;
+      return stopCalls === 1
+        ? Promise.reject(new Error("Cannot stop, scanner is not running or paused"))
+        : Promise.resolve();
+    });
+    mocks.start.mockImplementation(() => new Promise<void>((res) => (resolveStart = res)));
+
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole("button", { name: "Abrir câmera" }));
+    // troca para Manual ENQUANTO o start está pendente → desmonta o CameraScanner
+    await user.click(screen.getByRole("radio", { name: /Manual/ }));
+    // o start só resolve agora (track recém-aberto após o unmount): tem de ser parado
+    resolveStart();
+
+    await waitFor(() => expect(mocks.stop.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
 });

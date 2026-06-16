@@ -215,13 +215,16 @@ async def test_usuario_nao_provisionado_e_403(ctx: tuple[Any, ...]) -> None:
     assert resp.status_code == 403
 
 
-async def test_codigo_vazio_e_422(ctx: tuple[Any, ...]) -> None:
-    """Corpo sem código é erro de FORMA (validação da borda) — não enumera nada."""
+async def test_codigo_vazio_e_404_generico(ctx: tuple[Any, ...]) -> None:
+    """Anti-enumeração: código vazio é só mais um valor que não resolve — MESMO 404
+    genérico (não um 422 distinguível por comprimento), e é contado no rate limit.
+    Só a AUSÊNCIA do campo ``codigo`` (corpo estrutural inválido) seria 422."""
     client, _, ids = ctx
     resp = await client.post(
         "/provas/identificar", json={"codigo": ""}, headers=_auth(ids["regiane"], "vendedor")
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 404
+    assert resp.json()["error"]["message"] == "Prova não encontrada."
 
 
 # ---------------------------------------------------------------------------

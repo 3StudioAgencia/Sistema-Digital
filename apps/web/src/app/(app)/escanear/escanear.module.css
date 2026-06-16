@@ -42,8 +42,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
   max-width: 360px;
-  height: 52px;
-  padding: 5px;
+  height: 56px;
+  /* padding 4px → célula interna de 48px = piso de touch target (mobile-first). */
+  padding: 4px;
   background: var(--app-card-white);
   border-radius: var(--app-radius-pill);
 }
@@ -58,7 +59,7 @@
   color: var(--app-ink);
   cursor: pointer;
   min-width: 0;
-  min-height: 42px;
+  min-height: 48px;
 }
 
 .toggleItem:focus-visible {
@@ -382,7 +383,7 @@
 
   .toggleItem {
     font-size: calc(18 * var(--u));
-    min-height: calc(46 * var(--u));
+    min-height: calc(48 * var(--u));
   }
 
   .cameraCard {
