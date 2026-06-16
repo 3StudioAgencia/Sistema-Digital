@@ -55,13 +55,13 @@
 - **web: 136 verdes** (`codigo.test.ts`, `escanear-view.test.tsx` — incl. câmera negada→manual e QR==manual mesmo destino, `confirmar-view.test.tsx`) + **E2E** `escanear.spec.ts` (redirect sempre; live opt-in). `ruff`/`mypy --strict`/`lint`/`build`/`format:check` limpos.
 
 **Pendências / em aberto:**
-- [ ] **Migration `0014` no Supabase real** (operação de fechamento — não quebra o existente; o C10 não roda em prod sem ela). Padrão das waves anteriores (aplicar via MCP).
+- [x] **Migration `0014` aplicada no Supabase real** via MCP (`rate_limit_contadores` + RLS `self` + grants sem DELETE; `alembic_version=0014`, sem drift; advisors sem achados novos).
 - [ ] (Herdadas) segredos `R2_*`/role de runtime/leaked-password protection no dashboard.
 
 **Próximo passo:**
 - **W3-C11 — Máquina de Estados (14 estados, 4 rotas):** `TRANSITION_RULES` em `domain/state_machine/rules.py` (cobertura ≥ 95%); pluga no botão "Confirmar movimentação" da tela de confirmação do C10 e popula `finalizada_em`/`ciclo_atual`.
 
-**Definition of Done:** ✅ atendida (testes ≥80% domínio/serviço; anti-enumeração e idempotência QR/manual cobertas; sem erro de console/log crítico; error boundary `(app)` cobre a rota + degradação graciosa da câmera; animações com `prefers-reduced-motion`; RLS versionada; sem segredos versionados). ⚠️ **migration `0014` ainda não aplicada no Supabase real** (item de operação acima).
+**Definition of Done:** ✅ **atendida** (testes ≥80% domínio/serviço — 486/94,55%, domínio de provas 100%; anti-enumeração e idempotência QR/manual cobertas; sem erro de console/log crítico; error boundary `(app)` cobre a rota + degradação graciosa da câmera; animações com `prefers-reduced-motion`; RLS versionada e **aplicada no Supabase real** — `alembic_version=0014`, advisors sem achados novos; sem segredos versionados).
 
 ---
 
