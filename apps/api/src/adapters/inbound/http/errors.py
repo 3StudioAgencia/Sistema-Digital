@@ -29,7 +29,11 @@ from src.application.ports.identity_provider import (
 )
 from src.application.ports.storage import StorageError
 from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
-from src.domain.provas import CriacaoDivergenteError, ProvaNaoEncontradaError
+from src.domain.provas import (
+    CriacaoDivergenteError,
+    LimiteDeTentativasError,
+    ProvaNaoEncontradaError,
+)
 from src.domain.usuarios import ErroDeDominio
 from src.infrastructure.logging import request_id_var
 
@@ -101,6 +105,8 @@ def _status_de_dominio(exc: ErroDeDominio) -> int:
         return status.HTTP_404_NOT_FOUND
     if isinstance(exc, EmailJaCadastradoError | CriacaoDivergenteError):
         return status.HTTP_409_CONFLICT
+    if isinstance(exc, LimiteDeTentativasError):
+        return status.HTTP_429_TOO_MANY_REQUESTS
     return status.HTTP_422_UNPROCESSABLE_CONTENT
 
 

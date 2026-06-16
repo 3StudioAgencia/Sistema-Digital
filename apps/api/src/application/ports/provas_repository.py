@@ -84,6 +84,14 @@ class ProvasRepositoryPort(ABC):
         """Busca pontual por id — o escopo é da RLS (sessão com claims)."""
 
     @abstractmethod
+    async def buscar_por_codigo(self, codigo: str) -> Prova | None:
+        """Resolve a prova pelo CÓDIGO único (W3-C10) — o ``resolver_prova()`` do
+        backlog. Escopada pela RLS (sessão com claims): código inexistente OU fora
+        do escopo do ator → ``None``; o caso de uso converte AMBOS no MESMO 404
+        genérico (anti-enumeração — RN-014). O QR carrega o próprio código (C06),
+        então digitação manual e leitura batem aqui no mesmo caminho."""
+
+    @abstractmethod
     async def listar(self, filtros: FiltrosProvas) -> PaginaProvas:
         """Página de provas (busca + filtros), ordenada por ``created_at`` desc.
 

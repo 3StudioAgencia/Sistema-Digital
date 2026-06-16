@@ -32,6 +32,38 @@
 
 ---
 
+## Sessão 13 — 2026-06-16 — [Wave 3 / Componente C10] Escaneamento (Câmera + Manual, mobile-first) — ABRE A WAVE 3
+
+**Objetivo:** A ponte física→digital — identificar a prova pela leitura do QR (in-app) ou pela digitação manual, com um endpoint único e idempotente, tudo mobile-first, robusto (câmera negada → manual) e seguro (anti-enumeração + rate limiting). O C10 **só identifica**; transição é C11, assinatura é C12.
+
+**Decisões (respostas dos Pontos de Decisão §4 — confirmadas pelo dono):**
+- **DP-1 (bloqueante):** mantido o **formato canônico do C06** `PRV-AAAA-MM-NNNNNN`; a máscara "3S-/8 dígitos" do design é **legado**. Input com prefixo fixo `PRV-` + máscara `AAAA-MM-XXXXXX`; cliente em maiúsculas, **servidor normaliza** (`strip().upper()`) antes de validar. (ADR-052)
+- **DP-2:** destino pós-identificação = **uma nova tela de confirmação** (`/provas/[id]/confirmar`) mostrando **nome + requerimento + status** + **placeholder de assinatura** (C12) e "Confirmar movimentação" desabilitado (C11). Não é o detalhe do C08. (ADR-053)
+- **DP-3:** rate limiting = **contador Postgres de janela fixa** (`rate_limit_contadores`, 1 linha/ator, upsert atômico, reset por minuto, RLS `self`, sem DELETE); anti-enumeração por reuso do 404 do C08. (ADR-054)
+- **DP-4:** lib de câmera = **html5-qrcode** (stack §4); mobile-first de fato (CSS base mobile, safe areas, terço inferior, degradação graciosa). (ADR-055)
+- **DP-5:** "Última leitura" = indicador local/sessão; "Ver histórico" = placeholder (C13). (ADR-056)
+
+**Feito:**
+- **Grounding (workflow de 5 agentes):** confirmou o formato/regex/charset do C06 (`domain/provas.py`), o QR = código puro, que `resolver_prova()` **não existia** (é do C10), o padrão anti-enum/RLS/DI, a ausência de Redis (só Postgres), e o scaffolding do front (`/escanear` já no nav como placeholder; html5-qrcode **não instalado**).
+- **Backend:** `domain/provas.normalizar_codigo` + `LimiteDeTentativasError` (429); `RateLimiterPort` + `SqlAlchemyRateLimiter` (upsert atômico com `app_current_user_id()`); `ProvasRepositoryPort.buscar_por_codigo`; `ProvasIdentificacaoService` (rate limit→commit→normaliza→valida→resolve); `get_identificacao_service` (gate `Recurso.ESCANEAR`); `POST /provas/identificar` (`IdentificarIn`→`ProvaDetalheOut`); `errors.py` mapeia 429; migration **`0014`** (`rate_limit_contadores` + RLS) + espelhos `.sql`; `RateLimitContadorRow` no models.
+- **Frontend:** `lib/provas/codigo.ts` (espelho do formato) + `lib/api/escaneamento.ts`; `/escanear` (`EscanearView` + `CameraScanner` com import dinâmico de html5-qrcode + degradação graciosa; `EntradaManual` com máscara; toggle radiogroup; flash de sucesso; rodapé DP-5) + `escanear.module.css` **mobile-first**; `/provas/[id]/confirmar` (view + css). `html5-qrcode ^2.3.8` adicionado.
+- **Validação contra Postgres real:** subido o cluster in-repo `.tmp-pg` (PG, porta 5433); corrigido um **desync** (alembic_version=0014 sem a tabela — crash de shutdown do embedded-postgres) via `stamp 0013` + `upgrade head`; ciclo up/down/up do `test_migrations` verde.
+
+**Testes / cobertura:**
+- **api: 486 verdes, cobertura 94,55%** (domínio de provas 100%) — unit (`test_provas_identificacao`) + @db (`test_provas_identificacao_endpoints`, `test_rls_rate_limit`, `test_migrations` head 0014). Cobre **idempotência QR/manual** (mesmo registro), **anti-enumeração** (inválido==inexistente==fora-de-escopo, mensagem idêntica), **429** + isolamento por usuário, **RLS do contador**.
+- **web: 136 verdes** (`codigo.test.ts`, `escanear-view.test.tsx` — incl. câmera negada→manual e QR==manual mesmo destino, `confirmar-view.test.tsx`) + **E2E** `escanear.spec.ts` (redirect sempre; live opt-in). `ruff`/`mypy --strict`/`lint`/`build`/`format:check` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Migration `0014` no Supabase real** (operação de fechamento — não quebra o existente; o C10 não roda em prod sem ela). Padrão das waves anteriores (aplicar via MCP).
+- [ ] (Herdadas) segredos `R2_*`/role de runtime/leaked-password protection no dashboard.
+
+**Próximo passo:**
+- **W3-C11 — Máquina de Estados (14 estados, 4 rotas):** `TRANSITION_RULES` em `domain/state_machine/rules.py` (cobertura ≥ 95%); pluga no botão "Confirmar movimentação" da tela de confirmação do C10 e popula `finalizada_em`/`ciclo_atual`.
+
+**Definition of Done:** ✅ atendida (testes ≥80% domínio/serviço; anti-enumeração e idempotência QR/manual cobertas; sem erro de console/log crítico; error boundary `(app)` cobre a rota + degradação graciosa da câmera; animações com `prefers-reduced-motion`; RLS versionada; sem segredos versionados). ⚠️ **migration `0014` ainda não aplicada no Supabase real** (item de operação acima).
+
+---
+
 ## Sessão 12 — 2026-06-15 — [Wave 2 / Componente C09] Tela de Configurações do Sistema (FECHA A WAVE 2)
 
 **Objetivo:** Configurações do sistema (RF-022), exclusivas do 3Studio: tempo de atraso (RN-008/US-016) e template de etiqueta (RN-011), persistidos em `system_settings` com RLS, consumíveis server-side (etiqueta C06 agora; dashboard C16 depois). Último componente da Wave 2.

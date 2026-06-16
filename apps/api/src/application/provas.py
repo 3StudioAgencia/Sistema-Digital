@@ -38,6 +38,7 @@ from src.application.ports.provas_repository import (
     ProvaJaExisteError,
     ProvasRepositoryPort,
 )
+from src.application.ports.rate_limiter import RateLimiterPort
 from src.application.ports.settings_repository import SettingsRepositoryPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
@@ -45,11 +46,14 @@ from src.application.ports.usuarios_repository import UsuariosRepositoryPort
 from src.domain.provas import (
     EXTENSAO_POR_TIPO,
     CriacaoDivergenteError,
+    LimiteDeTentativasError,
     Prova,
     ProvaNaoEncontradaError,
     Rota,
     gerar_codigo,
+    normalizar_codigo,
     validar_arte,
+    validar_codigo,
     validar_vendedor,
 )
 from src.domain.settings import CHAVE_ETIQUETA, ConfiguracaoEtiqueta, efetivar_config_etiqueta
@@ -396,13 +400,92 @@ class ProvasConsultaService:
         return refs
 
 
+# ---------------------------------------------------------------------------
+# Identificação (W3-C10) — a ponte física→digital (QR/manual → registro)
+# ---------------------------------------------------------------------------
+# RN-014: 30 tentativas por usuário autenticado por minuto. ``CHAVE_IDENTIFICACAO``
+# é o bucket lógico do contador (a tabela é genérica — outros endpoints futuros
+# usam outras chaves sem nova migration).
+LIMITE_IDENTIFICACAO = 30
+CHAVE_IDENTIFICACAO = "identificar"
+
+
+class ProvasIdentificacaoService:
+    """Caso de uso de IDENTIFICAÇÃO da prova (W3-C10) — ``resolver_prova()``.
+
+    QR e digitação manual chegam pelo MESMO método (``identificar``) e resolvem o
+    MESMO registro (idempotente quanto ao mecanismo): o QR carrega o próprio
+    código (C06), então não há caminho separado. A resolução é escopada pela RLS
+    de ``provas`` (claims propagados — ADR-008).
+
+    Segurança (RN-014):
+    - ANTI-ENUMERAÇÃO: código malformado, inexistente E fora do escopo retornam o
+      MESMO ``ProvaNaoEncontradaError`` (404 genérico) — nada distingue os casos.
+    - RATE LIMITING: 30 tentativas/ator/minuto. A tentativa é contada e PERSISTIDA
+      (commit) ANTES de resolver, de modo que conte mesmo quando a resolução dá
+      404 — senão o rollback do 404 zeraria o contador e furaria o limite.
+
+    Só IDENTIFICA: validar a próxima transição é o C11 e assinar é o C12 (DP-2) —
+    o C10 entrega a prova resolvida e o fluxo de confirmação pluga depois.
+    """
+
+    def __init__(
+        self,
+        repo: ProvasRepositoryPort,
+        rate_limiter: RateLimiterPort,
+        uow: UnitOfWork,
+        limite: int = LIMITE_IDENTIFICACAO,
+    ) -> None:
+        self._repo = repo
+        self._rate_limiter = rate_limiter
+        self._uow = uow
+        self._limite = limite
+
+    async def identificar(self, codigo_bruto: str) -> ProvaListagem:
+        """Resolve a prova pelo QR/código manual (RF-004/RF-005), idempotente.
+
+        Nunca loga o código (não vaza o conteúdo escaneado — RNF-024): só o
+        ``prova_id`` no sucesso e a contagem no bloqueio.
+        """
+        # 1. Rate limit ANTES de tudo: conta a tentativa e a PERSISTE já (o 404 da
+        #    resolução não pode desfazê-la). Acima do limite → 429.
+        contador = await self._rate_limiter.registrar_e_contar(CHAVE_IDENTIFICACAO)
+        await self._uow.commit()
+        if contador > self._limite:
+            logger.warning(
+                "limite de identificação excedido",
+                extra={"event": "identificacao_rate_limited", "contador": contador},
+            )
+            raise LimiteDeTentativasError()
+
+        # 2. Normaliza + valida o FORMATO. Malformado é tratado como "não
+        #    encontrada" (MESMO 404 — não revela que nem chegou a consultar).
+        codigo = normalizar_codigo(codigo_bruto)
+        if not validar_codigo(codigo):
+            raise ProvaNaoEncontradaError()
+
+        # 3. Resolve pelo código (a RLS escopa): inexistente/fora do escopo → 404.
+        prova = await self._repo.buscar_por_codigo(codigo)
+        if prova is None:
+            raise ProvaNaoEncontradaError()
+        nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
+        logger.info(
+            "prova identificada",
+            extra={"event": "prova_identificada", "prova_id": prova.id},
+        )
+        return ProvaListagem(prova=prova, vendedor_nome=nomes.get(prova.vendedor_id))
+
+
 __all__ = [
+    "CHAVE_IDENTIFICACAO",
+    "LIMITE_IDENTIFICACAO",
     "MAX_TENTATIVAS_CODIGO",
     "CriarProva",
     "GeracaoDeCodigoEsgotadaError",
     "PaginaProvasListagem",
     "ProvaListagem",
     "ProvasConsultaService",
+    "ProvasIdentificacaoService",
     "ProvasService",
     "VendedorRef",
 ]

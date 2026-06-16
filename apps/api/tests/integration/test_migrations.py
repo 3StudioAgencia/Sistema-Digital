@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0013", (
-        "head deve registrar a revisão 0013 (system_settings — W2-C09)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0014", (
+        "head deve registrar a revisão 0014 (rate_limit_contadores — W3-C10)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -151,6 +151,21 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 3
     ), "0013 deve criar as 3 policies de system_settings (1 SELECT + INSERT + UPDATE)"
+    # W3-C10: tabela rate_limit_contadores (0014) + RLS por ator (1 policy FOR ALL).
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_class WHERE relname = 'rate_limit_contadores'",
+        )
+        == 1
+    ), "0014 deve criar a tabela rate_limit_contadores"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_policies WHERE tablename = 'rate_limit_contadores'",
+        )
+        == 1
+    ), "0014 deve criar a policy rate_limit_contadores_self (FOR ALL — ator só a própria linha)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -199,6 +214,12 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")
         == 0
     ), "downgrade da 0013 deve remover a tabela system_settings"
+    assert (
+        _scalar(
+            database_url, "SELECT count(*) FROM pg_class WHERE relname = 'rate_limit_contadores'"
+        )
+        == 0
+    ), "downgrade da 0014 deve remover a tabela rate_limit_contadores"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

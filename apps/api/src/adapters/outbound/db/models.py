@@ -151,4 +151,33 @@ class SystemSettingRow(Base):
     updated_by: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
 
 
-__all__ = ["NAMING_CONVENTION", "Base", "ProvaRow", "SystemSettingRow", "UsuarioRow", "metadata"]
+class RateLimitContadorRow(Base):
+    """Linha da tabela ``rate_limit_contadores`` (migration 0014 — W3-C10).
+
+    Contador de tentativas por ator: UMA linha por ``(user_id, chave)``. O
+    limitador (``SqlAlchemyRateLimiter``) faz upsert atômico em SQL puro
+    (``app_current_user_id()`` + ``date_trunc``) que incrementa na janela de 1 min
+    e RESETA ao virar o minuto — sem job de limpeza. RLS ``rate_limit_contadores_self``:
+    o ator só toca a PRÓPRIA linha. Este modelo existe para o espelho de schema
+    (autogenerate do Alembic); não é mapeado em leituras de runtime.
+    """
+
+    __tablename__ = "rate_limit_contadores"
+
+    user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    chave: Mapped[str] = mapped_column(String(60), primary_key=True)
+    janela_inicio: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False
+    )
+    contador: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+
+__all__ = [
+    "NAMING_CONVENTION",
+    "Base",
+    "ProvaRow",
+    "RateLimitContadorRow",
+    "SystemSettingRow",
+    "UsuarioRow",
+    "metadata",
+]

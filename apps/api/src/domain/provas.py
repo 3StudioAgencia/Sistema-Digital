@@ -100,6 +100,19 @@ def validar_codigo(codigo: str) -> bool:
     return CODIGO_REGEX.fullmatch(codigo) is not None
 
 
+def normalizar_codigo(bruto: str) -> str:
+    """Normaliza a entrada bruta (QR ou digitação) à forma canônica (W3-C10).
+
+    Remove espaços nas bordas e força MAIÚSCULAS: o alfabeto do código é só
+    maiúsculas (``CODIGO_ALFABETO``) e o ``PRV-`` é fixo, então colar/digitar em
+    minúsculas ou com um ``\\n`` do leitor de QR ainda resolve a MESMA prova
+    (DP-1). O QR já carrega o código exato — normalizar é idempotente para ele.
+    NÃO mexe em espaços internos: código com espaço no meio é malformado e cai no
+    MESMO 404 genérico (anti-enumeração — RN-014), nunca numa mensagem distinta.
+    """
+    return bruto.strip().upper()
+
+
 # ---------------------------------------------------------------------------
 # Arte (RF-001): JPG/PNG, máx 10 MB — validada por CONTEÚDO, não por extensão
 # ---------------------------------------------------------------------------
@@ -149,6 +162,20 @@ class ProvaNaoEncontradaError(ErroDeDominio):
 
     def __init__(self) -> None:
         super().__init__("Prova não encontrada.")
+
+
+class LimiteDeTentativasError(ErroDeDominio):
+    """Excesso de tentativas de identificação do MESMO ator numa janela curta
+    (RN-014: 30/usuário/minuto — W3-C10). Mapeada a 429. Mensagem genérica: não
+    revela NADA sobre provas (existência/escopo), só pede para aguardar — o
+    rate limiting protege a enumeração por volume sem virar canal lateral."""
+
+    codigo = "limite_de_tentativas"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente."
+        )
 
 
 def detectar_tipo_imagem(data: bytes) -> str | None:
@@ -231,12 +258,14 @@ __all__ = [
     "ArteInvalidaError",
     "CriacaoDivergenteError",
     "EstadoProva",
+    "LimiteDeTentativasError",
     "Prova",
     "ProvaNaoEncontradaError",
     "Rota",
     "VendedorInvalidoError",
     "detectar_tipo_imagem",
     "gerar_codigo",
+    "normalizar_codigo",
     "validar_arte",
     "validar_codigo",
     "validar_vendedor",

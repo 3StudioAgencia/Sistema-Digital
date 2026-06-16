@@ -49,6 +49,9 @@ class FakeProvasRepo(ProvasRepositoryPort):
     async def get(self, prova_id: str) -> Prova | None:  # pragma: no cover
         raise NotImplementedError
 
+    async def buscar_por_codigo(self, codigo: str) -> Prova | None:  # pragma: no cover - C10
+        raise NotImplementedError
+
     async def listar(self, filtros: FiltrosProvas) -> PaginaProvas:
         return self._pagina
 

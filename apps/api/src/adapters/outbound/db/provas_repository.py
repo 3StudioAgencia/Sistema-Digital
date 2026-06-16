@@ -89,6 +89,15 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         row = await self._session.get(ProvaRow, prova_id)
         return _para_dominio(row) if row is not None else None
 
+    async def buscar_por_codigo(self, codigo: str) -> Prova | None:
+        # Resolve por código único (índice ``uq_provas_codigo`` — RNF-019),
+        # escopado pela RLS da sessão: fora do escopo a linha simplesmente não
+        # retorna (None), e o serviço dá o mesmo 404 do inexistente
+        # (anti-enumeração). O código já chega normalizado/validado do serviço.
+        stmt = select(ProvaRow).where(ProvaRow.codigo == codigo)
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _para_dominio(row) if row is not None else None
+
     async def listar(self, filtros: FiltrosProvas) -> PaginaProvas:
         condicoes = self._condicoes(filtros)
         # Contagem + página na MESMA sessão (sem N+1 — RNF-022), filtradas pela

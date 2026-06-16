@@ -1,0 +1,258 @@
+/* Confirmação da movimentação (W3-C10/DP-2) — mobile-first, dentro do shell.
+   Cartão branco com os dados da prova (nome + requerimento) e cartão de
+   assinatura (placeholder do C12) + botão "Confirmar" (placeholder do C11).
+   Mesma linguagem visual do C08 (tokens --app-*, raios, pills). */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+}
+
+.voltar {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-card-white);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.voltar:hover {
+  opacity: 0.85;
+}
+
+.voltar:focus-visible,
+.linkRetry:focus-visible,
+.botaoConfirmar:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------- cartão de dados */
+.card {
+  background: var(--app-card-white);
+  border-radius: var(--app-card-radius);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.codigo {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--app-text-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+.requerimento {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--app-text-gray);
+}
+
+.nome {
+  margin-top: 4px;
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.divisor {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--app-divider);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 0;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campoRotulo {
+  font-size: 14px;
+  color: var(--app-text-gray);
+}
+
+.campoValor {
+  margin: 0;
+  font-size: 18px;
+  color: var(--app-ink);
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------------------------- cartão de assinatura */
+.assinatura {
+  flex: 1;
+  background: var(--app-ink);
+  border-radius: var(--app-card-radius);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assinaturaTitulo {
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.assinaturaPad {
+  flex: 1;
+  min-height: 160px;
+  border: 2px dashed var(--auth-text-muted);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.assinaturaDica {
+  font-size: 14px;
+  color: var(--app-sidebar-muted);
+  max-width: 36ch;
+}
+
+.botaoConfirmar {
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoConfirmar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.assinaturaNota {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--app-sidebar-muted);
+}
+
+/* -------------------------------------------------- estados auxiliares */
+.skeleton {
+  min-height: 240px;
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.erro {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 16px;
+  color: var(--app-text-gray);
+}
+
+.linkRetry {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* -------------------------------------------------- desktop (≥768px) */
+@media (min-width: 768px) {
+  .pagina {
+    gap: calc(28 * var(--u));
+    padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+  }
+
+  .voltar {
+    height: calc(56 * var(--u));
+    min-height: 0;
+    font-size: calc(20 * var(--u));
+    padding: 0 calc(34 * var(--u));
+  }
+
+  .card {
+    padding: calc(40 * var(--u));
+  }
+
+  .nome {
+    font-size: calc(54 * var(--u));
+  }
+
+  .requerimento {
+    font-size: calc(20 * var(--u));
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: calc(28 * var(--u)) calc(24 * var(--u));
+  }
+
+  .campoRotulo {
+    font-size: calc(18 * var(--u));
+  }
+
+  .campoValor {
+    font-size: calc(24 * var(--u));
+  }
+
+  .assinatura {
+    padding: calc(44 * var(--u));
+    min-height: calc(320 * var(--u));
+  }
+
+  .assinaturaTitulo {
+    font-size: calc(36 * var(--u));
+  }
+
+  .botaoConfirmar {
+    align-self: flex-start;
+    min-width: calc(320 * var(--u));
+    height: calc(64 * var(--u));
+  }
+}

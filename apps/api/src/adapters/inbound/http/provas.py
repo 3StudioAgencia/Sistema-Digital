@@ -19,9 +19,10 @@ from datetime import date, datetime
 from typing import Annotated, Self
 
 from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.adapters.inbound.http.dependencies import (
+    get_identificacao_service,
     get_provas_consulta_service,
     get_provas_service,
 )
@@ -34,6 +35,7 @@ from src.application.provas import (
     CriarProva,
     ProvaListagem,
     ProvasConsultaService,
+    ProvasIdentificacaoService,
     ProvasService,
 )
 from src.domain.provas import ARTE_TAMANHO_MAXIMO, EstadoProva, Prova, Rota
@@ -154,6 +156,16 @@ class ProvaDetalheOut(BaseModel):
         )
 
 
+class IdentificarIn(BaseModel):
+    """Entrada da identificação (W3-C10): o conteúdo do QR OU o código digitado —
+    MESMO campo, MESMO caminho (o QR carrega o próprio código — C06). A
+    normalização e a validação de FORMATO são do serviço (anti-enumeração: formato
+    inválido cai no mesmo 404, não num 422 que revelaria "nem chegou a consultar").
+    ``max_length`` é só um teto anti-abuso — o código real tem ~18 caracteres."""
+
+    codigo: Annotated[str, Field(min_length=1, max_length=100)]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -247,6 +259,25 @@ async def criar(
         arte_content_type_declarado=arte.content_type,
     )
     return ProvaOut.de_dominio(prova)
+
+
+@router.post("/identificar", response_model=ProvaDetalheOut)
+async def identificar(
+    body: IdentificarIn,
+    service: Annotated[ProvasIdentificacaoService, Depends(get_identificacao_service)],
+) -> ProvaDetalheOut:
+    """Identifica a prova pelo QR ou pelo código manual (RF-004/RF-005) — a ponte
+    física→digital. UNIVERSAL-em-escopo (Matriz §7 "Escanear"); o ESCOPO de dado é
+    da RLS de ``provas`` (claims propagados — ADR-008).
+
+    Anti-enumeração (RN-014): código inválido, inexistente E fora do escopo →
+    MESMO 404 genérico (``prova_nao_encontrada``). Rate limiting: 30 tentativas/
+    ator/minuto → 429 (``limite_de_tentativas``). Idempotente quanto ao mecanismo:
+    QR e digitação resolvem o MESMO registro pelo mesmo ``resolver_prova()``. Só
+    IDENTIFICA — a transição é do C11 e a assinatura do C12 (DP-2): o cliente leva
+    a prova resolvida à tela de confirmação.
+    """
+    return ProvaDetalheOut.de_dominio(await service.identificar(body.codigo))
 
 
 @router.get("/{prova_id}", response_model=ProvaDetalheOut)

@@ -1,0 +1,438 @@
+/* Escanear prova (W3-C10) — MOBILE-FIRST (RF-029/US-020): operadores no celular,
+   em pé, sob luz forte. Ao contrário das demais telas (desktop-first com override
+   ≤768px), aqui a base é o MOBILE (360px+), e o @media (min-width:768px) recompõe
+   o layout de duas colunas do design no desktop. Touch targets ≥48px, safe areas
+   via env(), botões principais no terço inferior, contraste AA. Tokens --app-* e
+   --motion-* da plataforma; só transform/opacity nas animações. */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Safe areas (notch/gestos) — o conteúdo nunca encosta nas bordas do device. */
+  padding: 20px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+}
+
+.cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.titulo {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.subtitulo {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--app-text-gray);
+  max-width: 60ch;
+}
+
+/* -------------------------------------------------- toggle Câmera | Manual */
+.toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  max-width: 360px;
+  height: 52px;
+  padding: 5px;
+  background: var(--app-card-white);
+  border-radius: var(--app-radius-pill);
+}
+
+.toggleItem {
+  position: relative;
+  border: 0;
+  background: none;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: 15px;
+  color: var(--app-ink);
+  cursor: pointer;
+  min-width: 0;
+  min-height: 42px;
+}
+
+.toggleItem:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+.togglePill {
+  position: absolute;
+  inset: 0;
+  background: var(--app-ink);
+  border-radius: var(--app-radius-pill);
+}
+
+.toggleRotulo {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.toggleItem[data-ativa] .toggleRotulo {
+  color: #ffffff;
+}
+
+.toggleIcone {
+  width: 18px;
+  height: 18px;
+}
+
+/* -------------------------------------------------- conteúdo (card) */
+.conteudo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* -------------------------------------------------- modo câmera */
+.cameraCard,
+.manualCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--app-card-white);
+  border-radius: var(--app-card-radius);
+  padding: 20px;
+}
+
+.visorCol {
+  position: relative;
+  width: 100%;
+}
+
+.visor,
+.visorPlaceholder {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 46vh;
+  border-radius: 24px;
+  background: var(--app-shell-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.visorOculto {
+  display: none;
+}
+
+.visorAtivo {
+  display: flex;
+}
+
+/* html5-qrcode injeta o <video> aqui; ocupa o quadro inteiro do visor. */
+.scanner {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.scanner :global(video) {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  border-radius: 18px;
+}
+
+.visorLegenda {
+  font-size: 13px;
+  color: var(--app-text-gray);
+  text-align: center;
+  padding: 0 8px 4px;
+}
+
+.visorMoldura {
+  width: 56%;
+  max-width: 180px;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.visorIcone {
+  font-size: 44px;
+  line-height: 1;
+  color: var(--app-ink);
+}
+
+.cameraPainel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.painelTitulo {
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.painelTexto {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--app-text-gray);
+}
+
+/* -------------------------------------------------- modo manual */
+.manualCard {
+  align-items: stretch;
+}
+
+.manualTitulo {
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--app-ink);
+}
+
+.manualTexto {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--app-text-gray);
+}
+
+.inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 56px;
+  padding: 0 18px;
+  background: var(--app-shell-bg);
+  border-radius: var(--app-radius-pill);
+}
+
+.inputWrap:focus-within {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+.inputAfixo {
+  font-size: 16px;
+  color: var(--app-text-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--app-ink);
+  text-transform: uppercase;
+}
+
+.input::placeholder {
+  color: var(--app-text-gray);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* -------------------------------------------------- botões */
+.botaoPrimario {
+  /* terço inferior no mobile: empurra a ação principal para a base do card,
+     ao alcance do polegar; resetado no desktop (segue o texto, como no design). */
+  margin-top: auto;
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-ink);
+  color: #ffffff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoSecundario {
+  margin-top: auto;
+  min-height: 48px;
+  border: 1px solid var(--app-divider);
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 24px;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoPrimario:hover,
+.botaoSecundario:hover {
+  opacity: 0.9;
+}
+
+.botaoPrimario:disabled,
+.botaoSecundario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botaoPrimario:focus-visible,
+.botaoSecundario:focus-visible,
+.rodapeLink:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------- flash de sucesso */
+.sucessoFlash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sucessoPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 22px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-ink);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* -------------------------------------------------- rodapé */
+.rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rodapeInfo {
+  font-size: 13px;
+  color: var(--app-text-gray);
+}
+
+.rodapeLink {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.rodapeLink:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------- desktop (≥768px) */
+@media (min-width: 768px) {
+  .pagina {
+    gap: calc(28 * var(--u));
+    padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+  }
+
+  .titulo {
+    font-size: calc(64 * var(--u));
+  }
+
+  .subtitulo {
+    font-size: calc(20 * var(--u));
+  }
+
+  .toggle {
+    height: calc(56 * var(--u));
+    max-width: calc(520 * var(--u));
+  }
+
+  .toggleItem {
+    font-size: calc(18 * var(--u));
+    min-height: calc(46 * var(--u));
+  }
+
+  .cameraCard {
+    flex-direction: row;
+    align-items: center;
+    gap: calc(48 * var(--u));
+    padding: calc(40 * var(--u));
+  }
+
+  .visorCol {
+    flex: 1;
+  }
+
+  .visor,
+  .visorPlaceholder {
+    max-height: none;
+  }
+
+  .manualCard {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: calc(20 * var(--u));
+    padding: calc(64 * var(--u));
+  }
+
+  .manualCard .inputWrap,
+  .manualCard .botaoPrimario {
+    width: 100%;
+    max-width: calc(520 * var(--u));
+  }
+
+  .painelTitulo,
+  .manualTitulo {
+    font-size: calc(40 * var(--u));
+  }
+
+  .painelTexto,
+  .manualTexto {
+    font-size: calc(20 * var(--u));
+  }
+
+  /* No desktop a ação acompanha o texto (não empurrada à base). */
+  .botaoPrimario,
+  .botaoSecundario {
+    margin-top: 0;
+    align-self: flex-start;
+  }
+
+  .manualCard .botaoPrimario {
+    align-self: center;
+  }
+}
