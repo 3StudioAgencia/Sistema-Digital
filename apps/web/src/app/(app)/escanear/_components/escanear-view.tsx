@@ -17,14 +17,14 @@
 import { motion } from "framer-motion";
 import { Camera, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { useToast } from "@/components/ui/toast/ToastProvider";
 import { ApiError } from "@/lib/api/client";
 import { identificarProva } from "@/lib/api/escaneamento";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
-import { mascararResto, montarCodigo, validarCodigo } from "@/lib/provas/codigo";
+import { mascararCodigo, validarCodigo } from "@/lib/provas/codigo";
 
 import styles from "../escanear.module.css";
 import { CameraScanner } from "./camera-scanner";
@@ -76,6 +76,11 @@ export function EscanearView() {
     }
   }
 
+  const rotuloLeitura = rotuloUltimaLeitura(ultimaLeitura);
+  function verHistorico() {
+    toast.success("O histórico de leituras chega com a timeline da prova (C13).");
+  }
+
   return (
     <section className={styles.pagina} aria-label="Escanear prova">
       <header className={styles.cabecalho}>
@@ -90,9 +95,18 @@ export function EscanearView() {
 
       <div className={styles.conteudo}>
         {modo === "camera" ? (
-          <CameraScanner onDetectar={identificar} ocupado={buscando} />
+          <CameraScanner
+            onDetectar={identificar}
+            ocupado={buscando}
+            rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
+          />
         ) : (
-          <EntradaManual onBuscar={identificar} ocupado={buscando} reduced={reduced} />
+          <EntradaManual
+            onBuscar={identificar}
+            ocupado={buscando}
+            reduced={reduced}
+            rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
+          />
         )}
 
         {sucesso && (
@@ -112,20 +126,20 @@ export function EscanearView() {
           </motion.div>
         )}
       </div>
-
-      <footer className={styles.rodape}>
-        <span className={styles.rodapeInfo}>{rotuloUltimaLeitura(ultimaLeitura)}</span>
-        <button
-          type="button"
-          className={styles.rodapeLink}
-          onClick={() =>
-            toast.success("O histórico de leituras chega com a timeline da prova (C13).")
-          }
-        >
-          Ver histórico →
-        </button>
-      </footer>
     </section>
+  );
+}
+
+/** Rodapé "Última leitura · Ver histórico" — reutilizado dentro do card (Câmera)
+ *  e no rodapé da página (Manual). DP-5: indicador local + placeholder do C13. */
+function Rodape({ rotulo, onHistorico }: { rotulo: string; onHistorico: () => void }) {
+  return (
+    <div className={styles.rodapeLinha}>
+      <span className={styles.rodapeInfo}>{rotulo}</span>
+      <button type="button" className={styles.rodapeLink} onClick={onHistorico}>
+        Ver histórico →
+      </button>
+    </div>
   );
 }
 
@@ -223,14 +237,15 @@ function EntradaManual({
   onBuscar,
   ocupado,
   reduced,
+  rodape,
 }: {
   onBuscar: (codigo: string) => void;
   ocupado: boolean;
   reduced: boolean;
+  rodape: ReactNode;
 }) {
   const idBase = useId();
-  const [resto, setResto] = useState("");
-  const codigo = montarCodigo(resto);
+  const [codigo, setCodigo] = useState("");
   const valido = validarCodigo(codigo);
   const toque = reduced ? {} : { whileTap: { scale: 0.98 }, transition: SPRING.interactive };
 
@@ -242,39 +257,45 @@ function EntradaManual({
 
   return (
     <form className={styles.manualCard} onSubmit={submeter} aria-label="Inserir código manualmente">
-      <h2 className={styles.manualTitulo}>Inserir código manualmente</h2>
-      <p className={styles.manualTexto}>
-        Digite o código que aparece abaixo do QR Code da etiqueta. A movimentação será registrada
-        após a confirmação.
-      </p>
+      {/* Bloco centralizado (mesma caixa do card da câmera): título + descrição +
+          input + botão + rodapé com divisória, tudo DENTRO do card (fiel ao design). */}
+      <div className={styles.manualBloco}>
+        <h2 className={styles.manualTitulo}>Inserir código manualmente</h2>
+        <p className={styles.manualTexto}>
+          Digite o código que aparece abaixo do QR Code da etiqueta. A movimentação será registrada
+          após a confirmação.
+        </p>
 
-      <div className={styles.inputWrap}>
-        <span className={styles.inputAfixo} aria-hidden>
-          PRV-
-        </span>
-        <input
-          id={`${idBase}-codigo`}
-          className={styles.input}
-          value={resto}
-          onChange={(e) => setResto(mascararResto(e.target.value))}
-          placeholder="AAAA-MM-XXXXXX"
-          inputMode="text"
-          autoCapitalize="characters"
-          autoCorrect="off"
-          autoComplete="off"
-          spellCheck={false}
-          aria-label="Código da prova (após PRV-)"
-        />
+        <div className={styles.inputWrap}>
+          <input
+            id={`${idBase}-codigo`}
+            className={styles.input}
+            value={codigo}
+            onChange={(e) => setCodigo(mascararCodigo(e.target.value))}
+            placeholder="PRV-AAAA-MM-XXXXXX"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="Código da prova"
+          />
+        </div>
+
+        <motion.button
+          type="submit"
+          className={styles.botaoPrimario}
+          disabled={!valido || ocupado}
+          {...toque}
+        >
+          {ocupado ? "Buscando…" : "Buscar prova →"}
+        </motion.button>
+
+        <div className={styles.cardRodape}>
+          <hr className={styles.cardRodapeDivisor} />
+          {rodape}
+        </div>
       </div>
-
-      <motion.button
-        type="submit"
-        className={styles.botaoPrimario}
-        disabled={!valido || ocupado}
-        {...toque}
-      >
-        {ocupado ? "Buscando…" : "Buscar prova →"}
-      </motion.button>
     </form>
   );
 }

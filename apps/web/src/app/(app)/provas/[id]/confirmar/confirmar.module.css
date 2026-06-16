@@ -1,7 +1,12 @@
-/* Confirmação da movimentação (W3-C10/DP-2) — mobile-first, dentro do shell.
-   Cartão branco com os dados da prova (nome + requerimento) e cartão de
-   assinatura (placeholder do C12) + botão "Confirmar" (placeholder do C11).
-   Mesma linguagem visual do C08 (tokens --app-*, raios, pills). */
+/* Confirmação da movimentação (W3-C10/DP-2) — fiel ao design (Figma), mesma
+   linguagem do detalhe (C08): "Voltar" + card BRANCO (nome + requerimento + linha
+   de metadados) com um card PRETO "Assinatura Digital" aninhado (botão Confirmar +
+   área de assinatura tracejada).
+
+   MOBILE-FIRST (prioridade): a base é o mobile (metadados em 2 colunas, Confirmar
+   full-width no rodapé do card preto, página rolável); o @media (min-width:768px)
+   recompõe o desktop (metadados em 6 colunas, card preenchendo a altura, Confirmar
+   no canto superior direito). Só transform/opacity nas animações. */
 
 .pagina {
   flex: 1;
@@ -11,6 +16,7 @@
   gap: 16px;
   padding: 20px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
+  overflow-y: auto; /* mobile: rola se o conteúdo passar da altura */
 }
 
 .voltar {
@@ -41,77 +47,79 @@
   outline-offset: 2px;
 }
 
-/* -------------------------------------------------- cartão de dados */
-.card {
+/* -------------------------------------------------- card branco (externo) */
+.cardExterno {
   background: var(--app-card-white);
-  border-radius: var(--app-card-radius);
-  padding: 24px 20px;
+  border-radius: 36px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
+  gap: 22px;
 }
 
-.codigo {
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  color: var(--app-text-gray);
-  font-variant-numeric: tabular-nums;
+.cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.requerimento {
-  margin-top: 6px;
-  font-size: 15px;
-  color: var(--app-text-gray);
+.tituloLinha {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .nome {
-  margin-top: 4px;
-  font-size: 32px;
-  line-height: 1.1;
+  font-size: 28px;
+  line-height: 1.12;
   font-weight: 400;
   color: var(--app-ink);
+  overflow-wrap: anywhere;
 }
 
-.divisor {
-  margin: 20px 0;
-  border: 0;
-  border-top: 1px solid var(--app-divider);
+.requerimento {
+  font-size: 12px;
+  color: var(--app-text-gray);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+/* linha de metadados (Cliente · Vendedor · Rota · Ciclo Atual · Criada em · Status) */
+.metadados {
   margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
 }
 
 .campo {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .campoRotulo {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--app-text-gray);
 }
 
 .campoValor {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   color: var(--app-ink);
   overflow-wrap: anywhere;
 }
 
-/* -------------------------------------------------- cartão de assinatura */
-.assinatura {
-  flex: 1;
+/* -------------------------------------------------- card preto (assinatura) */
+.cardAssinatura {
+  position: relative;
   background: var(--app-ink);
   border-radius: var(--app-card-radius);
-  padding: 24px 20px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  min-height: 360px;
 }
 
 .assinaturaTitulo {
@@ -120,26 +128,31 @@
   color: var(--auth-text);
 }
 
-.assinaturaPad {
+.assinaturaCanvas {
   flex: 1;
-  min-height: 160px;
-  border: 2px dashed var(--auth-text-muted);
-  border-radius: 18px;
+  min-height: 100px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   padding: 20px;
+  border: 2px dashed rgba(255, 255, 255, 0.26);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .assinaturaDica {
   font-size: 14px;
   color: var(--app-sidebar-muted);
-  max-width: 36ch;
+  max-width: 40ch;
 }
 
 .botaoConfirmar {
-  min-height: 52px;
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: var(--app-radius-pill);
   background: var(--app-accent);
@@ -151,20 +164,15 @@
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
-.botaoConfirmar:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.assinaturaNota {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--app-sidebar-muted);
+.botaoConfirmar:hover {
+  opacity: 0.9;
 }
 
 /* -------------------------------------------------- estados auxiliares */
 .skeleton {
-  min-height: 240px;
+  min-height: 320px;
+  background: var(--app-card-white);
+  border-radius: 36px;
   animation: pulso var(--motion-pulse) ease-in-out infinite;
 }
 
@@ -207,6 +215,7 @@
   .pagina {
     gap: calc(28 * var(--u));
     padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+    overflow: hidden; /* desktop: o card preenche a altura, sem rolagem */
   }
 
   .voltar {
@@ -216,21 +225,33 @@
     padding: 0 calc(34 * var(--u));
   }
 
-  .card {
-    padding: calc(40 * var(--u));
+  /* o card branco preenche a altura disponível (margens iguais — como no design). */
+  .cardExterno {
+    flex: 1;
+    min-height: 0;
+    padding: calc(48 * var(--u));
+    gap: calc(32 * var(--u));
+  }
+
+  .tituloLinha {
+    gap: calc(22 * var(--u));
   }
 
   .nome {
-    font-size: calc(54 * var(--u));
+    font-size: calc(56 * var(--u));
   }
 
   .requerimento {
-    font-size: calc(20 * var(--u));
+    font-size: calc(22 * var(--u));
   }
 
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: calc(28 * var(--u)) calc(24 * var(--u));
+  /* 6 campos justificados na largura inteira do card (= largura do card preto
+     abaixo): o 1º colado na esquerda, o último na direita, distância igual entre
+     eles (space-between). O ``gap`` é só o mínimo quando ficam apertados. */
+  .metadados {
+    display: flex;
+    justify-content: space-between;
+    gap: calc(20 * var(--u));
   }
 
   .campoRotulo {
@@ -241,18 +262,34 @@
     font-size: calc(24 * var(--u));
   }
 
-  .assinatura {
-    padding: calc(44 * var(--u));
-    min-height: calc(320 * var(--u));
+  /* o card preto preenche o resto do card branco. */
+  .cardAssinatura {
+    flex: 1;
+    min-height: 0;
+    padding: calc(40 * var(--u));
+    gap: calc(24 * var(--u));
   }
 
   .assinaturaTitulo {
-    font-size: calc(36 * var(--u));
+    font-size: calc(40 * var(--u));
   }
 
+  .assinaturaCanvas {
+    border-radius: calc(20 * var(--u));
+  }
+
+  .assinaturaDica {
+    font-size: calc(18 * var(--u));
+  }
+
+  /* Confirmar no canto superior direito (alinhado ao título). */
   .botaoConfirmar {
-    align-self: flex-start;
-    min-width: calc(320 * var(--u));
-    height: calc(64 * var(--u));
+    position: absolute;
+    top: calc(40 * var(--u));
+    right: calc(40 * var(--u));
+    width: auto;
+    min-width: calc(180 * var(--u));
+    height: calc(50 * var(--u));
+    font-size: calc(16 * var(--u));
   }
 }

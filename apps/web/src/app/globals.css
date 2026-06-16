@@ -36,9 +36,9 @@
   --app-accent: var(--auth-accent); /* #ffcb5c — mesmo amarelo do login */
   --app-danger: #ff5959; /* botão "Desativar" */
   --app-ink: #000000;
-  --app-text-gray: #575757; /* texto de tabela/controles claros */
+  --app-text-gray: #777777; /* texto de tabela/controles claros */
   --app-field: #d7d7d7; /* busca e filtros do conteúdo */
-  --app-divider: #979797; /* bordas/divisores da tabela */
+  --app-divider: #b9b9b9; /* bordas/divisores da tabela */
   --app-scrollbar: #b7b7b7;
   --app-avatar: #d9d9d9;
   --app-overlay: rgba(0, 0, 0, 0.76); /* scrim do modal (medido: alpha .763) */
@@ -62,6 +62,7 @@
      variáveis; o bloco @media abaixo zera tudo sob prefers-reduced-motion. */
   --motion-micro: 150ms; /* = DURATION.micro */
   --motion-pulse: 1200ms; /* pulso de skeleton/loading */
+  --motion-scan: 4000ms; /* varredura do QR no scanner (W3-C10) */
   --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* = EASING.standard */
 
   --font-sans:
@@ -74,6 +75,7 @@
   :root {
     --motion-micro: 0ms;
     --motion-pulse: 0ms;
+    --motion-scan: 0ms;
   }
 }
 

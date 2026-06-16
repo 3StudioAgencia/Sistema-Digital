@@ -102,11 +102,11 @@ describe("EscanearView (W3-C10) — câmera + manual, mobile-first", () => {
     const botao = screen.getByRole("button", { name: /Buscar prova/ });
     expect(botao).toBeDisabled();
 
-    fireEvent.change(input, { target: { value: "2026-06" } }); // incompleto
+    fireEvent.change(input, { target: { value: "PRV-2026-06" } }); // incompleto
     expect(botao).toBeDisabled();
 
     fireEvent.change(input, { target: { value: "prv-2026-06-a2kmq9" } }); // colou tudo, minúsculas
-    expect((input as HTMLInputElement).value).toBe("2026-06-A2KMQ9"); // mascarado
+    expect((input as HTMLInputElement).value).toBe(CODIGO); // mascarado p/ PRV-2026-06-A2KMQ9
     expect(botao).toBeEnabled();
   });
 
@@ -115,7 +115,7 @@ describe("EscanearView (W3-C10) — câmera + manual, mobile-first", () => {
     renderView();
     await user.click(screen.getByRole("radio", { name: /Manual/ }));
     fireEvent.change(screen.getByLabelText(/Código da prova/), {
-      target: { value: "2026-06-A2KMQ9" },
+      target: { value: CODIGO },
     });
     await user.click(screen.getByRole("button", { name: /Buscar prova/ }));
 
@@ -131,7 +131,7 @@ describe("EscanearView (W3-C10) — câmera + manual, mobile-first", () => {
     renderView();
     await user.click(screen.getByRole("radio", { name: /Manual/ }));
     fireEvent.change(screen.getByLabelText(/Código da prova/), {
-      target: { value: "2026-06-A2KMQ9" },
+      target: { value: CODIGO },
     });
     await user.click(screen.getByRole("button", { name: /Buscar prova/ }));
 
@@ -147,7 +147,7 @@ describe("EscanearView (W3-C10) — câmera + manual, mobile-first", () => {
     renderView();
     await user.click(screen.getByRole("radio", { name: /Manual/ }));
     fireEvent.change(screen.getByLabelText(/Código da prova/), {
-      target: { value: "2026-06-A2KMQ9" },
+      target: { value: CODIGO },
     });
     await user.click(screen.getByRole("button", { name: /Buscar prova/ }));
 

@@ -382,6 +382,17 @@
 - **Status:** **Aceita** (W3-C10).
 - **Consequências:** Anti-enumeração sem canal lateral por comprimento e com a classe inteira sob o rate limit; a câmera nunca vaza ligada mesmo na troca rápida de modo; o controle primário de modo cumpre o mínimo de toque. → **api 486 verdes / web 137 verdes**.
 
+## ADR-058 — Refino visual/UX das telas do C10 (escaneamento + confirmação) — sessão de design com o dono
+- **Contexto:** Após a entrega funcional do C10, o dono revisou as telas no app (e desenhou a confirmação no Figma) e pediu para deixá-las fiéis ao design, modernas e mobile-first.
+- **Decisões:**
+  1. **Visor da câmera dimensionado pela ALTURA (não pela largura):** o card branco preenche a altura disponível e o visor é um retângulo `height:100%`+`aspect-ratio` (~1.2:1) — corrige o bug em que o visor (dimensionado pela largura da coluna) estourava o card. Margens laterais/inferior iguais.
+  2. **Placeholder de QR + scanline animada:** o estado "pronto" mostra um QR **decorativo determinístico** (SVG com semente fixa → sem mismatch de hidratação) com molduras de canto; a faixa de varredura sobe/desce em loop via **novo token CSS `--motion-scan`** (globals.css, espelhado no bloco `prefers-reduced-motion`), só `transform` (GPU). Segue a regra "sem literais de duração fora dos tokens" (mesmo padrão do `--motion-pulse` dos skeletons).
+  3. **Input manual = código INTEIRO, sem prefixo fixo:** a pedido do dono, removido o afixo `PRV-` fixo na UI; `mascararCodigo` (lib/provas/codigo.ts) formata o código todo (`PRV-AAAA-MM-XXXXXX`) posicionalmente conforme digita, tolerante a colar/caixa. O servidor segue autoritativo (normaliza+valida — ADR-052). Vazio → mostra só o placeholder.
+  4. **Tela de confirmação fiel ao Figma (linguagem do C08):** card branco (nome + "Requerimento:" inline + **linha de metadados justificada** Cliente→Status via `flex`+`space-between`, ocupando a largura do card preto) + card preto **"Assinatura Digital"** aninhado (área tracejada = placeholder do C12 + botão **"Confirmar"** amarelo = gancho do C11). O "Rota direta"/"Aguardando vendedor" do mockup são textos legados — exibimos o rótulo REAL (`rotuloRota`/`rotuloStatus` — ADR-046/DP-7). Sem a arte (o Figma não a inclui).
+  5. **Mobile-first reforçado:** safe areas via `env()`, touch ≥48px, ação principal no terço inferior; metadados em 2 colunas no mobile / linha justificada no desktop; "Confirmar" full-width no rodapé do card preto no mobile / topo-direito no desktop; páginas roláveis no mobile.
+- **Status:** **Aceita** (aprovado pelo dono na sessão de design).
+- **Consequências:** Telas do C10 batem com o design e são robustas em mobile/desktop. O `--motion-scan` fica disponível como token de varredura. O contrato funcional (endpoint/identificação) não mudou. → **web 139 verdes**, `lint`/`build` limpos.
+
 ---
 
 ### Próximas decisões a confirmar (checklist vivo)

@@ -3,14 +3,17 @@
 /**
  * Confirmação da movimentação (W3-C10/DP-2) — destino após identificar a prova.
  *
- * Busca o detalhe (`GET /provas/{id}`, universal-em-escopo, mesmo padrão do C08)
- * e mostra o NOME e o REQUERIMENTO da prova + um PLACEHOLDER de assinatura. O C10
- * só IDENTIFICA: quem valida a próxima transição (perfil+estado) é o C11 e quem
- * captura a assinatura é o C12 — eles plugam exatamente neste cartão.
+ * Layout fiel ao design (Figma), mesma linguagem do detalhe (C08): card BRANCO com
+ * nome + "Requerimento:" + uma linha de metadados (Cliente · Vendedor · Rota ·
+ * Ciclo Atual · Criada em · Status) e, dentro dele, um card PRETO "Assinatura
+ * Digital" com a área de assinatura (placeholder do C12) e o botão "Confirmar"
+ * (gancho do C11). O C10 só IDENTIFICA: validar a próxima transição é o C11 e
+ * capturar a assinatura é o C12.
  *
- * 404 (inexistente OU fora do escopo — anti-enumeração §11) → toast genérico +
- * volta ao escaneamento, sem revelar se a prova existe. Animações sobre os tokens
- * (GPU — transform/opacity), instantâneas sob `prefers-reduced-motion`.
+ * Busca o detalhe (`GET /provas/{id}`, universal-em-escopo). 404 (inexistente OU
+ * fora do escopo — anti-enumeração §11) → toast genérico + volta ao escaneamento.
+ * Mobile-first; animações sobre os tokens (GPU), instantâneas sob
+ * `prefers-reduced-motion`.
  */
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -28,6 +31,15 @@ import styles from "../confirmar.module.css";
 
 /** Mensagem ÚNICA p/ inexistente E fora-de-escopo (anti-enumeração — §11). */
 const MSG_NAO_ENCONTRADA = "Prova não encontrada.";
+
+function formatarData(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
 
 export function ConfirmarView({ provaId }: { provaId: string }) {
   const reduced = useReducedMotion();
@@ -67,12 +79,18 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
     else router.push("/escanear");
   }
 
+  function confirmar() {
+    // Placeholder do C11: a transição (perfil+estado) e a assinatura (C12) plugam
+    // aqui depois. Por ora, feedback claro de que o passo chega na máquina de estados.
+    toast.success("A confirmação da movimentação chega com a máquina de estados (C11).");
+  }
+
   const duracao = reduced ? DURATION.instant : DURATION.medium;
-  const entrada = (delay: number) => ({
-    initial: { opacity: 0, y: reduced ? 0 : 8 },
+  const entrada = {
+    initial: { opacity: 0, y: reduced ? 0 : 10 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: duracao, ease: EASING.emphasized, delay: reduced ? 0 : delay },
-  });
+    transition: { duration: duracao, ease: EASING.emphasized },
+  };
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   return (
@@ -82,7 +100,7 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
       </motion.button>
 
       {estado === "carregando" ? (
-        <div className={`${styles.card} ${styles.skeleton}`} aria-hidden />
+        <div className={styles.skeleton} aria-hidden />
       ) : estado === "erro" ? (
         <p className={styles.erro} role="alert">
           Não foi possível carregar a prova.{" "}
@@ -98,29 +116,27 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
           </button>
         </p>
       ) : prova ? (
-        <>
-          <motion.article className={styles.card} {...entrada(0)}>
-            <p className={styles.codigo}>{prova.codigo}</p>
-            <p className={styles.requerimento}>Requerimento: {prova.requerimento}</p>
-            <h1 className={styles.nome}>{prova.nome}</h1>
+        <motion.article className={styles.cardExterno} {...entrada}>
+          <div className={styles.cabecalho}>
+            <div className={styles.tituloLinha}>
+              <h1 className={styles.nome}>{prova.nome}</h1>
+              <span className={styles.requerimento}>Requerimento: {prova.requerimento}</span>
+            </div>
 
-            <hr className={styles.divisor} />
-
-            <dl className={styles.grid}>
+            <dl className={styles.metadados}>
               <Campo rotulo="Cliente:" valor={prova.cliente} />
+              <Campo rotulo="Vendedor:" valor={prova.vendedor_nome ?? "—"} />
               <Campo rotulo="Rota:" valor={rotuloRota(prova.rota)} />
-              <Campo rotulo="Status atual:" valor={rotuloStatus(prova.status)} />
+              <Campo rotulo="Ciclo Atual:" valor={String(prova.ciclo_atual)} />
+              <Campo rotulo="Criada em:" valor={formatarData(prova.created_at)} />
+              <Campo rotulo="Status:" valor={rotuloStatus(prova.status)} />
             </dl>
-          </motion.article>
+          </div>
 
-          {/* Placeholder de assinatura (C12) + confirmação da transição (C11). */}
-          <motion.section
-            className={styles.assinatura}
-            aria-label="Assinatura e confirmação"
-            {...entrada(0.07)}
-          >
-            <h2 className={styles.assinaturaTitulo}>Assinatura digital</h2>
-            <div className={styles.assinaturaPad} role="img" aria-label="Área de assinatura">
+          {/* Card preto — assinatura (placeholder C12) + Confirmar (gancho C11). */}
+          <section className={styles.cardAssinatura} aria-label="Assinatura e confirmação">
+            <h2 className={styles.assinaturaTitulo}>Assinatura Digital</h2>
+            <div className={styles.assinaturaCanvas} role="img" aria-label="Área de assinatura">
               <span className={styles.assinaturaDica}>
                 A captura de assinatura chega com o componente de assinatura (C12).
               </span>
@@ -128,18 +144,13 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
             <motion.button
               type="button"
               className={styles.botaoConfirmar}
-              disabled
-              title="A confirmação da movimentação chega com a máquina de estados (C11)"
+              onClick={confirmar}
               {...toque}
             >
-              Confirmar movimentação
+              Confirmar
             </motion.button>
-            <p className={styles.assinaturaNota}>
-              A validação da próxima movimentação (perfil + estado) é da máquina de estados (C11);
-              este passo é apenas a identificação da prova.
-            </p>
-          </motion.section>
-        </>
+          </section>
+        </motion.article>
       ) : null}
     </section>
   );

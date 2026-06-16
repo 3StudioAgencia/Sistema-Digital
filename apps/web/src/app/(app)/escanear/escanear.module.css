@@ -1,19 +1,22 @@
 /* Escanear prova (W3-C10) — MOBILE-FIRST (RF-029/US-020): operadores no celular,
-   em pé, sob luz forte. Ao contrário das demais telas (desktop-first com override
-   ≤768px), aqui a base é o MOBILE (360px+), e o @media (min-width:768px) recompõe
-   o layout de duas colunas do design no desktop. Touch targets ≥48px, safe areas
-   via env(), botões principais no terço inferior, contraste AA. Tokens --app-* e
-   --motion-* da plataforma; só transform/opacity nas animações. */
+   em pé, sob luz forte. A base é o MOBILE (360px+); o @media (min-width:768px)
+   recompõe o layout de duas colunas do design no desktop. Touch targets ≥48px,
+   safe areas via env(), contraste AA. Tokens da plataforma (app/motion); só
+   transform e opacity nas animações.
+
+   Layout do card de câmera (desktop): o card BRANCO preenche a altura disponível
+   (margens iguais nas laterais e embaixo); o visor cinza é um QUADRADO
+   dimensionado pela ALTURA do card (height:100% + aspect-ratio) — nunca estoura o
+   card (o bug anterior: visor dimensionado pela LARGURA da coluna estourava). */
 
 .pagina {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  /* Safe areas (notch/gestos) — o conteúdo nunca encosta nas bordas do device. */
-  padding: 20px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
-    max(16px, env(safe-area-inset-left));
+  gap: 22px;
+  padding: 28px max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
 }
 
 .cabecalho {
@@ -97,94 +100,196 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  display: flex;
 }
 
-/* -------------------------------------------------- modo câmera */
-.cameraCard,
-.manualCard {
-  flex: 1;
+/* -------------------------------------------------- card da câmera */
+.cameraCard {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
   background: var(--app-card-white);
   border-radius: var(--app-card-radius);
-  padding: 20px;
+  padding: 24px;
 }
 
-.visorCol {
-  position: relative;
-  width: 100%;
-}
-
-.visor,
-.visorPlaceholder {
+/* Visor cinza (quadrado). Recebe o <video> da câmera (ativo) OU o placeholder do
+   QR (pronto), ambos em position:absolute inset:0 — mutuamente exclusivos. */
+.visor {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  max-height: 46vh;
-  border-radius: 24px;
+  max-height: 52vh;
   background: var(--app-shell-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  border-radius: 28px;
   overflow: hidden;
+  flex: none;
 }
 
-.visorOculto {
+.scanner {
+  position: absolute;
+  inset: 0;
+}
+
+.scannerOculto {
   display: none;
 }
 
-.visorAtivo {
-  display: flex;
-}
-
-/* html5-qrcode injeta o <video> aqui; ocupa o quadro inteiro do visor. */
-.scanner {
-  width: 100%;
-  flex: 1;
-  min-height: 0;
+.scannerVisivel {
+  display: block;
 }
 
 .scanner :global(video) {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover;
-  border-radius: 18px;
+}
+
+/* -------------------------------------------------- placeholder do QR */
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 4%, 26px);
+  padding: 8%;
+}
+
+.qrFrame {
+  position: relative;
+  width: min(56%, 250px);
+  aspect-ratio: 1 / 1;
+}
+
+.qrCard {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 13%;
+  overflow: hidden; /* recorta a varredura à área do card (cantos arredondados) */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.qrSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.qrModulo {
+  fill: var(--app-ink);
+}
+
+.qrVazio {
+  fill: #ffffff;
+}
+
+.qrCentro {
+  fill: var(--app-accent);
+}
+
+/* Faixa de varredura (glow amarelo) — sobe e desce em loop, estilo scanner.
+   Só transform (GPU); recortada pelo overflow:hidden do card; zerada sob
+   prefers-reduced-motion (token --motion-scan vira 0 + animation:none). */
+.scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 25%;
+  /* feixe suave nas DUAS pontas (sem borda dura no topo): transparente → amarelo
+     → transparente. */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 203, 92, 0) 0%,
+    rgba(255, 203, 92, 0.5) 50%,
+    rgba(255, 203, 92, 0) 100%
+  );
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 1;
+  animation: varredura var(--motion-scan) var(--motion-ease-standard) infinite;
+}
+
+@keyframes varredura {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    /* 300% da própria altura (25% do card) = 75% do card → o feixe chega à base
+       sem estourar (a base do feixe encosta no fim do card). */
+    transform: translateY(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline {
+    animation: none;
+    transform: translateY(0);
+  }
+}
+
+/* Molduras (cantos) amarelas em L, levemente fora do card do QR. */
+.bracket {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--app-accent);
+  z-index: 2;
+}
+
+.bracketTL {
+  top: -12px;
+  left: -12px;
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 8px;
+}
+
+.bracketTR {
+  top: -12px;
+  right: -12px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top-right-radius: 8px;
+}
+
+.bracketBL {
+  bottom: -12px;
+  left: -12px;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-left-radius: 8px;
+}
+
+.bracketBR {
+  bottom: -12px;
+  right: -12px;
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: 8px;
 }
 
 .visorLegenda {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--app-text-gray);
   text-align: center;
-  padding: 0 8px 4px;
 }
 
-.visorMoldura {
-  width: 56%;
-  max-width: 180px;
-  aspect-ratio: 1 / 1;
-  border-radius: 16px;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-}
-
-.visorIcone {
-  font-size: 44px;
-  line-height: 1;
-  color: var(--app-ink);
-}
-
+/* -------------------------------------------------- painel direito */
 .cameraPainel {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  min-width: 0;
+}
+
+.painelTopo {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .painelTitulo {
@@ -195,13 +300,72 @@
 
 .painelTexto {
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.55;
   color: var(--app-text-gray);
+  max-width: 46ch;
+}
+
+/* Rodapé DENTRO do card (abaixo do botão) — divisória + "Última leitura / Ver
+   histórico". No mobile fica logo após o botão; no desktop é empurrado à base. */
+.cardRodape {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 26px;
+}
+
+.cardRodapeDivisor {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--app-divider);
+}
+
+.rodapeLinha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rodapeInfo {
+  font-size: 13px;
+  color: var(--app-divider);
+}
+
+.rodapeLink {
+  border: 0;
+  background: none;
+  color: var(--app-divider);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.rodapeLink:hover {
+  text-decoration: underline;
 }
 
 /* -------------------------------------------------- modo manual */
+/* MESMA caixa do card da câmera (preenche a altura no desktop, mesmas margens e
+   posição); por dentro, um bloco centralizado (vertical e horizontal). */
 .manualCard {
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-card-white);
+  border-radius: var(--app-card-radius);
+  padding: 24px;
+}
+
+.manualBloco {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .manualTitulo {
@@ -221,20 +385,10 @@
   align-items: center;
   gap: 6px;
   height: 56px;
+  margin-top: 10px; /* respiro extra entre a descrição e o input (como no design) */
   padding: 0 18px;
   background: var(--app-shell-bg);
-  border-radius: var(--app-radius-pill);
-}
-
-.inputWrap:focus-within {
-  outline: 2px solid var(--app-ink);
-  outline-offset: 2px;
-}
-
-.inputAfixo {
-  font-size: 16px;
-  color: var(--app-text-gray);
-  font-variant-numeric: tabular-nums;
+  border-radius: 16px; /* retângulo arredondado (mesmo raio do botão "Buscar prova") */
 }
 
 .input {
@@ -257,12 +411,10 @@
 
 /* -------------------------------------------------- botões */
 .botaoPrimario {
-  /* terço inferior no mobile: empurra a ação principal para a base do card,
-     ao alcance do polegar; resetado no desktop (segue o texto, como no design). */
-  margin-top: auto;
+  width: 100%;
   min-height: 52px;
   border: 0;
-  border-radius: var(--app-radius-pill);
+  border-radius: 16px;
   background: var(--app-ink);
   color: #ffffff;
   font: inherit;
@@ -272,13 +424,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   padding: 0 24px;
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
 .botaoSecundario {
-  margin-top: auto;
+  align-self: flex-start;
   min-height: 48px;
   border: 1px solid var(--app-divider);
   border-radius: var(--app-radius-pill);
@@ -289,6 +441,11 @@
   cursor: pointer;
   padding: 0 24px;
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoIcone {
+  width: 20px;
+  height: 20px;
 }
 
 .botaoPrimario:hover,
@@ -332,40 +489,14 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-/* -------------------------------------------------- rodapé */
-.rodape {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.rodapeInfo {
-  font-size: 13px;
-  color: var(--app-text-gray);
-}
-
-.rodapeLink {
-  border: 0;
-  background: none;
-  color: var(--app-ink);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  min-height: 44px;
-  padding: 0 4px;
-}
-
-.rodapeLink:hover {
-  text-decoration: underline;
-}
-
 /* -------------------------------------------------- desktop (≥768px) */
 @media (min-width: 768px) {
   .pagina {
-    gap: calc(28 * var(--u));
-    padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+    /* Espelha a régua vertical do design (e da página Configurações): topo ~108u
+       (título/subtítulo/toggle descem), margens laterais e inferior iguais (28px).
+       O grande respiro toggle→card vem do margin-top do .conteudo abaixo. */
+    gap: calc(30 * var(--u));
+    padding: calc(108 * var(--u)) 28px 28px;
   }
 
   .titulo {
@@ -386,54 +517,114 @@
     min-height: calc(48 * var(--u));
   }
 
-  .cameraCard {
-    flex-direction: row;
-    align-items: center;
-    gap: calc(48 * var(--u));
-    padding: calc(40 * var(--u));
+  /* o card preenche a altura disponível → margem inferior = padding inferior da
+     página (= laterais). O margin-top dá o respiro grande toggle→card do design e,
+     somado ao topo maior, deixa o card (e o visor) MAIS BAIXO. */
+  .conteudo {
+    display: flex;
+    margin-top: calc(56 * var(--u));
   }
 
-  .visorCol {
+  .cameraCard {
+    flex: 1;
+    min-height: 0;
+    flex-direction: row;
+    align-items: stretch;
+    /* respiro maior visor→painel: empurra os textos da direita mais para a direita
+       (igual ao design). */
+    gap: calc(80 * var(--u));
+    padding: calc(32 * var(--u));
+  }
+
+  /* Retângulo ~1.2:1 dimensionado pela ALTURA do card (não pela largura) → nunca
+     estoura; o card do QR (quadrado) fica centralizado com mais cinza nas laterais
+     (o "levemente maior só para os lados" do design). */
+  .visor {
+    width: auto;
+    height: 100%;
+    aspect-ratio: 1.2;
+    max-height: none;
+    flex: 0 0 auto;
+  }
+
+  .cameraPainel {
     flex: 1;
   }
 
-  .visor,
-  .visorPlaceholder {
-    max-height: none;
-  }
-
-  .manualCard {
-    align-items: center;
+  /* grupo de texto/botão centralizado verticalmente; rodapé empurrado à base. */
+  .painelTopo {
+    flex: 1;
     justify-content: center;
-    text-align: center;
-    gap: calc(20 * var(--u));
-    padding: calc(64 * var(--u));
+    gap: calc(14 * var(--u));
   }
 
-  .manualCard .inputWrap,
-  .manualCard .botaoPrimario {
-    width: 100%;
-    max-width: calc(520 * var(--u));
+  .painelTitulo {
+    font-size: calc(48 * var(--u));
   }
 
-  .painelTitulo,
+  .painelTexto {
+    font-size: calc(20 * var(--u));
+  }
+
+  .botaoPrimario {
+    width: auto;
+    align-self: flex-start;
+    min-width: calc(300 * var(--u));
+    height: calc(60 * var(--u));
+    font-size: calc(20 * var(--u));
+    margin-top: calc(12 * var(--u));
+  }
+
+  .cardRodape {
+    margin-top: calc(28 * var(--u));
+  }
+
+  .rodapeInfo {
+    font-size: calc(15 * var(--u));
+  }
+
+  .rodapeLink {
+    font-size: calc(16 * var(--u));
+  }
+
+  .visorLegenda {
+    font-size: calc(16 * var(--u));
+  }
+
+  /* manual: MESMA caixa do card da câmera (flex:1 → preenche a altura, mesmo
+     padding/posição). O bloco interno fica centrado (vertical e horizontal). */
+  .manualCard {
+    flex: 1;
+    min-height: 0;
+    padding: calc(32 * var(--u));
+  }
+
+  .manualBloco {
+    max-width: calc(620 * var(--u));
+    gap: calc(14 * var(--u));
+  }
+
   .manualTitulo {
     font-size: calc(40 * var(--u));
+    white-space: nowrap; /* "Inserir código manualmente" numa linha só */
   }
 
-  .painelTexto,
   .manualTexto {
     font-size: calc(20 * var(--u));
   }
 
-  /* No desktop a ação acompanha o texto (não empurrada à base). */
-  .botaoPrimario,
-  .botaoSecundario {
-    margin-top: 0;
-    align-self: flex-start;
+  .manualBloco .inputWrap {
+    height: calc(60 * var(--u));
+    margin-top: calc(12 * var(--u));
   }
 
-  .manualCard .botaoPrimario {
-    align-self: center;
+  /* o botão do Manual ocupa a largura do bloco (≠ do "Abrir câmera" da câmera, que
+     é alinhado à esquerda com largura mínima). */
+  .manualBloco .botaoPrimario {
+    width: 100%;
+    align-self: stretch;
+    min-width: 0;
+    height: calc(60 * var(--u));
+    margin-top: 0;
   }
 }

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider } from "@/components/ui/toast/ToastProvider";
@@ -52,15 +53,26 @@ beforeEach(() => {
 });
 
 describe("ConfirmarView (W3-C10/DP-2)", () => {
-  it("mostra nome + requerimento + placeholder de assinatura (C12) e confirmação travada (C11)", async () => {
+  it("mostra nome + requerimento + metadados + card de assinatura (placeholder C12)", async () => {
     renderView();
     expect(
       await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 }),
     ).toBeInTheDocument();
     expect(screen.getByText("Requerimento: 155295")).toBeInTheDocument();
+    expect(screen.getByText("Edulat")).toBeInTheDocument(); // Cliente
+    expect(screen.getByText("Regiane")).toBeInTheDocument(); // Vendedor
+    expect(screen.getByText("Matriz")).toBeInTheDocument(); // Rota (rótulo real, não "Rota direta")
+    expect(screen.getByText("16/06/2026")).toBeInTheDocument(); // Criada em (UTC)
+    expect(screen.getByRole("heading", { name: "Assinatura Digital" })).toBeInTheDocument();
     expect(screen.getByText(/captura de assinatura chega com o componente/i)).toBeInTheDocument();
-    // O passo de confirmação é placeholder (C11): botão desabilitado.
-    expect(screen.getByRole("button", { name: "Confirmar movimentação" })).toBeDisabled();
+  });
+
+  it("'Confirmar' é o gancho do C11 — por ora dá feedback de que chega depois", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/máquina de estados \(C11\)/i)).toBeInTheDocument(); // toast
   });
 
   it("404 (inexistente OU fora do escopo) → toast genérico + volta ao escaneamento (§11)", async () => {

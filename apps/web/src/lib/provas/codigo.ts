@@ -53,3 +53,22 @@ export function mascararResto(bruto: string): string {
 export function montarCodigo(resto: string): string {
   return `${CODIGO_PREFIXO}-${resto}`;
 }
+
+/**
+ * Máscara do código INTEIRO (sem prefixo fixo na UI): o usuário digita o código
+ * todo (incluindo o `PRV`) e a entrada é agrupada em `PRV-AAAA-MM-XXXXXX`
+ * posicionalmente. Vazio → "" (mostra só o placeholder). Tolera colar com
+ * hífens/espaços e qualquer caixa.
+ */
+export function mascararCodigo(bruto: string): string {
+  const limpo = bruto
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "")
+    .slice(0, 15); // PRV(3) + AAAA(4) + MM(2) + sufixo(6)
+  if (limpo.length === 0) return "";
+  let saida = limpo.slice(0, 3); // PRV
+  if (limpo.length > 3) saida += `-${limpo.slice(3, 7)}`;
+  if (limpo.length > 7) saida += `-${limpo.slice(7, 9)}`;
+  if (limpo.length > 9) saida += `-${limpo.slice(9, 15)}`;
+  return saida;
+}
