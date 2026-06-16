@@ -36,10 +36,12 @@ from src.application.ports.provas_repository import (
 )
 from src.application.provas import (
     CriarProva,
+    MovimentacaoComAtor,
     ProvaListagem,
     ProvasConsultaService,
     ProvasIdentificacaoService,
     ProvasService,
+    TimelineProva,
 )
 from src.application.transicoes import ProvasTransicaoService
 from src.domain.assinaturas import ASSINATURA_TAMANHO_MAXIMO, AssinaturaInvalidaError
@@ -222,6 +224,70 @@ class AcaoDisponivelOut(BaseModel):
     estado_destino: EstadoProva
 
 
+class MovimentacaoOut(BaseModel):
+    """Uma movimentação do histórico (W3-C13) — uma transição registrada.
+
+    ``ator_nome`` é o responsável resolvido (DP-2b); ``tem_assinatura`` é só o SELO
+    de que houve comprovante desenhado (DP-2c — o C13 não expõe a imagem). A imagem
+    da assinatura (``bytea``) NUNCA trafega aqui."""
+
+    id: str
+    estado_origem: EstadoProva
+    estado_destino: EstadoProva
+    acao: Acao
+    ator_id: str
+    ator_nome: str | None
+    ciclo: int
+    motivo: str | None
+    tem_assinatura: bool
+    created_at: datetime | None
+
+    @classmethod
+    def de_dominio(cls, item: MovimentacaoComAtor) -> Self:
+        m = item.movimentacao
+        return cls(
+            id=m.id,
+            estado_origem=m.estado_origem,
+            estado_destino=m.estado_destino,
+            acao=m.acao,
+            ator_id=m.ator_id,
+            ator_nome=item.ator_nome,
+            ciclo=m.ciclo,
+            motivo=m.motivo,
+            tem_assinatura=m.assinatura_ref is not None,
+            created_at=m.created_at,
+        )
+
+
+class TimelineOut(BaseModel):
+    """Insumo da Timeline visual (W3-C13): histórico + esqueleto da rota.
+
+    ``etapas_canonicas`` é a sequência de estados do caminho NORMAL da rota,
+    DERIVADA das ``transition_rules`` do C11 (DP-1 — fonte única, não duplica a
+    §6). O frontend a usa como esqueleto (etapas percorridas/atual/futuras),
+    sobrepõe ``movimentacoes`` (asc) e agrupa por ``ciclo`` (DP-3). ``criada_em``
+    carimba o nó inicial ``CRIADA`` (a prova nasce nesse estado — não há
+    movimentação para ele)."""
+
+    rota: Rota
+    estado_atual: EstadoProva
+    ciclo_atual: int
+    criada_em: datetime | None
+    etapas_canonicas: list[EstadoProva]
+    movimentacoes: list[MovimentacaoOut]
+
+    @classmethod
+    def de_dominio(cls, t: TimelineProva) -> Self:
+        return cls(
+            rota=t.rota,
+            estado_atual=t.estado_atual,
+            ciclo_atual=t.ciclo_atual,
+            criada_em=t.criada_em,
+            etapas_canonicas=list(t.etapas_canonicas),
+            movimentacoes=[MovimentacaoOut.de_dominio(m) for m in t.movimentacoes],
+        )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -398,6 +464,23 @@ async def detalhe(
     listagem e mostra um toast, sem revelar se a prova existe.
     """
     return ProvaDetalheOut.de_dominio(await service.obter(str(prova_id)))
+
+
+@router.get("/{prova_id}/movimentacoes", response_model=TimelineOut)
+async def movimentacoes(
+    prova_id: uuid.UUID,
+    service: Annotated[ProvasConsultaService, Depends(get_provas_consulta_service)],
+) -> TimelineOut:
+    """Histórico de movimentações + esqueleto da rota para a Timeline (W3-C13).
+
+    Página UNIVERSAL escopada pela RLS — MESMO gate/escopo do detalhe (Matriz §7):
+    qualquer perfil ativo, dados escopados pela RLS de ``movimentacoes`` (espelha
+    ``provas``). Prova inexistente e prova fora do escopo retornam o MESMO 404
+    genérico (anti-enumeração — CLAUDE.md §11). ``etapas_canonicas`` deriva das
+    regras do C11 (DP-1 — não duplica a §6); ``movimentacoes`` vêm em ordem
+    cronológica, com o responsável resolvido e o selo de assinatura (sem a imagem).
+    """
+    return TimelineOut.de_dominio(await service.obter_movimentacoes(str(prova_id)))
 
 
 @router.get("/{prova_id}/arte")

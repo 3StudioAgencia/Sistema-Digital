@@ -74,6 +74,40 @@ def transicoes_de(rota: Rota, estado: EstadoProva) -> tuple[Transicao, ...]:
     return TRANSITION_RULES.get((rota, estado), ())
 
 
+# Ações que AVANÇAM o fluxo NORMAL (sem desvios). A sequência canônica de uma
+# rota é o caminho por estas ações, de ``CRIADA`` até o terminal; ``REPROVAR``,
+# ``CANCELAR`` e ``REINICIAR_CICLO`` são desvios (não entram no caminho linear
+# esperado — a Timeline do C13 os representa como eventos, não como etapas).
+ACOES_AVANCO: frozenset[Acao] = frozenset({Acao.IDENTIFICAR_E_ASSINAR, Acao.APROVAR})
+
+
+def sequencia_canonica(rota: Rota) -> tuple[EstadoProva, ...]:
+    """Sequência ordenada de estados do caminho NORMAL de uma rota (W3-C13/DP-1).
+
+    DERIVADA de ``TRANSITION_RULES`` (fonte ÚNICA — a §6 NÃO é duplicada): caminha
+    de ``CRIADA`` seguindo a única transição de avanço (``ACOES_AVANCO``) de cada
+    estado até o terminal. Determinística: na §6, todo estado ATIVO tem
+    exatamente UMA transição de avanço (os estados de decisão do Vendedor têm
+    Aprovar como avanço e Reprovar como desvio). A Timeline a usa como o
+    "esqueleto" da rota (etapas percorridas/atual/futuras); os rótulos são do
+    frontend (C07/C08). Pura, sem IO — coberta como o resto da máquina (≥95%).
+
+    O guarda ``visitados`` corta qualquer ciclo acidental (a §6 é acíclica no
+    avanço — o reinício é desvio), mantendo a função total.
+    """
+    sequencia: list[EstadoProva] = [EstadoProva.CRIADA]
+    visitados: set[EstadoProva] = {EstadoProva.CRIADA}
+    atual = EstadoProva.CRIADA
+    while True:
+        proxima = next((t for t in transicoes_de(rota, atual) if t.acao in ACOES_AVANCO), None)
+        if proxima is None or proxima.estado_destino in visitados:
+            break
+        sequencia.append(proxima.estado_destino)
+        visitados.add(proxima.estado_destino)
+        atual = proxima.estado_destino
+    return tuple(sequencia)
+
+
 def avaliar_transicao(
     rota: Rota,
     estado_atual: EstadoProva,
@@ -96,10 +130,12 @@ def avaliar_transicao(
 
 
 __all__ = [
+    "ACOES_AVANCO",
     "MotivoObrigatorioError",
     "TransicaoInvalidaError",
     "TransicaoNaoAutorizadaError",
     "autoriza",
     "avaliar_transicao",
+    "sequencia_canonica",
     "transicoes_de",
 ]

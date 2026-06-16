@@ -201,22 +201,6 @@
   color: var(--auth-text);
 }
 
-.historicoVazio {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: calc(8 * var(--u));
-  text-align: center;
-  color: var(--app-sidebar-muted);
-  font-size: calc(22 * var(--u));
-}
-
-.historicoVazioSub {
-  font-size: calc(18 * var(--u));
-}
-
 /* -------------------------------------------------- estados de carga/erro */
 .skeletonCard {
   min-height: calc(420 * var(--u));
@@ -336,9 +320,5 @@
 
   .historicoTitulo {
     font-size: 24px;
-  }
-
-  .historicoVazio {
-    font-size: 16px;
   }
 }

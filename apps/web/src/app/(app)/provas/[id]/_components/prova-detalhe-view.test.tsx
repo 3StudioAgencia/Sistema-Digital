@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   baixarArte: vi.fn(),
   baixarEtiqueta: vi.fn(),
   salvarArquivo: vi.fn(),
+  obterMovimentacoes: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
@@ -29,6 +30,12 @@ vi.mock("@/lib/api/provas", async (importOriginal) => {
     baixarEtiqueta: mocks.baixarEtiqueta,
     salvarArquivo: mocks.salvarArquivo,
   };
+});
+
+// A timeline (C13) faz seu próprio fetch; mockado aqui para isolar o detalhe.
+vi.mock("@/lib/api/timeline", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/api/timeline")>();
+  return { ...original, obterMovimentacoes: mocks.obterMovimentacoes };
 });
 
 import { ProvaDetalheView } from "./prova-detalhe-view";
@@ -63,6 +70,26 @@ beforeEach(() => {
   mocks.baixarEtiqueta.mockResolvedValue(
     new Blob([new Uint8Array([4, 5, 6])], { type: "application/pdf" }),
   );
+  mocks.obterMovimentacoes.mockResolvedValue({
+    rota: "lam_matriz",
+    estado_atual: "criada",
+    ciclo_atual: 1,
+    criada_em: "2026-04-27T00:00:00Z",
+    etapas_canonicas: [
+      "criada",
+      "encaminhada_para_laminacao",
+      "com_motorista_ida_laminacao",
+      "laminacao_concluida",
+      "com_motorista_volta_laminacao",
+      "de_volta_studio_pos_laminacao",
+      "retirada_vendedor",
+      "aprovada_vendedor",
+      "de_volta_studio",
+      "com_motorista_entrega_final",
+      "recebida_clicheria",
+    ],
+    movimentacoes: [],
+  });
   // jsdom não implementa object URLs — stub determinístico.
   let n = 0;
   global.URL.createObjectURL = vi.fn(() => `blob:mock-${++n}`);
@@ -91,13 +118,12 @@ describe("ProvaDetalheView (W2-C08)", () => {
     expect(screen.getByRole("button", { name: "Baixar etiqueta" })).toBeInTheDocument();
   });
 
-  it("histórico nasce em empty state (DP-2 — fronteira com C11/C13)", async () => {
+  it("histórico pluga a timeline visual (W3-C13) com o esqueleto da rota", async () => {
     renderView();
     await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
-    expect(screen.getByText("Esta prova ainda não teve movimentações.")).toBeInTheDocument();
-    expect(
-      screen.getByText(/timeline visual fica disponível quando a prova for escaneada/i),
-    ).toBeInTheDocument();
+    // A ProofTimeline busca o próprio histórico e desenha o badge da rota no topo.
+    expect(await screen.findByText("Rota: Lam. Matriz")).toBeInTheDocument();
+    expect(mocks.obterMovimentacoes).toHaveBeenCalledWith("p-1", expect.anything());
   });
 
   it("exibe a arte vinda do proxy do backend (DP-5: blob → objectURL, sem URL pública)", async () => {

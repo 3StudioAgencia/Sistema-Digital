@@ -38,5 +38,25 @@ class MovimentacoesRepositoryPort(ABC):
         gravada, e o caso de uso converge (200 idempotente) sem reaplicar. Escopada
         pela RLS (espelha ``provas``)."""
 
+    @abstractmethod
+    async def listar_por_prova(self, prova_id: str) -> list[Movimentacao]:
+        """Histórico de UMA prova em ordem cronológica (W3-C13/DP-2).
+
+        Alimenta a Timeline: lê pelo índice ``ix_movimentacoes_prova_id_created_at``
+        (sem N+1 — RNF-022), ordenado por ``created_at`` asc (``id`` desempata para
+        ordem estável quando dois eventos colidem no instante). Escopada pela RLS
+        (``movimentacoes_select_por_prova_visivel`` espelha ``provas``): só retorna
+        algo se o ator enxerga a prova — fora do escopo → lista vazia."""
+
+    @abstractmethod
+    async def nomes_de_atores(self, ids: list[str]) -> dict[str, str]:
+        """Mapa ``ator_id -> nome`` via ``private.nomes_de_usuarios`` (W3-C13/DP-2b).
+
+        Projeção SECURITY DEFINER que resolve o nome de QUALQUER setor (não só
+        Vendedor — o ator de uma movimentação pode ser 3Studio/Motorista/Clicheria),
+        expondo só id+nome e só de atores em provas VISÍVEIS ao chamador. Resolve o
+        "responsável" de cada etapa sem ampliar a Matriz §7 (espelha a filosofia de
+        ``nomes_de_vendedores``)."""
+
 
 __all__ = ["IdempotenciaJaRegistradaError", "MovimentacoesRepositoryPort"]

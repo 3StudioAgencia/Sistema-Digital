@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from src.application.ports.etiqueta import EtiquetaPort
+from src.application.ports.movimentacoes_repository import MovimentacoesRepositoryPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
     FiltrosProvas,
@@ -43,9 +44,11 @@ from src.application.ports.settings_repository import SettingsRepositoryPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import UsuariosRepositoryPort
+from src.domain.movimentacoes import Movimentacao
 from src.domain.provas import (
     EXTENSAO_POR_TIPO,
     CriacaoDivergenteError,
+    EstadoProva,
     LimiteDeTentativasError,
     Prova,
     ProvaNaoEncontradaError,
@@ -57,6 +60,7 @@ from src.domain.provas import (
     validar_vendedor,
 )
 from src.domain.settings import CHAVE_ETIQUETA, ConfiguracaoEtiqueta, efetivar_config_etiqueta
+from src.domain.state_machine.machine import sequencia_canonica
 
 logger = logging.getLogger("rastreio.provas")
 
@@ -266,6 +270,35 @@ class PaginaProvasListagem:
     page_size: int
 
 
+@dataclass(frozen=True)
+class MovimentacaoComAtor:
+    """Uma movimentação + o NOME do responsável (W3-C13/DP-2b).
+
+    ``ator_nome`` é resolvido por ``nomes_de_atores`` (projeção SECURITY DEFINER) e
+    pode ser ``None`` no caso impossível-mas-seguro de o ator sumir do projetor."""
+
+    movimentacao: Movimentacao
+    ator_nome: str | None
+
+
+@dataclass(frozen=True)
+class TimelineProva:
+    """Insumo da Timeline (W3-C13): o histórico da prova + o esqueleto da rota.
+
+    ``etapas_canonicas`` é a sequência de estados do caminho normal da rota
+    (DERIVADA de ``TRANSITION_RULES`` — DP-1; a §6 não é duplicada). O frontend
+    sobrepõe ``movimentacoes`` (ordenadas asc) ao esqueleto, destaca ``estado_atual``
+    e agrupa por ``ciclo`` (DP-3). ``criada_em`` carimba o nó inicial ``CRIADA``
+    (que não é uma movimentação — a prova nasce nesse estado)."""
+
+    rota: Rota
+    estado_atual: EstadoProva
+    ciclo_atual: int
+    criada_em: datetime | None
+    etapas_canonicas: tuple[EstadoProva, ...]
+    movimentacoes: list[MovimentacaoComAtor]
+
+
 class ProvasConsultaService:
     """Casos de uso de LEITURA de provas (W2-C07 listagem + W2-C08 detalhe/arte/etiqueta).
 
@@ -287,11 +320,15 @@ class ProvasConsultaService:
         storage: StoragePort | None = None,
         etiqueta: EtiquetaPort | None = None,
         settings_repo: SettingsRepositoryPort | None = None,
+        movs: MovimentacoesRepositoryPort | None = None,
     ) -> None:
         self._repo = repo
         self._storage = storage
         self._etiqueta = etiqueta
         self._settings_repo = settings_repo
+        # W3-C13: o histórico (Timeline) só é exigido por ``obter_movimentacoes``;
+        # opcional para os testes de listagem/detalhe não dublarem o repo de movs.
+        self._movs = movs
 
     # ----------------------------------------------------------------- detalhe
     async def obter(self, prova_id: str) -> ProvaListagem:
@@ -304,6 +341,36 @@ class ProvasConsultaService:
             raise ProvaNaoEncontradaError()
         nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
         return ProvaListagem(prova=prova, vendedor_nome=nomes.get(prova.vendedor_id))
+
+    # ---------------------------------------------------------------- timeline
+    async def obter_movimentacoes(self, prova_id: str) -> TimelineProva:
+        """Histórico + esqueleto da rota para a Timeline (W3-C13/DP-1/DP-2).
+
+        Resolve a prova ANTES (escopada pela RLS) — fora do escopo / inexistente →
+        o MESMO 404 genérico (anti-enumeração — igual ao detalhe). Depois lê o
+        histórico (escopado pela RLS de ``movimentacoes``) e resolve os nomes dos
+        atores numa ÚNICA ida ao projetor (sem N+1 — RNF-022). O caminho canônico
+        vem de ``sequencia_canonica`` (DP-1 — fonte única, não duplica a §6)."""
+        prova = await self._repo.get(prova_id)
+        if prova is None:
+            raise ProvaNaoEncontradaError()
+        movs_repo = self._movs_obrigatorio()
+        movs = await movs_repo.listar_por_prova(prova_id)
+        ids = list({m.ator_id for m in movs})
+        nomes = await movs_repo.nomes_de_atores(ids) if ids else {}
+        return TimelineProva(
+            rota=prova.rota,
+            estado_atual=prova.status,
+            ciclo_atual=prova.ciclo_atual,
+            criada_em=prova.created_at,
+            etapas_canonicas=sequencia_canonica(prova.rota),
+            movimentacoes=[MovimentacaoComAtor(m, nomes.get(m.ator_id)) for m in movs],
+        )
+
+    def _movs_obrigatorio(self) -> MovimentacoesRepositoryPort:
+        if self._movs is None:  # pragma: no cover — a DI sempre injeta
+            raise RuntimeError("MovimentacoesRepositoryPort não configurada no serviço.")
+        return self._movs
 
     async def obter_arte(self, prova_id: str) -> tuple[bytes, str]:
         """Bytes da arte + content-type, para o PROXY de imagem do C08 (DP-5).
@@ -482,10 +549,12 @@ __all__ = [
     "MAX_TENTATIVAS_CODIGO",
     "CriarProva",
     "GeracaoDeCodigoEsgotadaError",
+    "MovimentacaoComAtor",
     "PaginaProvasListagem",
     "ProvaListagem",
     "ProvasConsultaService",
     "ProvasIdentificacaoService",
     "ProvasService",
+    "TimelineProva",
     "VendedorRef",
 ]

@@ -1,0 +1,328 @@
+/* Timeline visual (W3-C13) — vive DENTRO do card preto "Histórico de movimentações"
+   do detalhe (C08). Vertical (funciona no mobile), na linguagem da plataforma:
+   escala --u e tokens da plataforma (--app, --auth). Marcadores coloridos por
+   status sobre uma trilha vertical; laminação e travessias de motorista
+   diferenciadas; reprovação e cancelamento em destaque. Só transform e opacity
+   nas animações (GPU — pilar §3.4). */
+
+.timeline {
+  /* Cores semânticas locais (não há token de "perigo"/"trilha" na plataforma). */
+  --tl-line: rgba(255, 255, 255, 0.18);
+  --tl-muted: var(--app-sidebar-muted);
+  --tl-danger: #ff8080;
+  --tl-lamina: #7ec8ff;
+
+  margin-top: calc(28 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(20 * var(--u));
+}
+
+/* Badge da rota no topo (Backlog C13). */
+.badgeRota {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  height: calc(40 * var(--u));
+  padding: 0 calc(20 * var(--u));
+  border-radius: var(--app-radius-pill);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--auth-text);
+  font-size: calc(18 * var(--u));
+}
+
+.ciclo {
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+}
+
+/* Separador de ciclo (DP-3) — só aparece quando há mais de um ciclo. */
+.cicloSeparador {
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  color: var(--tl-muted);
+  font-size: calc(18 * var(--u));
+}
+
+.cicloSeparador::before,
+.cicloSeparador::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--tl-line);
+}
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Cada nó: trilha (marcador + linha) + conteúdo. */
+.item {
+  display: grid;
+  grid-template-columns: calc(40 * var(--u)) 1fr;
+  gap: calc(16 * var(--u));
+  padding-bottom: calc(22 * var(--u));
+}
+
+.item:last-child {
+  padding-bottom: 0;
+}
+
+.rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/* Marcador (dot/ring) alinhado ao topo do conteúdo. */
+.marker {
+  position: relative;
+  z-index: 1;
+  margin-top: calc(4 * var(--u));
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
+  border-radius: 50%;
+  border: calc(2 * var(--u)) solid var(--tl-muted);
+  background: var(--app-ink);
+  flex: none;
+}
+
+/* Conector vertical até o próximo nó (oculto no último). */
+.rail::after {
+  content: "";
+  position: absolute;
+  top: calc(24 * var(--u));
+  bottom: calc(-22 * var(--u));
+  left: 50%;
+  width: calc(2 * var(--u));
+  transform: translateX(-50%);
+  background: var(--tl-line);
+}
+
+.item:last-child .rail::after {
+  display: none;
+}
+
+/* Status das etapas. */
+.percorrido .marker {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+.atual .marker {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+}
+
+/* Anel pulsante do "atual" — transform/opacity, desligado sob reduced-motion. */
+.atual .marker::after {
+  content: "";
+  position: absolute;
+  inset: calc(-6 * var(--u));
+  border-radius: 50%;
+  border: calc(2 * var(--u)) solid var(--app-accent);
+  animation: tlPulse 1600ms ease-in-out infinite;
+}
+
+@keyframes tlPulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.85);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+.futuro .marker {
+  background: var(--app-ink);
+  border-color: var(--tl-line);
+}
+
+.naoPercorrido .marker {
+  background: var(--app-ink);
+  border-color: var(--tl-line);
+  opacity: 0.6;
+}
+
+/* Eventos especiais. */
+.reprovacao .marker,
+.cancelamento .marker {
+  background: var(--tl-danger);
+  border-color: var(--tl-danger);
+}
+
+.reinicio .marker {
+  background: var(--tl-muted);
+  border-color: var(--tl-muted);
+}
+
+.conteudo {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(6 * var(--u));
+}
+
+.tituloLinha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+
+.titulo {
+  font-size: calc(22 * var(--u));
+  color: var(--auth-text);
+}
+
+.futuro .titulo,
+.naoPercorrido .titulo {
+  color: var(--tl-muted);
+}
+
+.reprovacao .titulo,
+.cancelamento .titulo {
+  color: var(--tl-danger);
+}
+
+/* Badges de contexto (laminação / em trânsito). */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: calc(26 * var(--u));
+  padding: 0 calc(12 * var(--u));
+  border-radius: var(--app-radius-pill);
+  font-size: calc(14 * var(--u));
+  white-space: nowrap;
+}
+
+.tagLamina {
+  background: rgba(126, 200, 255, 0.16);
+  color: var(--tl-lamina);
+}
+
+.tagMotorista {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--auth-text);
+}
+
+.tagAssinada {
+  background: rgba(255, 203, 92, 0.16);
+  color: var(--app-accent);
+}
+
+.meta {
+  font-size: calc(17 * var(--u));
+  color: var(--tl-muted);
+}
+
+/* Motivo da reprovação/cancelamento em DESTAQUE (RF-012). */
+.motivo {
+  margin-top: calc(4 * var(--u));
+  padding: calc(12 * var(--u)) calc(16 * var(--u));
+  border-left: calc(3 * var(--u)) solid var(--tl-danger);
+  border-radius: calc(8 * var(--u));
+  background: rgba(255, 128, 128, 0.12);
+  color: var(--auth-text);
+  font-size: calc(18 * var(--u));
+  overflow-wrap: anywhere;
+}
+
+/* Loading / erro (degradação graciosa — não derruba o detalhe). */
+.skeleton {
+  margin-top: calc(28 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--u));
+}
+
+.skeletonLinha {
+  height: calc(24 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: rgba(255, 255, 255, 0.12);
+  animation: tlShimmer var(--motion-pulse) ease-in-out infinite;
+}
+
+.skeletonLinha:nth-child(2) {
+  width: 70%;
+}
+
+.skeletonLinha:nth-child(3) {
+  width: 85%;
+}
+
+@keyframes tlShimmer {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.erro {
+  margin-top: calc(28 * var(--u));
+  color: var(--tl-muted);
+  font-size: calc(18 * var(--u));
+}
+
+.linkRetry {
+  border: 0;
+  background: none;
+  color: var(--app-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atual .marker::after,
+  .skeletonLinha {
+    animation: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .badgeRota {
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .titulo {
+    font-size: 16px;
+  }
+
+  .meta {
+    font-size: 13px;
+  }
+
+  .motivo {
+    font-size: 14px;
+  }
+
+  .item {
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    padding-bottom: 16px;
+  }
+
+  .marker {
+    width: 16px;
+    height: 16px;
+  }
+}

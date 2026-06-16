@@ -32,6 +32,39 @@
 
 ---
 
+## Sessão 16 — 2026-06-16 — [Wave 3 / Componente C13] Timeline Visual com 4 Rotas e Laminação
+
+**Objetivo:** Preencher a seção "Histórico de movimentações" do detalhe (C08), em empty state, com a **timeline visual** `<ProofTimeline>` — renderização adaptativa por rota, etapa atual destacada (animada), laminação/contexto de motorista diferenciados, reprovação com motivo, múltiplos ciclos com separador — lendo `movimentacoes` (C11) com respeito à RLS.
+
+**Feito:**
+- **Grounding (régua PARE E PERGUNTE):** workflow de 6 leitores paralelos sobre C11/C12/C08/C07 + verificação direta. Resolvi um **conflito entre agentes**: a coluna **`movimentacoes.ciclo` EXISTE** (models.py:216, carimbada em `transicoes.py:171`) — a doc/ADRs do C11 não a mencionavam (drift de doc; o código vence). Isso tornou o **DP-3 sem retroação**.
+- **Pontos de Decisão (§4) ao dono, respostas:** DP-1 = **derivar no backend**; DP-2 = **endpoint dedicado**; DP-2b = **resolver nome pessoal** (migration); DP-2c = **sem visualizador de assinatura** (só selo); DP-5 = **seguir o padrão do C08**. DP-3 = usar `movimentacoes.ciclo`; DP-4 = caminho completo desde a criação (recomendação mantida).
+- **Backend:** `sequencia_canonica(rota)` + `ACOES_AVANCO` (puro, derivado de `TRANSITION_RULES` — DP-1); `MovimentacoesRepositoryPort.listar_por_prova`/`nomes_de_atores` + impl; `ProvasConsultaService.obter_movimentacoes` (+ `TimelineProva`/`MovimentacaoComAtor`, repo de movs injetado no DI); endpoint **`GET /provas/{id}/movimentacoes`** + schemas `TimelineOut`/`MovimentacaoOut` (`tem_assinatura` = selo). Migration **`0017`** + `migrations/rls/nomes_de_usuarios.sql` (`private.nomes_de_usuarios` SECURITY DEFINER, escopo do chamador re-aplicado).
+- **Frontend:** `lib/api/timeline.ts`; `lib/provas/timeline.ts` (`construirTimeline` puro + `ESTADOS_LAMINACAO`/`ESTADOS_MOTORISTA`); `<ProofTimeline>` + CSS Module (vertical, responsivo, revelação progressiva + anel pulsante, `prefers-reduced-motion`); integrado no detalhe substituindo o empty state (classes mortas removidas). Reusa `rotuloStatus` (C07) e `rotuloRota` (C08).
+- **Supabase real:** verifiquei o head (estava `0016` — checklist do C12 stale) e **apliquei a `0017`** via MCP — `alembic_version=0017`, `nomes_de_usuarios` em `private` (não em `public`), SECURITY DEFINER, `authenticated` EXECUTE / `anon` não; **advisors sem achados novos** (os 2 pré-existentes permanecem).
+
+**Decisões (ADRs):**
+- ADR-069: caminho canônico derivado de `TRANSITION_RULES` (DP-1).
+- ADR-070: histórico por endpoint dedicado, não estendendo o detalhe (DP-2).
+- ADR-071: agrupamento por `movimentacoes.ciclo` existente, sem retroação (DP-3).
+- ADR-072: estados especiais como eventos + nome do ator via `private.nomes_de_usuarios` + assinatura só como selo (DP-4/DP-2b/DP-2c).
+
+**Testes / cobertura:**
+- api: `test_state_machine.py` (+`sequencia_canonica` × oráculo independente), `test_provas_timeline.py`, `test_provas_timeline_endpoints.py` (@db), `test_rls_nomes_de_usuarios.py` (@db), `test_migrations.py` (head `0017`). **441 unit + 253 @db verdes**; `ruff`/`mypy --strict` limpos.
+- web: `lib/provas/timeline.test.ts` (builder — 4 rotas, statuses, laminação/motorista, reprovação, ciclos), `ProofTimeline.test.tsx`, `prova-detalhe-view.test.tsx` atualizado. **157 verdes**; `lint`/`build` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Cancelar (C14) / Reiniciar (C15)** — a timeline já **representa** cancelamento/reprovação/ciclos; as **ações** são C14/C15 (invocam o motor do C11). C15 deve carimbar `reiniciar_ciclo` com o ciclo **pré-incremento** (ver ADR-071).
+- [ ] **Dívida de prettier pré-existente (C12):** `confirmar-view.tsx` e `lib/api/transicoes.ts` reprovam `format:check` — não tocados pelo C13; formatados num `style` commit à parte.
+- [ ] **Visualizador de assinatura** (imagem por proxy) — fora do escopo do C13 por decisão do dono (DP-2c); pode entrar depois reusando o proxy-streaming do C08.
+
+**Próximo passo:**
+- **W3-C14 — Cancelamento de Prova Digital.**
+
+**Definition of Done:** ✅ atendida — code review (revisão adversarial pendente como passo final), testes (4 rotas, ciclos, RLS do histórico, ≥95% na máquina), animações com `prefers-reduced-motion`, sem erro de console/log crítico, docs do módulo (`docs/timeline.md`), migration `0017` versionada/aplicada (up/down limpa), sem segredos versionados.
+
+---
+
 ## Sessão 15 — 2026-06-16 — [Wave 3 / Componente C12] Assinatura Digital no Fluxo de Escaneamento
 
 **Objetivo:** Fechar o laço do fluxo de movimentação — tornar *identificar → assinar → confirmar → transição* funcional de ponta a ponta. Assinatura desenhada como comprovante de cada movimentação (RN-003), apresentada automaticamente ao próximo ator (RF-028), capturando e invocando o motor do C11.

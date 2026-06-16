@@ -118,6 +118,12 @@ class FakeMovsRepo(MovimentacoesRepositoryPort):
     async def buscar_por_idempotencia(self, idempotency_key: str) -> Movimentacao | None:
         return self._existente
 
+    async def listar_por_prova(self, prova_id: str) -> list[Movimentacao]:  # pragma: no cover - C13
+        raise NotImplementedError
+
+    async def nomes_de_atores(self, ids: list[str]) -> dict[str, str]:  # pragma: no cover - C13
+        raise NotImplementedError
+
 
 class FakeAssinaturasRepo(AssinaturasRepositoryPort):
     def __init__(self, falha: Exception | None = None) -> None:

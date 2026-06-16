@@ -9,17 +9,21 @@ motor (422/403/motivo/admin) e a travessia completa das quatro rotas.
 Sem banco, sem IO: a §6 é regra pura (DAT §4).
 """
 
+import itertools
+
 import pytest
 from src.domain.provas import EstadoProva as E
 from src.domain.provas import Rota
 from src.domain.state_machine.enums import Acao
 from src.domain.state_machine.enums import Autorizacao as Az
 from src.domain.state_machine.machine import (
+    ACOES_AVANCO,
     MotivoObrigatorioError,
     TransicaoInvalidaError,
     TransicaoNaoAutorizadaError,
     autoriza,
     avaliar_transicao,
+    sequencia_canonica,
     transicoes_de,
 )
 from src.domain.state_machine.rules import ESTADOS_TERMINAIS, TRANSITION_RULES, Transicao
@@ -186,6 +190,42 @@ _TRAVESSIAS: dict[Rota, list[tuple[E, Acao, Setor, E]]] = {
         (E.APROVADA_VENDEDOR, ID, Setor.CLICHERIA, E.RECEBIDA_CLICHERIA),
     ],
 }
+
+
+# ---------------------------------------------------------------------------
+# Sequência canônica (W3-C13/DP-1) — DERIVADA de TRANSITION_RULES, consistente
+# com a travessia feliz (oráculo independente). Garante que a Timeline desenha
+# exatamente o caminho da máquina, sem duplicar a §6.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("rota", list(Rota))
+def test_sequencia_canonica_bate_com_a_travessia_feliz(rota: Rota) -> None:
+    # A cadeia de destinos da travessia feliz (começando em CRIADA) É a sequência
+    # canônica — o oráculo independente prova que a derivação não driftou da §6.
+    esperada = (E.CRIADA, *(destino for _o, _a, _s, destino in _TRAVESSIAS[rota]))
+    assert sequencia_canonica(rota) == esperada
+
+
+def test_sequencia_canonica_comprimentos_por_rota() -> None:
+    """Backlog C13: Lam. Matriz percorre ~11 etapas; Filial ~4 (conta os nós)."""
+    assert len(sequencia_canonica(Rota.MATRIZ)) == 6
+    assert len(sequencia_canonica(Rota.LAM_MATRIZ)) == 11
+    assert len(sequencia_canonica(Rota.FILIAL)) == 4
+    assert len(sequencia_canonica(Rota.LAM_FILIAL)) == 7
+
+
+@pytest.mark.parametrize("rota", list(Rota))
+def test_sequencia_canonica_e_um_caminho_real_da_maquina(rota: Rota) -> None:
+    seq = sequencia_canonica(rota)
+    assert seq[0] == E.CRIADA
+    assert seq[-1] == E.RECEBIDA_CLICHERIA
+    # Desvios nunca entram no caminho canônico (são eventos, não etapas — C13).
+    assert E.REPROVADA_VENDEDOR not in seq
+    assert E.CANCELADA not in seq
+    # Cada par consecutivo é a ÚNICA transição de avanço da §6 (consistência C11).
+    for origem, destino in itertools.pairwise(seq):
+        avancos = [t for t in transicoes_de(rota, origem) if t.acao in ACOES_AVANCO]
+        assert len(avancos) == 1, f"{rota}/{origem} deve ter 1 avanço"
+        assert avancos[0].estado_destino == destino
 
 
 @pytest.mark.parametrize("rota", list(Rota))

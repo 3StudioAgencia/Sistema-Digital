@@ -5,7 +5,9 @@ NUNCA faz commit — a fronteira é do caso de uso (RNF-017). A sessão vem de
 ``abrir_sessao_rls``: o escopo é da RLS (espelha ``provas``).
 """
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +73,31 @@ class SqlAlchemyMovimentacoesRepository(MovimentacoesRepositoryPort):
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _para_dominio(row) if row is not None else None
+
+    async def listar_por_prova(self, prova_id: str) -> list[Movimentacao]:
+        # Índice composto (prova_id, created_at) — RNF-019/RNF-022. ``id`` desempata
+        # para ordem estável quando dois eventos colidem no mesmo instante. A RLS
+        # (movimentacoes_select_por_prova_visivel) escopa: fora do escopo → vazio.
+        stmt = (
+            select(MovimentacaoRow)
+            .where(MovimentacaoRow.prova_id == prova_id)
+            .order_by(MovimentacaoRow.created_at.asc(), MovimentacaoRow.id.asc())
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_para_dominio(r) for r in rows]
+
+    async def nomes_de_atores(self, ids: list[str]) -> dict[str, str]:
+        if not ids:
+            return {}
+        # Projeção SECURITY DEFINER (DP-2b): resolve nomes de atores de QUALQUER
+        # setor fora da RLS de usuarios, expondo só id+nome e só de atores em provas
+        # visíveis ao chamador. Vive no schema ``private`` (não exposto pela Data
+        # API — migration 0017). Param tipado como uuid[] (asyncpg).
+        stmt = text("SELECT id, nome FROM private.nomes_de_usuarios(:ids)").bindparams(
+            bindparam("ids", value=ids, type_=ARRAY(PgUuid(as_uuid=False)))
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return {str(r.id): r.nome for r in rows}
 
 
 __all__ = ["SqlAlchemyMovimentacoesRepository"]

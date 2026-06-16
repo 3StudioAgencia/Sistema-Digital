@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0016", (
-        "head deve registrar a revisão 0016 (assinaturas — W3-C12)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0017", (
+        "head deve registrar a revisão 0017 (nomes_de_usuarios — W3-C13)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -214,6 +214,15 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0016 deve fechar a FK movimentacoes.assinatura_ref -> assinaturas (DP-1)"
+    # W3-C13: projetor de nomes de ator (DP-2b) no schema private (não exposto).
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE p.proname = 'nomes_de_usuarios' AND n.nspname = 'private'",
+        )
+        == 1
+    ), "0017 deve criar nomes_de_usuarios no schema private (DP-2b)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -267,6 +276,10 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores'")
         == 0
     ), "downgrade da 0010 deve remover a função nomes_de_vendedores"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_usuarios'")
+        == 0
+    ), "downgrade da 0017 deve remover a função nomes_de_usuarios"
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")
         == 0

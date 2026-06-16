@@ -171,6 +171,9 @@ async def get_provas_consulta_service(
             # W2-C09: a etiqueta respeita a config do template (RN-011), lida na
             # MESMA sessão RLS (leitura authenticated — DP-2).
             settings_repo=SqlAlchemySettingsRepository(session),
+            # W3-C13: o histórico (Timeline) é lido na MESMA sessão RLS — a RLS de
+            # ``movimentacoes`` espelha o escopo de ``provas`` (DP-2).
+            movs=SqlAlchemyMovimentacoesRepository(session),
         )
 
 

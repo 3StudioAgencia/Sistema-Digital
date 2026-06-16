@@ -45,9 +45,11 @@ def test_enums_da_migration_0007_espelham_o_dominio() -> None:
 
 
 def test_policy_motorista_usa_o_escopo_operacional_derivado_da_maquina() -> None:
-    """W3-C11: o Motorista vê o escopo OPERACIONAL (origens das suas transições +
-    Em Trânsito), DERIVADO da §6 (``ESTADOS_ESCOPO_MOTORISTA``), nos dois espelhos
-    da ampliação (SQL + migration 0015). Pega drift entre a máquina e a RLS."""
+    """W3-C11/C13: o Motorista vê o escopo OPERACIONAL (origens das suas transições +
+    Em Trânsito), DERIVADO da §6 (``ESTADOS_ESCOPO_MOTORISTA``), em TODAS as fontes
+    que o replicam em SQL. Pega drift entre a máquina e a RLS — incl. a projeção
+    ``private.nomes_de_usuarios`` do C13 (4ª fonte: o predicado de defesa em
+    profundidade re-aplica o mesmo escopo do Motorista)."""
     esperados = {e.value for e in ESTADOS_ESCOPO_MOTORISTA}
     assert len(esperados) == 6  # 3 origens + 3 Em Trânsito
     estados_validos = {e.value for e in EstadoProva}
@@ -55,6 +57,12 @@ def test_policy_motorista_usa_o_escopo_operacional_derivado_da_maquina() -> None
         ((_RLS / "provas_select_motorista.sql").read_text(encoding="utf-8"), "select_motorista"),
         ((_RLS / "provas_update_motorista.sql").read_text(encoding="utf-8"), "update_motorista"),
         ((_VERSIONS / "0015_movimentacoes.py").read_text(encoding="utf-8"), "_MOTORISTA_SCOPE"),
+        # W3-C13: a projeção de nomes re-aplica o escopo do Motorista (DP-2b) — entra
+        # no harness para travar o drift com a §6, como as 3 fontes acima.
+        (
+            (_RLS / "nomes_de_usuarios.sql").read_text(encoding="utf-8"),
+            "'motorista' AND p.status IN",
+        ),
     )
     for fonte, marcador in fontes:
         bloco = fonte[fonte.index(marcador) :]

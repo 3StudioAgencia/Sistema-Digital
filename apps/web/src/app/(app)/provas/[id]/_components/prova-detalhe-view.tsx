@@ -38,6 +38,8 @@ import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { rotuloRota } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
 
+import { ProofTimeline } from "./ProofTimeline";
+
 import styles from "../prova-detalhe.module.css";
 
 /** Mensagem ÚNICA p/ inexistente E fora-de-escopo (anti-enumeração — §11). */
@@ -265,19 +267,16 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
             </div>
           </motion.article>
 
-          {/* Histórico (DP-2): empty state agora; timeline do C13 pluga aqui. */}
+          {/* Histórico (W3-C13): a timeline visual lê GET /provas/{id}/movimentacoes
+              e desenha o caminho da rota. Falha do histórico é isolada na própria
+              ProofTimeline — não derruba este detalhe (§3.6). */}
           <motion.section
             className={styles.historico}
             aria-label="Histórico de movimentações"
             {...entrada(0.07)}
           >
             <h2 className={styles.historicoTitulo}>Histórico de movimentações</h2>
-            <div className={styles.historicoVazio}>
-              <p>Esta prova ainda não teve movimentações.</p>
-              <p className={styles.historicoVazioSub}>
-                A timeline visual fica disponível quando a prova for escaneada pela primeira vez.
-              </p>
-            </div>
+            <ProofTimeline provaId={prova.id} />
           </motion.section>
 
           <MotionModal
