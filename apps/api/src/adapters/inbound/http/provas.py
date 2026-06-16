@@ -14,6 +14,8 @@ NÃO há endpoint de update nesta wave (DP-5 do C06): a rota é imutável (RN-00
 as transições de status são do C11 — qualquer PATCH/PUT responde 405 por ausência.
 """
 
+import base64
+import binascii
 import uuid
 from datetime import date, datetime
 from typing import Annotated, Self
@@ -40,8 +42,27 @@ from src.application.provas import (
     ProvasService,
 )
 from src.application.transicoes import ProvasTransicaoService
+from src.domain.assinaturas import ASSINATURA_TAMANHO_MAXIMO, AssinaturaInvalidaError
 from src.domain.provas import ARTE_TAMANHO_MAXIMO, EstadoProva, Prova, Rota
 from src.domain.state_machine.enums import Acao
+
+# Teto do campo base64 da assinatura: ~4/3 do PNG (1 MB) + folga do prefixo
+# data-URL. O teto do corpo inteiro (anti-DoS) é do ``BodyLimitMiddleware``.
+ASSINATURA_BASE64_MAXIMO = (ASSINATURA_TAMANHO_MAXIMO // 3 + 1) * 4 + 64
+
+
+def _decodificar_assinatura(valor: str) -> bytes:
+    """Decodifica a imagem base64 da assinatura (aceita ``data:image/png;base64,``).
+
+    Malformada → 422 (``AssinaturaInvalidaError``, mensagem genérica); o CONTEÚDO
+    (magic bytes, tamanho) é validado no domínio (``validar_assinatura``)."""
+    dados = valor.strip()
+    if dados.startswith("data:"):
+        _, _, dados = dados.partition(",")
+    try:
+        return base64.b64decode(dados, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise AssinaturaInvalidaError("Assinatura inválida: imagem não reconhecida.") from exc
 
 router = APIRouter(prefix="/provas", tags=["provas"])
 
@@ -173,19 +194,32 @@ class IdentificarIn(BaseModel):
 
 
 class TransicaoIn(BaseModel):
-    """Entrada da transição (W3-C11). ``acao`` é a ação da §6; ``motivo`` é
+    """Entrada da transição (W3-C11/C12). ``acao`` é a ação da §6; ``motivo`` é
     obrigatório (validado no domínio) só para Reprovar/Cancelar.
 
-    ``assinatura_ref`` é a referência da assinatura digital (RN-003) — o C12 a
-    fornece (captura + tabela ``signatures``); no C11 é exigida pelo contrato
-    (testes usam um stub). ``idempotency_key`` é a chave por operação (RNF-015/
-    DP-2): o reenvio da MESMA transição reusa a chave e converge, sem duplicar.
+    ``assinatura`` é a IMAGEM da assinatura digital desenhada (RN-003 — W3-C12): o
+    PNG do ``react-signature-canvas`` em base64 (com ou sem o prefixo data-URL). O
+    backend cria a linha ``assinaturas`` e a vincula à movimentação na MESMA
+    transação atômica (nascem/falham juntas — DP-1). ``idempotency_key`` é a chave
+    por operação (RNF-015/DP-2): o reenvio da MESMA transição reusa a chave e
+    converge, sem duplicar nem recriar a assinatura.
     """
 
     acao: Acao
-    assinatura_ref: uuid.UUID
+    assinatura: str = Field(min_length=1, max_length=ASSINATURA_BASE64_MAXIMO)
     idempotency_key: uuid.UUID
     motivo: str | None = Field(default=None, max_length=500)
+
+
+class AcaoDisponivelOut(BaseModel):
+    """Uma ação do fluxo de escaneamento que o ator logado pode executar AGORA
+    (W3-C12/DP-3) — orienta a tela de confirmação (assinar / Aprovar / Reprovar).
+
+    ``exige_motivo`` é ``True`` para Reprovar: a UI mostra o campo de motivo."""
+
+    acao: Acao
+    exige_motivo: bool
+    estado_destino: EstadoProva
 
 
 # ---------------------------------------------------------------------------
@@ -302,26 +336,49 @@ async def identificar(
     return ProvaDetalheOut.de_dominio(await service.identificar(body.codigo))
 
 
+@router.get("/{prova_id}/acoes-disponiveis", response_model=list[AcaoDisponivelOut])
+async def acoes_disponiveis(
+    prova_id: uuid.UUID,
+    service: Annotated[ProvasTransicaoService, Depends(get_transicao_service)],
+) -> list[AcaoDisponivelOut]:
+    """Ações do fluxo de escaneamento que o ator logado pode executar na prova
+    AGORA (W3-C12/DP-3) — orienta a tela de confirmação (assinar automaticamente
+    vs Aprovar/Reprovar vs bloqueio genérico). Reusa as regras do C11
+    (``transicoes_de`` + ``autoriza``), sem duplicar a §6; Cancelar/Reiniciar
+    (C14/C15) NÃO entram (têm UI própria).
+
+    Lista vazia = não é a vez do ator → a UI mostra o bloqueio genérico, SEM
+    revelar quem é o próximo (RN-014). Prova fora do escopo / inexistente → 404
+    genérico (anti-enumeração — a RLS escopa a leitura)."""
+    transicoes = await service.acoes_disponiveis(str(prova_id))
+    return [
+        AcaoDisponivelOut(acao=t.acao, exige_motivo=t.exige_motivo, estado_destino=t.estado_destino)
+        for t in transicoes
+    ]
+
+
 @router.post("/{prova_id}/transicoes", response_model=ProvaDetalheOut)
 async def transicionar(
     prova_id: uuid.UUID,
     body: TransicaoIn,
     service: Annotated[ProvasTransicaoService, Depends(get_transicao_service)],
 ) -> ProvaDetalheOut:
-    """Executa uma transição da máquina de estados (W3-C11) — o "confirmar" do
-    fluxo identificar → assinar → confirmar (§6/RF-007). ATÔMICA (RNF-017) e
-    IDEMPOTENTE (RNF-015): reenvio com a mesma ``idempotency_key`` converge.
+    """Executa uma transição da máquina de estados (W3-C11) gravando a assinatura
+    desenhada como comprovante (W3-C12/RN-003) — o "confirmar" do fluxo
+    identificar → assinar → confirmar (§6/RF-007). ATÔMICA (RNF-017): a assinatura
+    e a movimentação nascem/falham JUNTAS. IDEMPOTENTE (RNF-015): reenvio com a
+    mesma ``idempotency_key`` converge (sem recriar a assinatura).
 
-    Erros: transição não definida → 422; perfil não autorizado → 403 (genérico,
-    sem revelar o próximo ator — RN-014); prova fora do escopo / inexistente →
-    404 genérico (anti-enumeração); chave reusada para outra operação → 409.
-    Quem CAPTURA a assinatura é o C12; quem dispara Cancelar/Reiniciar pela UI é
+    Erros: assinatura malformada/ inválida → 422; transição não definida → 422;
+    perfil não autorizado → 403 (genérico, sem revelar o próximo ator — RN-014);
+    prova fora do escopo / inexistente → 404 genérico (anti-enumeração); chave
+    reusada para outra operação → 409. Quem dispara Cancelar/Reiniciar pela UI é
     o C14/C15 — todos INVOCAM este endpoint.
     """
     item = await service.executar(
         prova_id=str(prova_id),
         acao=body.acao,
-        assinatura_ref=str(body.assinatura_ref),
+        assinatura_imagem=_decodificar_assinatura(body.assinatura),
         idempotency_key=str(body.idempotency_key),
         motivo=body.motivo,
     )

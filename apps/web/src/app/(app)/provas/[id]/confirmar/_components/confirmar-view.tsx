@@ -1,36 +1,85 @@
 "use client";
 
 /**
- * Confirmação da movimentação (W3-C10/DP-2) — destino após identificar a prova.
+ * Confirmação da movimentação (W3-C10/C12) — destino após identificar a prova.
  *
- * Layout fiel ao design (Figma), mesma linguagem do detalhe (C08): card BRANCO com
- * nome + "Requerimento:" + uma linha de metadados (Cliente · Vendedor · Rota ·
- * Ciclo Atual · Criada em · Status) e, dentro dele, um card PRETO "Assinatura
- * Digital" com a área de assinatura (placeholder do C12) e o botão "Confirmar"
- * (gancho do C11). O C10 só IDENTIFICA: validar a próxima transição é o C11 e
- * capturar a assinatura é o C12.
+ * Fecha o laço identificar → assinar → confirmar → transição (RF-007/RF-028). Após
+ * carregar a prova (C08) e as AÇÕES disponíveis (C12/DP-3 — reusa as regras do
+ * C11), decide a branch (DP-4):
+ *   (a) o ator é o próximo → a assinatura é apresentada AUTOMATICAMENTE (RF-028);
+ *   (b) estados de posse do Vendedor → Aprovar/Reprovar (Reprovar exige motivo);
+ *   (c) o ator NÃO é o próximo → bloqueio genérico, SEM revelar quem é (RN-014).
  *
- * Busca o detalhe (`GET /provas/{id}`, universal-em-escopo). 404 (inexistente OU
- * fora do escopo — anti-enumeração §11) → toast genérico + volta ao escaneamento.
- * Mobile-first; animações sobre os tokens (GPU), instantâneas sob
- * `prefers-reduced-motion`.
+ * Submete a assinatura desenhada (`react-signature-canvas` → PNG) + a ação ao motor
+ * do C11 (atômico/idempotente). Resiliência (RNF-016/DP-5): falha de submissão
+ * PRESERVA o traço (canvas em memória) + a ação (sessionStorage) e oferece retry
+ * com a MESMA `idempotency_key` (converge, não duplica). Mobile-first; animações
+ * sobre os tokens (GPU), instantâneas sob `prefers-reduced-motion`.
  */
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useToast } from "@/components/ui/toast/ToastProvider";
 import { ApiError } from "@/lib/api/client";
 import { obterProva, type ProvaDetalhe } from "@/lib/api/provas";
+import {
+  type Acao,
+  type AcaoDisponivel,
+  acoesDisponiveis,
+  executarTransicao,
+} from "@/lib/api/transicoes";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { rotuloRota } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
 
 import styles from "../confirmar.module.css";
+import { AssinaturaPad, type AssinaturaPadHandle } from "./assinatura-pad";
 
 /** Mensagem ÚNICA p/ inexistente E fora-de-escopo (anti-enumeração — §11). */
 const MSG_NAO_ENCONTRADA = "Prova não encontrada.";
+const MSG_ASSINE = "Desenhe a assinatura para confirmar.";
+const MOTIVO_MAX = 500;
+
+type Stash = { assinatura: string; acao: Acao; motivo: string; key: string };
+
+function chaveStash(provaId: string): string {
+  return `c12:confirmar:${provaId}`;
+}
+
+function lerStash(provaId: string): Stash | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const bruto = sessionStorage.getItem(chaveStash(provaId));
+    return bruto ? (JSON.parse(bruto) as Stash) : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarStash(provaId: string, stash: Stash): void {
+  try {
+    sessionStorage?.setItem(chaveStash(provaId), JSON.stringify(stash));
+  } catch {
+    // quota/indisponível: a resiliência em-memória (canvas + retry) ainda vale.
+  }
+}
+
+function limparStash(provaId: string): void {
+  try {
+    sessionStorage?.removeItem(chaveStash(provaId));
+  } catch {
+    /* no-op */
+  }
+}
+
+function novaChave(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function formatarData(iso: string | null): string {
   if (!iso) return "—";
@@ -48,41 +97,144 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
 
   const [estado, setEstado] = useState<"carregando" | "pronto" | "erro">("carregando");
   const [prova, setProva] = useState<ProvaDetalhe | null>(null);
-  const [tentativa, setTentativa] = useState(0);
+  const [acoes, setAcoes] = useState<AcaoDisponivel[]>([]);
+  const [tentativaCarregar, setTentativaCarregar] = useState(0);
 
-  const acoesRef = useRef({ router, toast });
+  const [modoReprovar, setModoReprovar] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [motivoErro, setMotivoErro] = useState(false);
+  const [submetendo, setSubmetendo] = useState(false);
+  const [sucesso, setSucesso] = useState(false);
+  const [erroSubmissao, setErroSubmissao] = useState<string | null>(null);
+
+  const padRef = useRef<AssinaturaPadHandle | null>(null);
+  const idemRef = useRef<string>("");
+  const ultimaAcaoRef = useRef<Acao | null>(null);
+  // Traço preservado (DP-5) a restaurar quando o pad montar; nulo após restaurar.
+  const restaurarRef = useRef<string | null>(null);
+  const motivoId = useId();
+
+  // Ações estáveis para o efeito de carga (evita re-disparo por mudança de ref).
+  const acoesEfeito = useRef({ router, toast });
   useEffect(() => {
-    acoesRef.current = { router, toast };
+    acoesEfeito.current = { router, toast };
   });
 
   useEffect(() => {
     const controller = new AbortController();
-    obterProva(provaId, controller.signal)
-      .then((p) => {
+    Promise.all([
+      obterProva(provaId, controller.signal),
+      acoesDisponiveis(provaId, controller.signal),
+    ])
+      .then(([p, a]) => {
         setProva(p);
+        setAcoes(a);
+        // Chave de idempotência: reaproveita a de um stash (retry pós-reload
+        // converge) ou nasce nova. Definida client-side (sem mismatch de SSR).
+        const stash = lerStash(provaId);
+        idemRef.current = stash?.key ?? novaChave();
+        if (stash) {
+          restaurarRef.current = stash.assinatura; // o traço é restaurado no efeito
+          if (stash.acao === "reprovar") {
+            setModoReprovar(true);
+            setMotivo(stash.motivo);
+          }
+        }
         setEstado("pronto");
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (error instanceof ApiError && error.status === 404) {
-          acoesRef.current.toast.error(MSG_NAO_ENCONTRADA);
-          acoesRef.current.router.replace("/escanear");
+          acoesEfeito.current.toast.error(MSG_NAO_ENCONTRADA);
+          acoesEfeito.current.router.replace("/escanear");
           return;
         }
         setEstado("erro");
       });
     return () => controller.abort();
-  }, [provaId, tentativa]);
+  }, [provaId, tentativaCarregar]);
+
+  // Resiliência (DP-5): quando o pad monta, restaura o traço preservado. Só
+  // efeito colateral no canvas (sem setState — a ação/motivo já vieram na carga).
+  useEffect(() => {
+    if (estado !== "pronto" || restaurarRef.current === null || !padRef.current) return;
+    const url = restaurarRef.current;
+    restaurarRef.current = null;
+    padRef.current.fromDataURL(url);
+    acoesEfeito.current.toast.success("Recuperamos sua assinatura. Confirme para registrar.");
+  }, [estado]);
 
   function voltar() {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/escanear");
   }
 
-  function confirmar() {
-    // Placeholder do C11: a transição (perfil+estado) e a assinatura (C12) plugam
-    // aqui depois. Por ora, feedback claro de que o passo chega na máquina de estados.
-    toast.success("A confirmação da movimentação chega com a máquina de estados (C11).");
+  async function confirmar(acao: Acao) {
+    if (submetendo || sucesso) return;
+    if (padRef.current?.isEmpty() ?? true) {
+      toast.error(MSG_ASSINE);
+      return;
+    }
+    if (acao === "reprovar" && !motivo.trim()) {
+      setMotivoErro(true);
+      toast.error("Informe o motivo da reprovação.");
+      return;
+    }
+    const assinatura = padRef.current!.toDataURL();
+    ultimaAcaoRef.current = acao;
+    setSubmetendo(true);
+    setErroSubmissao(null);
+    // Preserva ANTES de ir à rede: nem um crash/reload perde a operação (DP-5).
+    gravarStash(provaId, { assinatura, acao, motivo, key: idemRef.current });
+    try {
+      const atualizada = await executarTransicao(provaId, {
+        acao,
+        assinatura,
+        idempotencyKey: idemRef.current,
+        motivo: acao === "reprovar" ? motivo.trim() : undefined,
+      });
+      limparStash(provaId);
+      setSucesso(true);
+      toast.success(`Movimentação registrada: ${rotuloStatus(atualizada.status)}.`);
+      const ir = () => router.replace(`/provas/${provaId}`);
+      if (reduced) ir();
+      else setTimeout(ir, 650);
+    } catch (error: unknown) {
+      setSubmetendo(false);
+      tratarErroSubmissao(error);
+    }
+  }
+
+  function tratarErroSubmissao(error: unknown) {
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        limparStash(provaId);
+        toast.error(MSG_NAO_ENCONTRADA);
+        router.replace("/escanear");
+        return;
+      }
+      if (error.status === 403) {
+        // Não é a vez do ator (genérico — não revela quem é, RN-014).
+        limparStash(provaId);
+        toast.error(error.message);
+        router.replace("/escanear");
+        return;
+      }
+      if (error.status === 422) {
+        if (error.code === "motivo_obrigatorio") setMotivoErro(true);
+        toast.error(error.message); // traço preservado no canvas; o ator reenvia
+        return;
+      }
+      if (error.status === 409) {
+        limparStash(provaId);
+        toast.error(error.message);
+        return;
+      }
+    }
+    // Rede/timeout/5xx → retentável: o traço fica no canvas + o stash sobrevive.
+    setErroSubmissao(
+      "Não foi possível registrar agora. Sua assinatura foi preservada — tente novamente.",
+    );
   }
 
   const duracao = reduced ? DURATION.instant : DURATION.medium;
@@ -92,6 +244,11 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
     transition: { duration: duracao, ease: EASING.emphasized },
   };
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
+
+  const bloqueado = estado === "pronto" && acoes.length === 0;
+  const podeAprovar = acoes.some((a) => a.acao === "aprovar");
+  const podeReprovar = acoes.some((a) => a.acao === "reprovar");
+  const modoDecisao = podeAprovar || podeReprovar;
 
   return (
     <section className={styles.pagina} aria-label="Confirmar movimentação">
@@ -109,7 +266,7 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
             className={styles.linkRetry}
             onClick={() => {
               setEstado("carregando");
-              setTentativa((t) => t + 1);
+              setTentativaCarregar((t) => t + 1);
             }}
           >
             Tentar novamente
@@ -133,25 +290,139 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
             </dl>
           </div>
 
-          {/* Card preto — assinatura (placeholder C12) + Confirmar (gancho C11). */}
           <section className={styles.cardAssinatura} aria-label="Assinatura e confirmação">
             <h2 className={styles.assinaturaTitulo}>Assinatura Digital</h2>
-            <div className={styles.assinaturaCanvas} role="img" aria-label="Área de assinatura">
-              <span className={styles.assinaturaDica}>
-                A captura de assinatura chega com o componente de assinatura (C12).
-              </span>
-            </div>
-            <motion.button
-              type="button"
-              className={styles.botaoConfirmar}
-              onClick={confirmar}
-              {...toque}
-            >
-              Confirmar
-            </motion.button>
+
+            {bloqueado ? (
+              // Branch (c): não é a vez deste ator — genérico, sem revelar quem é.
+              <p className={styles.bloqueio} role="status">
+                Esta prova não está aguardando uma ação sua no momento.
+              </p>
+            ) : (
+              <>
+                <AssinaturaPad ref={padRef} />
+                <p className={styles.assinaturaDica}>
+                  Desenhe a assinatura no quadro acima para confirmar a movimentação.
+                  <button type="button" className={styles.linkLimpar} onClick={() => padRef.current?.clear()}>
+                    Limpar
+                  </button>
+                </p>
+
+                {modoReprovar && (
+                  <div className={styles.motivoCampo}>
+                    <label className={styles.motivoLabel} htmlFor={motivoId}>
+                      Motivo da reprovação
+                    </label>
+                    <textarea
+                      id={motivoId}
+                      className={styles.motivoTextarea}
+                      value={motivo}
+                      maxLength={MOTIVO_MAX}
+                      rows={3}
+                      data-erro={motivoErro || undefined}
+                      onChange={(e) => {
+                        setMotivo(e.target.value);
+                        setMotivoErro(false);
+                      }}
+                      placeholder="Descreva o que precisa ser corrigido"
+                      aria-invalid={motivoErro || undefined}
+                    />
+                  </div>
+                )}
+
+                <div className={styles.acoes}>
+                  {modoDecisao ? (
+                    modoReprovar ? (
+                      <>
+                        <motion.button
+                          type="button"
+                          className={styles.botaoSecundario}
+                          onClick={() => {
+                            setModoReprovar(false);
+                            setMotivoErro(false);
+                          }}
+                          disabled={submetendo}
+                          {...toque}
+                        >
+                          Voltar
+                        </motion.button>
+                        <motion.button
+                          type="button"
+                          className={styles.botaoReprovar}
+                          onClick={() => confirmar("reprovar")}
+                          disabled={submetendo}
+                          {...toque}
+                        >
+                          {submetendo ? "Registrando…" : "Confirmar reprovação"}
+                        </motion.button>
+                      </>
+                    ) : (
+                      <>
+                        <motion.button
+                          type="button"
+                          className={styles.botaoReprovar}
+                          onClick={() => setModoReprovar(true)}
+                          disabled={submetendo || !podeReprovar}
+                          {...toque}
+                        >
+                          Reprovar
+                        </motion.button>
+                        <motion.button
+                          type="button"
+                          className={styles.botaoConfirmar}
+                          onClick={() => confirmar("aprovar")}
+                          disabled={submetendo || !podeAprovar}
+                          {...toque}
+                        >
+                          {submetendo ? "Registrando…" : "Aprovar"}
+                        </motion.button>
+                      </>
+                    )
+                  ) : (
+                    <motion.button
+                      type="button"
+                      className={styles.botaoConfirmar}
+                      onClick={() => confirmar("identificar_e_assinar")}
+                      disabled={submetendo}
+                      {...toque}
+                    >
+                      {submetendo ? "Registrando…" : "Confirmar"}
+                    </motion.button>
+                  )}
+                </div>
+
+                {erroSubmissao && (
+                  <p className={styles.retry} role="alert">
+                    {erroSubmissao}{" "}
+                    <button
+                      type="button"
+                      className={styles.linkRetry}
+                      onClick={() => ultimaAcaoRef.current && confirmar(ultimaAcaoRef.current)}
+                      disabled={submetendo}
+                    >
+                      Tentar novamente
+                    </button>
+                  </p>
+                )}
+              </>
+            )}
           </section>
         </motion.article>
       ) : null}
+
+      {sucesso && (
+        <motion.div
+          className={styles.sucessoOverlay}
+          role="status"
+          initial={{ opacity: 0, scale: reduced ? 1 : 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: reduced ? DURATION.instant : DURATION.short, ease: EASING.emphasized }}
+        >
+          <span className={styles.sucessoPill}>
+            <span aria-hidden>✓</span> Movimentação registrada
+          </span>
+        </motion.div>
+      )}
     </section>
   );
 }

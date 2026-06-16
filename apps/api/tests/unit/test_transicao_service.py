@@ -1,15 +1,18 @@
-"""``ProvasTransicaoService`` (W3-C11) — orquestração offline com dublês.
+"""``ProvasTransicaoService`` (W3-C11 + assinatura do W3-C12) — offline com dublês.
 
-Cobre o que é difícil/caro de provocar pela borda: ATOMICIDADE (falha ao gravar
-a movimentação → status NÃO é commitado, rollback acontece — RNF-017) e os ramos
-de IDEMPOTÊNCIA (convergência e conflito — RNF-015/DP-2), além de 404/422/403/
-motivo e o carimbo terminal. A regra pura da §6 está em ``test_state_machine``;
-aqui o foco é o caso de uso.
+Cobre o que é difícil/caro de provocar pela borda: ATOMICIDADE (falha ao gravar a
+movimentação → status NÃO é commitado, rollback acontece — RNF-017), o vínculo
+assinatura↔movimentação (a assinatura nasce e a movimentação a referencia, na
+MESMA transação — DP-1), os ramos de IDEMPOTÊNCIA (convergência e conflito —
+RNF-015/DP-2), 404/422/403/motivo, o carimbo terminal e ``acoes_disponiveis``
+(DP-3). A regra pura da §6 está em ``test_state_machine``; aqui o foco é o caso de
+uso.
 """
 
 import datetime as dt
 
 import pytest
+from src.application.ports.assinaturas_repository import AssinaturasRepositoryPort
 from src.application.ports.movimentacoes_repository import MovimentacoesRepositoryPort
 from src.application.ports.provas_repository import (
     FiltrosProvas,
@@ -18,6 +21,7 @@ from src.application.ports.provas_repository import (
 )
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.transicoes import ProvasTransicaoService
+from src.domain.assinaturas import Assinatura, AssinaturaInvalidaError
 from src.domain.movimentacoes import Movimentacao, TransicaoIdempotenciaConflitoError
 from src.domain.provas import EstadoProva, Prova, ProvaNaoEncontradaError, Rota
 from src.domain.state_machine.enums import Acao
@@ -31,6 +35,8 @@ from src.domain.usuarios import Setor, Usuario
 QUANDO = dt.datetime(2026, 6, 16, 12, 0, tzinfo=dt.UTC)
 VENDEDOR_ID = "22222222-2222-2222-2222-222222222222"
 ADMIN_ID = "99999999-9999-9999-9999-999999999999"
+# Imagem mínima que passa por ``validar_assinatura`` (magic bytes de PNG).
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 
 
 def _prova(status: EstadoProva = EstadoProva.CRIADA, rota: Rota = Rota.MATRIZ) -> Prova:
@@ -67,6 +73,9 @@ class FakeProvasRepo(ProvasRepositoryPort):
     async def obter_para_transicao(self, prova_id: str) -> Prova | None:
         return self._prova
 
+    async def get(self, prova_id: str) -> Prova | None:
+        return self._prova
+
     async def atualizar_status(
         self,
         prova_id: str,
@@ -80,9 +89,6 @@ class FakeProvasRepo(ProvasRepositoryPort):
         return {VENDEDOR_ID: "Regiane"}
 
     async def add(self, prova: Prova) -> None:  # pragma: no cover
-        raise NotImplementedError
-
-    async def get(self, prova_id: str) -> Prova | None:  # pragma: no cover
         raise NotImplementedError
 
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:  # pragma: no cover
@@ -113,6 +119,21 @@ class FakeMovsRepo(MovimentacoesRepositoryPort):
         return self._existente
 
 
+class FakeAssinaturasRepo(AssinaturasRepositoryPort):
+    def __init__(self, falha: Exception | None = None) -> None:
+        self._falha = falha
+        self.registradas: list[Assinatura] = []
+
+    async def registrar(self, assinatura: Assinatura) -> Assinatura:
+        if self._falha is not None:
+            raise self._falha
+        self.registradas.append(assinatura)
+        return assinatura
+
+    async def obter(self, assinatura_id: str) -> Assinatura | None:  # pragma: no cover
+        return next((a for a in self.registradas if a.id == assinatura_id), None)
+
+
 class FakeUoW(UnitOfWork):
     def __init__(self) -> None:
         self.commits = 0
@@ -126,25 +147,42 @@ class FakeUoW(UnitOfWork):
 
 
 def _servico(
-    repo: FakeProvasRepo, movs: FakeMovsRepo, uow: FakeUoW, ator: Usuario
+    repo: FakeProvasRepo,
+    movs: FakeMovsRepo,
+    uow: FakeUoW,
+    ator: Usuario,
+    assinaturas: FakeAssinaturasRepo | None = None,
 ) -> ProvasTransicaoService:
-    return ProvasTransicaoService(repo=repo, movs=movs, uow=uow, ator=ator, relogio=lambda: QUANDO)
+    return ProvasTransicaoService(
+        repo=repo,
+        movs=movs,
+        assinaturas=assinaturas or FakeAssinaturasRepo(),
+        uow=uow,
+        ator=ator,
+        relogio=lambda: QUANDO,
+    )
 
 
 # ---------------------------------------------------------------------------
-async def test_caminho_feliz_transiciona_grava_e_commita() -> None:
+async def test_caminho_feliz_transiciona_grava_assinatura_e_commita() -> None:
     repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
-    svc = _servico(repo, movs, uow, _vendedor())
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
     out = await svc.executar(
         prova_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         acao=Acao.IDENTIFICAR_E_ASSINAR,
-        assinatura_ref="11111111-1111-1111-1111-111111111111",
+        assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
     )
     assert out.prova.status == EstadoProva.RETIRADA_VENDEDOR
     assert out.vendedor_nome == "Regiane"
     assert repo.status_atualizado == (EstadoProva.RETIRADA_VENDEDOR, None)
+    # A assinatura nasceu e a movimentação a referencia (vínculo — DP-1).
+    assert len(assin.registradas) == 1
+    assert assin.registradas[0].content_type == "image/png"
+    assert assin.registradas[0].ator_id == VENDEDOR_ID
     assert len(movs.registradas) == 1
+    assert movs.registradas[0].assinatura_ref == assin.registradas[0].id
     assert uow.commits == 1
 
 
@@ -155,7 +193,7 @@ async def test_terminal_carimba_finalizada_em() -> None:
     out = await svc.executar(
         prova_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         acao=Acao.IDENTIFICAR_E_ASSINAR,
-        assinatura_ref="11111111-1111-1111-1111-111111111111",
+        assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
     )
     assert out.prova.status == EstadoProva.RECEBIDA_CLICHERIA
@@ -170,21 +208,24 @@ async def test_prova_fora_do_escopo_e_404_sem_commit() -> None:
         await svc.executar(
             prova_id="x",
             acao=Acao.IDENTIFICAR_E_ASSINAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
     assert uow.commits == 0
 
 
-async def test_acao_invalida_e_422_sem_commit() -> None:
+async def test_acao_invalida_e_422_sem_commit_nem_assinatura() -> None:
     repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
-    svc = _servico(repo, movs, uow, _vendedor())
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(TransicaoInvalidaError):
         await svc.executar(
             prova_id="a", acao=Acao.APROVAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
+    # Transição inválida é avaliada ANTES de tocar a assinatura: nada persiste.
+    assert assin.registradas == []
     assert uow.commits == 0 and repo.status_atualizado is None
 
 
@@ -196,7 +237,7 @@ async def test_perfil_errado_e_403_sem_commit() -> None:
     with pytest.raises(TransicaoNaoAutorizadaError):
         await svc.executar(
             prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
     assert uow.commits == 0
@@ -209,31 +250,68 @@ async def test_reprovar_sem_motivo_e_422_sem_commit() -> None:
     with pytest.raises(MotivoObrigatorioError):
         await svc.executar(
             prova_id="a", acao=Acao.REPROVAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
             motivo="   ",
         )
     assert uow.commits == 0
 
 
+async def test_assinatura_invalida_e_422_sem_commit_nem_movimentacao() -> None:
+    """W3-C12: imagem vazia/ não-imagem → 422; nada é persistido (a assinatura é
+    validada na MESMA transação, antes de gravar a movimentação)."""
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
+    with pytest.raises(AssinaturaInvalidaError):
+        await svc.executar(
+            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            assinatura_imagem=b"",  # vazia
+            idempotency_key="33333333-3333-3333-3333-333333333333",
+        )
+    assert assin.registradas == []
+    assert movs.registradas == []
+    assert uow.commits == 0 and repo.status_atualizado is None
+
+
 async def test_atomicidade_falha_ao_gravar_movimentacao_nao_commita() -> None:
     """RNF-017: erro ao inserir a movimentação → NÃO commita (rollback do __aexit__)
-    → status não fica inconsistente."""
+    → assinatura e status não ficam inconsistentes (nascem/falham juntas)."""
     repo = FakeProvasRepo(_prova())
     movs = FakeMovsRepo(falha=RuntimeError("falha de banco no INSERT da movimentação"))
+    assin = FakeAssinaturasRepo()
     uow = FakeUoW()
-    svc = _servico(repo, movs, uow, _vendedor())
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(RuntimeError):
         await svc.executar(
             prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
     assert uow.commits == 0
-    assert uow.rollbacks >= 1  # o __aexit__ desfez a transação
+    assert uow.rollbacks >= 1  # o __aexit__ desfez a transação (assinatura inclusa)
 
 
-async def test_idempotencia_reenvio_converge_sem_reaplicar() -> None:
+async def test_atomicidade_falha_ao_gravar_assinatura_nao_commita() -> None:
+    """W3-C12: erro ao inserir a assinatura → rollback; a movimentação NUNCA é
+    gravada (a assinatura vem antes) — sem transição sem comprovante."""
+    repo = FakeProvasRepo(_prova())
+    movs = FakeMovsRepo()
+    assin = FakeAssinaturasRepo(falha=RuntimeError("falha de banco no INSERT da assinatura"))
+    uow = FakeUoW()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
+    with pytest.raises(RuntimeError):
+        await svc.executar(
+            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            assinatura_imagem=PNG,
+            idempotency_key="33333333-3333-3333-3333-333333333333",
+        )
+    assert movs.registradas == []
+    assert uow.commits == 0
+    assert uow.rollbacks >= 1
+
+
+async def test_idempotencia_reenvio_converge_sem_reaplicar_nem_recriar_assinatura() -> None:
     prova = _prova(status=EstadoProva.RETIRADA_VENDEDOR)  # já transicionada
     existente = Movimentacao(
         id="m1",
@@ -245,15 +323,17 @@ async def test_idempotencia_reenvio_converge_sem_reaplicar() -> None:
         idempotency_key="33333333-3333-3333-3333-333333333333",
     )
     repo, movs, uow = FakeProvasRepo(prova), FakeMovsRepo(existente=existente), FakeUoW()
-    svc = _servico(repo, movs, uow, _vendedor())
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
     out = await svc.executar(
         prova_id=prova.id, acao=Acao.IDENTIFICAR_E_ASSINAR,
-        assinatura_ref="11111111-1111-1111-1111-111111111111",
+        assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
     )
     assert out.prova.status == EstadoProva.RETIRADA_VENDEDOR
     assert repo.status_atualizado is None  # NÃO reaplicou
     assert movs.registradas == []  # NÃO duplicou
+    assert assin.registradas == []  # NÃO recriou a assinatura
     assert uow.commits == 0
 
 
@@ -273,7 +353,7 @@ async def test_idempotencia_mesma_chave_operacao_diferente_e_409() -> None:
     with pytest.raises(TransicaoIdempotenciaConflitoError):
         await svc.executar(
             prova_id=prova.id, acao=Acao.IDENTIFICAR_E_ASSINAR,
-            assinatura_ref="11111111-1111-1111-1111-111111111111",
+            assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
     assert uow.commits == 0
@@ -284,7 +364,7 @@ async def test_admin_cancela_com_motivo_e_grava_movimentacao() -> None:
     svc = _servico(repo, movs, uow, _admin())
     out = await svc.executar(
         prova_id="a", acao=Acao.CANCELAR,
-        assinatura_ref="11111111-1111-1111-1111-111111111111",
+        assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
         motivo="cliente desistiu",
     )
@@ -292,3 +372,45 @@ async def test_admin_cancela_com_motivo_e_grava_movimentacao() -> None:
     assert movs.registradas[0].motivo == "cliente desistiu"
     assert movs.registradas[0].ator_id == ADMIN_ID
     assert uow.commits == 1
+
+
+# ---------------------------------------------------------------------------
+# acoes_disponiveis (W3-C12/DP-3) — reusa as regras do C11
+# ---------------------------------------------------------------------------
+async def test_acoes_disponiveis_vendedor_no_avanco() -> None:
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _vendedor())
+    acoes = await svc.acoes_disponiveis("a")
+    assert {t.acao for t in acoes} == {Acao.IDENTIFICAR_E_ASSINAR}
+
+
+async def test_acoes_disponiveis_vendedor_aprovar_reprovar() -> None:
+    repo = FakeProvasRepo(_prova(status=EstadoProva.RETIRADA_VENDEDOR))
+    movs, uow = FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _vendedor())
+    acoes = await svc.acoes_disponiveis("a")
+    assert {t.acao for t in acoes} == {Acao.APROVAR, Acao.REPROVAR}
+    assert next(t for t in acoes if t.acao is Acao.REPROVAR).exige_motivo is True
+
+
+async def test_acoes_disponiveis_nao_ator_vazio() -> None:
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    ator = Usuario(id="c", nome="C", email="c@x.z", setor=Setor.CLICHERIA)
+    svc = _servico(repo, movs, uow, ator)
+    assert await svc.acoes_disponiveis("a") == ()
+
+
+async def test_acoes_disponiveis_admin_nao_inclui_cancelar() -> None:
+    """W3-C12: Cancelar (C14) é admin em todo estado ativo, mas NÃO entra no fluxo
+    de escaneamento — senão todo admin seria 'o próximo ator' em qualquer prova."""
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _admin())
+    acoes = await svc.acoes_disponiveis("a")
+    assert Acao.CANCELAR not in {t.acao for t in acoes}
+
+
+async def test_acoes_disponiveis_prova_fora_do_escopo_e_404() -> None:
+    repo, movs, uow = FakeProvasRepo(None), FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _vendedor())
+    with pytest.raises(ProvaNaoEncontradaError):
+        await svc.acoes_disponiveis("x")

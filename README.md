@@ -133,7 +133,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
-| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura · 13 Timeline · 14 Cancelamento · 15 Reinício | **Em andamento** 🚧 |
+| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline · 14 Cancelamento · 15 Reinício | **Em andamento** 🚧 |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |
 | **6 · Animações/Auditoria** | 19 Animações · 20 Log de Auditoria | ⬜ |

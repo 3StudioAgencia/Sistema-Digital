@@ -128,23 +128,181 @@
   color: var(--auth-text);
 }
 
-.assinaturaCanvas {
-  flex: 1;
-  min-height: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 20px;
-  border: 2px dashed rgba(255, 255, 255, 0.26);
+/* "Papel" branco (traço escuro) — legível em qualquer fundo (Timeline C13). */
+.assinaturaPad {
+  position: relative;
+  width: 100%;
+  height: 200px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: #fff;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.assinaturaCanvasEl {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* essencial no touch: desenhar não rola/zooma a página (mobile-first). */
+  touch-action: none;
+  cursor: crosshair;
 }
 
 .assinaturaDica {
   font-size: 14px;
   color: var(--app-sidebar-muted);
-  max-width: 40ch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.linkLimpar {
+  border: 0;
+  background: none;
+  color: var(--auth-text);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  min-height: 44px;
+}
+
+.bloqueio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  font-size: 15px;
+  color: var(--app-sidebar-muted);
+}
+
+/* ----------------------------------------------- motivo (Reprovar) */
+.motivoCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.motivoLabel {
+  font-size: 13px;
+  color: var(--app-sidebar-muted);
+}
+
+.motivoTextarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.motivoTextarea::placeholder {
+  color: var(--app-sidebar-muted);
+}
+
+.motivoTextarea:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
+}
+
+.motivoTextarea[data-erro] {
+  border-color: #ff8a8a;
+}
+
+/* ----------------------------------------------- linha de ações */
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.acoes > button {
+  flex: 1 1 0;
+  min-width: 140px;
+}
+
+.botaoReprovar,
+.botaoSecundario {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.botaoReprovar {
+  border: 1px solid rgba(255, 138, 138, 0.6);
+  background: transparent;
+  color: #ff8a8a;
+}
+
+.botaoSecundario {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: var(--auth-text);
+}
+
+.botaoReprovar:hover,
+.botaoSecundario:hover {
+  opacity: 0.85;
+}
+
+.botaoReprovar:focus-visible,
+.botaoSecundario:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.botaoReprovar:disabled,
+.botaoSecundario:disabled,
+.botaoConfirmar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ----------------------------------------------- retry (resiliência) */
+.retry {
+  margin: 0;
+  font-size: 14px;
+  color: #ffd0d0;
+}
+
+/* ----------------------------------------------- sucesso (flash leve) */
+.sucessoOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.sucessoPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 .botaoConfirmar {
@@ -282,14 +440,19 @@
     font-size: calc(18 * var(--u));
   }
 
-  /* Confirmar no canto superior direito (alinhado ao título). */
-  .botaoConfirmar {
-    position: absolute;
-    top: calc(40 * var(--u));
-    right: calc(40 * var(--u));
-    width: auto;
+  /* Ações alinhadas à direita do card (botões de largura natural). */
+  .acoes {
+    justify-content: flex-end;
+  }
+
+  .acoes > button {
+    flex: 0 0 auto;
     min-width: calc(180 * var(--u));
     height: calc(50 * var(--u));
     font-size: calc(16 * var(--u));
+  }
+
+  .assinaturaPad {
+    height: calc(220 * var(--u));
   }
 }

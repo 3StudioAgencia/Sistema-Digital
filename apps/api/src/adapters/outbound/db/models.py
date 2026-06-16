@@ -14,7 +14,17 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, MetaData, String, Text, Uuid, text
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    MetaData,
+    String,
+    Text,
+    Uuid,
+    text,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -179,9 +189,10 @@ class MovimentacaoRow(Base):
     Log APPEND-ONLY do fluxo (RNF-006/DP-3): UMA linha por transição. Imutável —
     o trigger ``trg_movimentacoes_append_only`` bloqueia UPDATE/DELETE e não há
     GRANT para eles. ``idempotency_key`` é UNIQUE (RNF-015): reenvio da mesma
-    transição converge, não duplica. ``assinatura_ref`` é nullable (DP-1): o C12
-    adiciona a tabela ``signatures`` + a FK. ``acao`` usa ``acao_enum``
-    (sincronizado com ``domain/state_machine/enums.py`` — DAT §4.5).
+    transição converge, não duplica. ``assinatura_ref`` é a FK (nullable — DP-1)
+    para ``assinaturas`` (W3-C12: a coluna nasceu sem FK no C11 e o C12 a fechou).
+    ``acao`` usa ``acao_enum`` (sincronizado com ``domain/state_machine/enums.py``
+    — DAT §4.5).
     """
 
     __tablename__ = "movimentacoes"
@@ -204,8 +215,42 @@ class MovimentacaoRow(Base):
     ator_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     ciclo: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
-    assinatura_ref: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+    # W3-C12: a referência aponta para a assinatura digital (RN-003). Nullable —
+    # o C12 adicionou a FK mas manteve a coluna opcional (DP-1): Cancelar/Reiniciar
+    # (C14/C15) podem não capturar um traço desenhado; só o fluxo de assinatura cria.
+    assinatura_ref: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("assinaturas.id"), nullable=True
+    )
     idempotency_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class AssinaturaRow(Base):
+    """Linha da tabela ``assinaturas`` (migration 0016 — W3-C12).
+
+    Comprovante IMUTÁVEL de uma movimentação (RN-003). ``imagem`` é o PNG do canvas
+    (``bytea``); ``content_type`` alimenta o futuro proxy de leitura (C13).
+    APPEND-ONLY: trigger ``trg_assinaturas_append_only`` + sem GRANT de
+    UPDATE/DELETE. RLS espelha ``provas`` (via ``prova_id`` denormalizado). A FK
+    ``movimentacoes.assinatura_ref`` aponta para cá — por isso a assinatura é
+    inserida ANTES da movimentação, na MESMA transação atômica (RNF-017/DP-1).
+    """
+
+    __tablename__ = "assinaturas"
+    # RETURNING do created_at (server default) no próprio INSERT (RNF-020).
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    prova_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("provas.id"), nullable=False
+    )
+    ator_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    imagem: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -213,6 +258,7 @@ class MovimentacaoRow(Base):
 
 __all__ = [
     "NAMING_CONVENTION",
+    "AssinaturaRow",
     "Base",
     "MovimentacaoRow",
     "ProvaRow",

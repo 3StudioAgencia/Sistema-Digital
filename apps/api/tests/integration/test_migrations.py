@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0015", (
-        "head deve registrar a revisão 0015 (movimentacoes — W3-C11)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0016", (
+        "head deve registrar a revisão 0016 (assinaturas — W3-C12)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -187,6 +187,33 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 2
     ), "0015 deve criar as 2 policies de movimentacoes (SELECT por prova visível + INSERT)"
+    # W3-C12: tabela assinaturas (0016) append-only + RLS + FK do C11.
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'assinaturas'") == 1
+    ), "0016 deve criar a tabela assinaturas"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_assinaturas_append_only'",
+        )
+        == 1
+    ), "0016 deve criar o trigger append-only de assinaturas (RN-003: imutável)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_policies WHERE tablename = 'assinaturas'",
+        )
+        == 2
+    ), "0016 deve criar as 2 policies de assinaturas (SELECT por prova visível + INSERT)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.table_constraints "
+            "WHERE constraint_name = 'fk_movimentacoes_assinatura_ref_assinaturas' "
+            "AND constraint_type = 'FOREIGN KEY'",
+        )
+        == 1
+    ), "0016 deve fechar a FK movimentacoes.assinatura_ref -> assinaturas (DP-1)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -216,6 +243,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'provas'") == 0, (
         "downgrade da 0007 deve remover a tabela provas"
     )
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'assinaturas'") == 0
+    ), "downgrade da 0016 deve remover a tabela assinaturas"
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'movimentacoes'") == 0
     ), "downgrade da 0015 deve remover a tabela movimentacoes"

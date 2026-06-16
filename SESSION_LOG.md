@@ -32,6 +32,34 @@
 
 ---
 
+## Sessão 15 — 2026-06-16 — [Wave 3 / Componente C12] Assinatura Digital no Fluxo de Escaneamento
+
+**Objetivo:** Fechar o laço do fluxo de movimentação — tornar *identificar → assinar → confirmar → transição* funcional de ponta a ponta. Assinatura desenhada como comprovante de cada movimentação (RN-003), apresentada automaticamente ao próximo ator (RF-028), capturando e invocando o motor do C11.
+
+**Feito:**
+- **Grounding (régua PARE E PERGUNTE):** workflow de 6 leitores paralelos + verificação direta do contrato do C11. Achei **2 premissas erradas no prompt** e as levei ao dono: (1) o C08 **não** tem "padrão de URL pré-assinada" (grep `presigned` = 0 — usa proxy-streaming); (2) `useAuthorization` **não existe** (o RBAC de front é `can`/`podeAcessarRota` em `access-matrix.ts`, e a checagem fina de "é sua vez" é do backend). Confirmados: `movimentacoes.assinatura_ref` nullable sem FK (0015:200), `executar(assinatura_ref)` no ramo `else`, `transicoes_de`+`autoriza` puros, `react-signature-canvas` ausente, head `0015`.
+- **Pontos de Decisão (§4) — respostas do dono:** DP-1/DP-2 **bytea em `assinaturas`** (+ FK nullable em `movimentacoes`); atomicidade por **endpoint único** (estende `POST .../transicoes` com a imagem); DP-3 **adicionar `GET /acoes-disponiveis`** reusando o motor; DP-5 resiliência por idempotência+sessionStorage; DP-6 preencher o card de assinatura já fiel ao Figma do C10.
+- **Backend:** `domain/assinaturas.py` (`validar_assinatura` magic bytes ≤1 MB); porta + repo `assinaturas`; `AssinaturaRow` + FK em `MovimentacaoRow`; **migration `0016`** (`assinaturas` bytea append-only + RLS + FK do C11) + espelhos `rls/assinaturas_*.sql`; `ProvasTransicaoService` (assinatura+movimentação na MESMA transação; `acoes_disponiveis` filtrando `ACOES_FLUXO_ESCANEAMENTO`); `TransicaoIn.assinatura` (base64) + decode; `GET /acoes-disponiveis`; DI injeta o repo de assinaturas.
+- **Frontend:** `lib/api/transicoes.ts`; `_components/assinatura-pad.tsx` (react-signature-canvas 1.1.0-alpha.2 — React 19); `confirmar-view.tsx` reescrito (3 branches DP-4; captura + invoca o C11; resiliência DP-5); `confirmar.module.css` estendido; `error.tsx` (error boundary). Build/lint limpos.
+- **`react-signature-canvas`:** `latest` resolveu para **1.1.0-alpha.2** — a linha 1.1 dropou `findDOMNode` (removido no React 19); a stable 1.0.x quebraria. Pinada exata; ships types próprios.
+
+**Decisões (ADRs):** ADR-066 (assinatura bytea na transação + FK), ADR-067 (endpoint único atômico + `acoes-disponiveis` reusando o motor), ADR-068 (resiliência por idempotência + sessionStorage). Ver DECISIONS.md.
+
+**Testes / cobertura:**
+- api — `test_assinaturas_dominio.py`; `test_transicao_service.py` reescrito (**vínculo assinatura↔movimentação**, **atomicidade** com falha injetada na assinatura OU na movimentação → nada commitado, idempotência não recria, `acoes_disponiveis`); `test_transicoes_endpoints.py` (assinatura nasce vinculada; **anti-enumeração** acoes/transição; inválida/base64 malformado → 422 sem efeito; reenvio não duplica); `test_rls_assinaturas.py` (SELECT por perfil, INSERT WITH CHECK, append-only); `test_migrations.py` (head `0016`). **671 verdes**, `ruff`/`mypy --strict` limpos.
+- web — `confirmar-view.test.tsx` reescrito (3 branches; canvas vazio bloqueia; Reprovar exige motivo; **resiliência preserva o traço + retry com a MESMA chave**; 404). **144 verdes**; E2E `confirmar.spec.ts` (guard + live opt-in RF-028).
+
+**Pendências / em aberto:**
+- **Timeline (C13)** — o histórico no detalhe segue em empty state; a RLS de SELECT de `movimentacoes` e de `assinaturas` já está pronta. O **proxy de leitura da imagem** da assinatura é do C13 (define a exibição).
+- **Cancelar/Reiniciar (C14/C15)** — invocam o mesmo motor; têm UI própria (fora do fluxo de escaneamento; por isso `acoes-disponiveis` os exclui).
+- **Migration `0016` aplicada no Supabase real** (`wmpxxrzbzqgsorjwczvz`) via MCP — `alembic_version=0016`, tabela+trigger+2 policies+FK+RLS verificados, **sem drift**; advisors de segurança **sem achados novos** (os 2 pré-existentes seguem). **O fluxo de movimentação está operacional de ponta a ponta.**
+
+**Próximo passo:** **W3-C13 — Timeline Visual com 4 Rotas e Laminação**.
+
+**Definition of Done:** ✅ atendida — testes (incl. atomicidade assinatura↔transição, anti-enumeração, RLS de `assinaturas`, resiliência/retry), migration `0016` + RLS versionadas/aplicadas, sem erro de console/log crítico, docs (`docs/assinatura.md`), error boundary, animações com `prefers-reduced-motion`, idempotência, sem N+1, sem segredos versionados.
+
+---
+
 ## Sessão 14 — 2026-06-16 — [Wave 3 / Componente C11] Máquina de Estados (14 Estados, 4 Rotas) — O CORAÇÃO DO DOMÍNIO
 
 **Objetivo:** O motor de estados autoritativo do sistema — a Requisitos v1.0 §6 inteira como regra **em código** (nunca no banco), um serviço de transição **atômico e idempotente**, a tabela `movimentacoes` **imutável** com RLS, e o endpoint de transição. Predominantemente backend/domínio (sem UI — DP-6). Régua de cuidado no máximo: um erro aqui corrompe silenciosamente o estado de uma prova.

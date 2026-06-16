@@ -11,9 +11,13 @@ validando os critérios §6:
 - Aprovar/Reprovar (motivo obrigatório); Cancelar (admin + motivo) e Reiniciar;
 - idempotência: reenvio com a mesma chave → 200, UMA movimentação;
 - o Motorista identifica+transiciona a prova de ORIGEM (escopo ampliado — a
-  pendência que o C11 destravou).
+  pendência que o C11 destravou);
+- W3-C12: a assinatura desenhada nasce JUNTO com a movimentação (vínculo
+  ``movimentacoes.assinatura_ref``), atomicamente; assinatura inválida → 422 sem
+  efeito; ``GET /acoes-disponiveis`` orienta a tela de confirmação.
 """
 
+import base64
 import datetime as dt
 import uuid
 from collections.abc import AsyncIterator
@@ -34,7 +38,8 @@ from tests.conftest import FakeStorage, make_client, ping_ok
 pytestmark = pytest.mark.db
 
 HS256_SECRET = "segredo-integracao-nunca-em-producao"
-STUB_ASSINATURA = "11111111-1111-1111-1111-111111111111"
+# Imagem mínima que passa por ``validar_assinatura`` (magic bytes de PNG), em base64.
+ASSINATURA_PNG_B64 = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode()
 
 
 def _token(sub: str, setor: str, administrador: bool = False) -> str:
@@ -128,7 +133,7 @@ async def _transicionar(
 ) -> httpx.Response:
     body: dict[str, Any] = {
         "acao": acao,
-        "assinatura_ref": STUB_ASSINATURA,
+        "assinatura": ASSINATURA_PNG_B64,
         "idempotency_key": idem or str(uuid.uuid4()),
     }
     if motivo is not None:
@@ -142,6 +147,18 @@ async def _contar_movs(engine: AsyncEngine, prova_id: str) -> int:
             (
                 await conn.execute(
                     text("SELECT count(*) FROM movimentacoes WHERE prova_id = :p"),
+                    {"p": prova_id},
+                )
+            ).scalar_one()
+        )
+
+
+async def _contar_assinaturas(engine: AsyncEngine, prova_id: str) -> int:
+    async with engine.connect() as conn:
+        return int(
+            (
+                await conn.execute(
+                    text("SELECT count(*) FROM assinaturas WHERE prova_id = :p"),
                     {"p": prova_id},
                 )
             ).scalar_one()
@@ -384,7 +401,7 @@ async def test_sem_token_e_401(ctx: tuple[Any, ...]) -> None:
         f"/provas/{prova}/transicoes",
         json={
             "acao": "identificar_e_assinar",
-            "assinatura_ref": STUB_ASSINATURA,
+            "assinatura": ASSINATURA_PNG_B64,
             "idempotency_key": str(uuid.uuid4()),
         },
     )
@@ -398,3 +415,138 @@ async def test_usuario_nao_provisionado_e_403(ctx: tuple[Any, ...]) -> None:
         client, prova, "identificar_e_assinar", _auth(str(uuid.uuid4()), "vendedor")
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# W3-C12: assinatura digital — vínculo, atomicidade, anti-enumeração
+# ---------------------------------------------------------------------------
+async def test_assinatura_nasce_vinculada_a_movimentacao(ctx: tuple[Any, ...]) -> None:
+    """A transição grava UMA assinatura, e a movimentação a referencia
+    (``assinatura_ref`` → ``assinaturas.id``), tudo na mesma transação."""
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await _transicionar(
+        client, prova, "identificar_e_assinar", _auth(ids["vendedor1"], "vendedor")
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _contar_assinaturas(engine, prova) == 1
+    async with engine.connect() as conn:
+        linha = (
+            await conn.execute(
+                text(
+                    "SELECT m.assinatura_ref, a.id, a.ator_id, a.content_type,"
+                    " octet_length(a.imagem) AS tamanho"
+                    " FROM movimentacoes m JOIN assinaturas a ON a.id = m.assinatura_ref"
+                    " WHERE m.prova_id = :p"
+                ),
+                {"p": prova},
+            )
+        ).one()
+    assert linha.assinatura_ref == linha.id  # vínculo correto
+    assert str(linha.ator_id) == ids["vendedor1"]  # ator = quem assinou
+    assert linha.content_type == "image/png"
+    assert linha.tamanho > 0  # a imagem foi persistida (bytea)
+
+
+async def test_assinatura_invalida_e_422_sem_efeito(ctx: tuple[Any, ...]) -> None:
+    """Imagem base64 que não é imagem → 422; nada é gravado (atomicidade)."""
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    lixo = base64.b64encode(b"isto nao e uma imagem").decode()
+    resp = await client.post(
+        f"/provas/{prova}/transicoes",
+        json={
+            "acao": "identificar_e_assinar",
+            "assinatura": lixo,
+            "idempotency_key": str(uuid.uuid4()),
+        },
+        headers=_auth(ids["vendedor1"], "vendedor"),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "assinatura_invalida"
+    assert await _contar_movs(engine, prova) == 0
+    assert await _contar_assinaturas(engine, prova) == 0
+
+
+async def test_base64_malformado_e_422(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await client.post(
+        f"/provas/{prova}/transicoes",
+        json={
+            "acao": "identificar_e_assinar",
+            "assinatura": "@@@nao-e-base64@@@",
+            "idempotency_key": str(uuid.uuid4()),
+        },
+        headers=_auth(ids["vendedor1"], "vendedor"),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "assinatura_invalida"
+
+
+async def test_reenvio_idempotente_nao_duplica_assinatura(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    chave = str(uuid.uuid4())
+    h = _auth(ids["vendedor1"], "vendedor")
+    r1 = await _transicionar(client, prova, "identificar_e_assinar", h, idem=chave)
+    r2 = await _transicionar(client, prova, "identificar_e_assinar", h, idem=chave)
+    assert r1.status_code == r2.status_code == 200
+    assert await _contar_movs(engine, prova) == 1
+    assert await _contar_assinaturas(engine, prova) == 1  # reenvio NÃO recriou
+
+
+# ---------------------------------------------------------------------------
+# W3-C12: GET /acoes-disponiveis — orienta a tela de confirmação (DP-3/DP-4)
+# ---------------------------------------------------------------------------
+async def _acoes(
+    client: httpx.AsyncClient, prova_id: str, headers: dict[str, str]
+) -> httpx.Response:
+    return await client.get(f"/provas/{prova_id}/acoes-disponiveis", headers=headers)
+
+
+async def test_acoes_disponiveis_proximo_ator_assina(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await _acoes(client, prova, _auth(ids["vendedor1"], "vendedor"))
+    assert resp.status_code == 200, resp.text
+    assert [a["acao"] for a in resp.json()] == ["identificar_e_assinar"]
+
+
+async def test_acoes_disponiveis_aprovar_reprovar_com_motivo(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(
+        engine, vendedor_id=ids["vendedor1"], status="retirada_vendedor", rota="matriz"
+    )
+    resp = await _acoes(client, prova, _auth(ids["vendedor1"], "vendedor"))
+    assert resp.status_code == 200
+    por_acao = {a["acao"]: a for a in resp.json()}
+    assert set(por_acao) == {"aprovar", "reprovar"}
+    assert por_acao["reprovar"]["exige_motivo"] is True
+    assert por_acao["aprovar"]["exige_motivo"] is False
+
+
+async def test_acoes_disponiveis_nao_ator_lista_vazia(ctx: tuple[Any, ...]) -> None:
+    """Clicheria vê a prova (em escopo) mas não é o ator de 'criada' → lista vazia
+    (a UI mostra o bloqueio genérico, sem revelar quem é — RN-014)."""
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await _acoes(client, prova, _auth(ids["clicheria"], "clicheria"))
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_acoes_disponiveis_admin_nao_lista_cancelar(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await _acoes(client, prova, _auth(ids["admin"], "studio", admin=True))
+    assert resp.status_code == 200
+    assert "cancelar" not in {a["acao"] for a in resp.json()}
+
+
+async def test_acoes_disponiveis_fora_do_escopo_e_404(ctx: tuple[Any, ...]) -> None:
+    client, engine, ids = ctx
+    prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
+    resp = await _acoes(client, prova, _auth(ids["vendedor2"], "vendedor"))
+    assert resp.status_code == 404
+    assert resp.json()["error"]["message"] == "Prova não encontrada."

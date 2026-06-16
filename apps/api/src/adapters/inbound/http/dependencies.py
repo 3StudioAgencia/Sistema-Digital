@@ -15,6 +15,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
+from src.adapters.outbound.db.assinaturas_repository import SqlAlchemyAssinaturasRepository
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
 from src.adapters.outbound.db.rate_limiter import SqlAlchemyRateLimiter
@@ -238,6 +239,9 @@ async def get_transicao_service(
         yield ProvasTransicaoService(
             repo=SqlAlchemyProvasRepository(session),
             movs=SqlAlchemyMovimentacoesRepository(session),
+            # W3-C12: a assinatura e a movimentação caem na MESMA sessão/transação
+            # (RNF-017) — nascem/falham juntas.
+            assinaturas=SqlAlchemyAssinaturasRepository(session),
             uow=SqlAlchemyUnitOfWork(session),
             ator=ator,
         )
