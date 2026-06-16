@@ -28,10 +28,7 @@ export type AcaoDisponivel = {
   estado_destino: EstadoProva;
 };
 
-export function acoesDisponiveis(
-  provaId: string,
-  signal?: AbortSignal,
-): Promise<AcaoDisponivel[]> {
+export function acoesDisponiveis(provaId: string, signal?: AbortSignal): Promise<AcaoDisponivel[]> {
   return apiFetch<AcaoDisponivel[]>(`/provas/${provaId}/acoes-disponiveis`, { signal });
 }
 

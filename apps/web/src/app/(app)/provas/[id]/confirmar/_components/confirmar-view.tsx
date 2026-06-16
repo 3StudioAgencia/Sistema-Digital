@@ -303,7 +303,11 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
                 <AssinaturaPad ref={padRef} />
                 <p className={styles.assinaturaDica}>
                   Desenhe a assinatura no quadro acima para confirmar a movimentação.
-                  <button type="button" className={styles.linkLimpar} onClick={() => padRef.current?.clear()}>
+                  <button
+                    type="button"
+                    className={styles.linkLimpar}
+                    onClick={() => padRef.current?.clear()}
+                  >
                     Limpar
                   </button>
                 </p>
@@ -416,7 +420,10 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
           role="status"
           initial={{ opacity: 0, scale: reduced ? 1 : 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: reduced ? DURATION.instant : DURATION.short, ease: EASING.emphasized }}
+          transition={{
+            duration: reduced ? DURATION.instant : DURATION.short,
+            ease: EASING.emphasized,
+          }}
         >
           <span className={styles.sucessoPill}>
             <span aria-hidden>✓</span> Movimentação registrada
