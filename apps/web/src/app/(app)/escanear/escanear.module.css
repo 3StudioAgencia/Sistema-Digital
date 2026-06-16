@@ -47,7 +47,7 @@
   max-width: 360px;
   height: 56px;
   /* padding 4px → célula interna de 48px = piso de touch target (mobile-first). */
-  padding: 4px;
+  padding: 3px;
   background: var(--app-card-white);
   border-radius: var(--app-radius-pill);
 }
@@ -401,6 +401,7 @@
   letter-spacing: 0.06em;
   color: var(--app-ink);
   text-transform: uppercase;
+  outline: none;
 }
 
 .input::placeholder {
