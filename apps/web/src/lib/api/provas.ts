@@ -95,12 +95,16 @@ export type VendedorRef = { id: string; nome: string };
 export type FiltrosProvas = {
   busca?: string;
   cliente?: string;
-  status?: EstadoProva | "";
+  /** Um valor = filtro simples; vários = "qualquer um" (IN) — deep-link do
+   * Dashboard (ex.: "Com Vendedor" = retirada + encaminhada — W4-C16/DP-6). */
+  status?: EstadoProva | EstadoProva[] | "";
   rota?: Rota | "";
   vendedorId?: string;
   /** Dia exato (YYYY-MM-DD) — vira limite inferior E superior no backend. */
   criada?: string;
   finalizada?: string;
+  /** Filtro "Atrasadas" (W4-C16/DP-6): reusa a regra de horas úteis do backend. */
+  atrasada?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -112,7 +116,13 @@ export function listarProvas(
   const params = new URLSearchParams();
   if (filtros.busca) params.set("busca", filtros.busca);
   if (filtros.cliente) params.set("cliente", filtros.cliente);
-  if (filtros.status) params.set("status", filtros.status);
+  // status pode ser múltiplo (?status=a&status=b) ou simples — o backend trata
+  // ambos (lista vazia = sem filtro).
+  if (Array.isArray(filtros.status)) {
+    for (const s of filtros.status) if (s) params.append("status", s);
+  } else if (filtros.status) {
+    params.set("status", filtros.status);
+  }
   if (filtros.rota) params.set("rota", filtros.rota);
   if (filtros.vendedorId) params.set("vendedor_id", filtros.vendedorId);
   // Um dia escolhido cobre o dia inteiro (criada_de = criada_ate = dia).
@@ -124,6 +134,7 @@ export function listarProvas(
     params.set("finalizada_de", filtros.finalizada);
     params.set("finalizada_ate", filtros.finalizada);
   }
+  if (filtros.atrasada) params.set("atrasada", "true");
   params.set("page", String(filtros.page ?? 1));
   params.set("page_size", String(filtros.pageSize ?? 20));
   return apiFetch<PaginaProvas>(`/provas?${params.toString()}`, { signal });

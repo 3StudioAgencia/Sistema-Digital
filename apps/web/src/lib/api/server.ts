@@ -10,6 +10,7 @@ import { cache } from "react";
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
+import type { Dashboard } from "./dashboard";
 import type { Usuario } from "./usuarios";
 
 // Curto de propósito: este fetch roda NO SERVIDOR antes do primeiro byte do
@@ -47,3 +48,30 @@ export const fetchUsuarioAtual = cache(async (): Promise<Usuario | null> => {
     return null;
   }
 });
+
+// Carga INICIAL do dashboard no servidor (W4-C16): evita um waterfall de
+// requisição no cliente (TTFB já traz os números — RNF-001 ≤ 3s). DEGRADA para
+// null em qualquer falha; o cliente assume com o refetch via Realtime.
+export async function fetchDashboard(): Promise<Dashboard | null> {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!base) return null;
+
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return null;
+
+  try {
+    const response = await fetch(`${base}/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as Dashboard;
+  } catch {
+    return null;
+  }
+}

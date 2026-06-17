@@ -20,6 +20,39 @@
   flex: none;
 }
 
+/* Chip de filtro ativo "Atrasadas" (vindo do clique no Dashboard — W4-C16/DP-6). */
+.chips {
+  display: flex;
+  gap: 10px;
+  margin-top: calc(16 * var(--u));
+  flex: none;
+}
+
+.chipAtrasada {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(16 * var(--u));
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  padding: calc(8 * var(--u)) calc(20 * var(--u));
+  min-height: 32px;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+.chipAtrasada:hover {
+  opacity: 0.85;
+}
+
+.chipAtrasada:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 2px;
+}
+
 /* -------------------------------------------------- barra de filtros (2 linhas) */
 .filtros {
   display: grid;

@@ -99,14 +99,18 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
 
   const lerFiltros = useCallback((): FiltrosProvas => {
     const sp = searchParamsRef.current;
+    // status pode chegar múltiplo do deep-link do Dashboard (W4-C16): 1 valor vira
+    // string (filtro simples), vários viram array (IN). 0 → undefined.
+    const statuses = sp.getAll("status").filter(Boolean) as ProvaListagem["status"][];
     return {
       busca: sp.get("busca") ?? undefined,
       cliente: sp.get("cliente") ?? undefined,
-      status: (sp.get("status") as FiltrosProvas["status"]) ?? undefined,
+      status: statuses.length > 1 ? statuses : (statuses[0] ?? undefined),
       rota: (sp.get("rota") as FiltrosProvas["rota"]) ?? undefined,
       vendedorId: sp.get("vendedor") ?? undefined,
       criada: sp.get("criada") ?? undefined,
       finalizada: sp.get("finalizada") ?? undefined,
+      atrasada: sp.get("atrasada") === "true" ? true : undefined,
     };
   }, []);
 
@@ -293,6 +297,19 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   return (
     <section className={styles.pagina} aria-label="Provas digitais">
       <h1 className={styles.titulo}>Provas digitais</h1>
+
+      {searchParams.get("atrasada") === "true" ? (
+        <div className={styles.chips}>
+          <button
+            type="button"
+            className={styles.chipAtrasada}
+            onClick={() => aplicarParam({ atrasada: undefined })}
+            aria-label="Remover filtro Atrasadas"
+          >
+            Atrasadas <span aria-hidden>✕</span>
+          </button>
+        </div>
+      ) : null}
 
       <div className={styles.filtros}>
         <label className={styles.campo}>

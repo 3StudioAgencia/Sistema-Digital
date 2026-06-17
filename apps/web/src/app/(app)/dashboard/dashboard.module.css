@@ -1,0 +1,390 @@
+/* Dashboard (W4-C16) — layout BENTO fiel ao design (sobre o shell #eaeaea).
+   Cards claros com número grande + ícone de documento amarelo; "Atrasadas" é uma
+   LISTA por vendedor + total (≠ dos demais); atalhos Escanear (preto) e Nova Prova
+   (amarelo). Escala pela unidade --u (como o resto da plataforma); só transform/
+   opacity nas transições (GPU); reduced-motion já zera --motion-* no globals. */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+}
+
+/* -------------------------------------------------- grade bento */
+.bento {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: calc(22 * var(--u));
+  grid-template-columns: 1fr 1fr 0.92fr;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-areas:
+    "criadas comvend atras"
+    "aprov   aprov   atras"
+    "escan   clich   atras"
+    "nova    clich   atras";
+}
+
+.criadas {
+  grid-area: criadas;
+}
+.comVendedor {
+  grid-area: comvend;
+}
+.aprovadas {
+  grid-area: aprov;
+}
+.naClicheria {
+  grid-area: clich;
+}
+.atrasadas {
+  grid-area: atras;
+}
+.escanear {
+  grid-area: escan;
+}
+.novaProva {
+  grid-area: nova;
+}
+
+/* -------------------------------------------------- card base */
+.card {
+  background: var(--dash-card);
+  border-radius: var(--app-card-radius);
+  padding: calc(32 * var(--u)) calc(38 * var(--u));
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Cards de contador são botões (clicáveis → listagem pré-filtrada — DP-6). */
+.cardContador {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: calc(16 * var(--u));
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--app-ink);
+  transition: transform var(--motion-micro) var(--motion-ease-standard);
+}
+
+.cardContador:hover {
+  transform: translateY(-2px);
+}
+
+.cardTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardTitulo {
+  font-size: calc(30 * var(--u));
+  line-height: 1.15;
+  color: var(--dash-title);
+  font-weight: 400;
+}
+
+/* Ícone de documento: quadrado amarelo com o glifo branco (do design). */
+.cardIcone {
+  flex: none;
+  width: calc(58 * var(--u));
+  height: calc(58 * var(--u));
+  border-radius: calc(14 * var(--u));
+  background: var(--app-accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cardIcone svg {
+  width: 54%;
+  height: 54%;
+}
+
+.cardNumero {
+  font-size: calc(96 * var(--u));
+  line-height: 1;
+  font-weight: 400;
+  color: var(--app-ink);
+  letter-spacing: -0.01em;
+}
+
+/* "Aprovadas" é o card largo (2 colunas) — número ainda maior, fiel ao design. */
+.largo .cardNumero {
+  font-size: calc(112 * var(--u));
+}
+
+/* -------------------------------------------------- card "Atrasadas" (lista) */
+.atrasadasCard {
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+}
+
+.atrasadasLista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(10 * var(--u));
+  scrollbar-gutter: stable;
+}
+
+.atrasadasLista::-webkit-scrollbar {
+  width: 6px;
+}
+.atrasadasLista::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar);
+  border-radius: 3px;
+}
+.atrasadasLista::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .atrasadasLista {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar) transparent;
+  }
+}
+
+/* Cada vendedor é clicável → listagem atrasada + vendedor (DP-6). */
+.atrasadaLinha {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  background: var(--dash-row);
+  border-radius: calc(16 * var(--u));
+  padding: calc(14 * var(--u)) calc(22 * var(--u));
+  transition: background-color var(--motion-micro) var(--motion-ease-standard);
+}
+
+.atrasadaLinha:hover {
+  background: var(--dash-row-hover);
+}
+
+.atrasadaNome {
+  font-size: calc(22 * var(--u));
+  color: var(--app-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atrasadaTotal {
+  font-size: calc(22 * var(--u));
+  color: var(--dash-title);
+  flex: none;
+}
+
+.atrasadasVazio {
+  font-size: calc(20 * var(--u));
+  color: var(--dash-title);
+  padding: calc(14 * var(--u)) calc(4 * var(--u));
+}
+
+/* Total em destaque ao final (o "258" do design) — clicável (todas atrasadas). */
+.atrasadasRodape {
+  flex: none;
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  transition: transform var(--motion-micro) var(--motion-ease-standard);
+}
+
+.atrasadasRodape:hover {
+  transform: translateY(-2px);
+}
+
+.atrasadasTotal {
+  font-size: calc(88 * var(--u));
+  line-height: 1;
+  font-weight: 400;
+  color: var(--app-ink);
+  letter-spacing: -0.01em;
+}
+
+/* -------------------------------------------------- atalhos */
+.atalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  border-radius: var(--app-card-radius);
+  padding: calc(28 * var(--u)) calc(40 * var(--u));
+  transition: transform var(--motion-micro) var(--motion-ease-standard);
+}
+
+.atalho:hover {
+  transform: translateY(-2px);
+}
+
+.atalhoRotulo {
+  font-size: calc(30 * var(--u));
+  font-weight: 400;
+}
+
+.atalhoIcone {
+  flex: none;
+  width: calc(48 * var(--u));
+  height: calc(48 * var(--u));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atalhoIcone svg {
+  width: 100%;
+  height: 100%;
+}
+
+.atalhoEscanear {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+.atalhoNova {
+  background: var(--app-accent);
+  color: var(--app-ink);
+}
+
+/* -------------------------------------------------- foco visível (acessibilidade) */
+.cardContador:focus-visible,
+.atrasadaLinha:focus-visible,
+.atrasadasRodape:focus-visible,
+.atalho:focus-visible,
+.tentarNovamente:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 3px;
+}
+
+/* -------------------------------------------------- estados de carga/erro */
+.skeleton {
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.estadoErro {
+  margin: auto;
+  text-align: center;
+  font-size: 18px;
+  color: var(--app-text-gray);
+}
+
+.tentarNovamente {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* -------------------------------------------------- responsivo */
+@media (max-width: 1100px) {
+  .bento {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: minmax(calc(150 * var(--u)), auto);
+    grid-template-areas:
+      "criadas comvend"
+      "aprov   aprov"
+      "clich   atras"
+      "escan   atras"
+      "nova    atras";
+  }
+
+  .atrasadas {
+    min-height: calc(360 * var(--u));
+  }
+}
+
+@media (max-width: 767px) {
+  .pagina {
+    padding: 20px 16px 24px;
+    overflow-y: auto;
+  }
+
+  .bento {
+    flex: none;
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    gap: 14px;
+    grid-template-areas:
+      "criadas"
+      "comvend"
+      "aprov"
+      "clich"
+      "atras"
+      "escan"
+      "nova";
+  }
+
+  .card {
+    padding: 22px 24px;
+  }
+
+  .cardContador {
+    min-height: 130px;
+  }
+
+  .cardTitulo,
+  .atalhoRotulo {
+    font-size: 18px;
+  }
+
+  .cardNumero,
+  .largo .cardNumero {
+    font-size: 56px;
+  }
+
+  .atrasadas {
+    min-height: 320px;
+  }
+
+  .atrasadaNome,
+  .atrasadaTotal {
+    font-size: 16px;
+  }
+
+  .atrasadasTotal {
+    font-size: 48px;
+  }
+}

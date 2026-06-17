@@ -51,6 +51,13 @@
   --app-field-hover: #c9c9c9; /* derivado: hover/foco das opções do dropdown */
   --app-modal-field-hover: #2f2f2f; /* derivado: hover das opções no dropdown escuro */
 
+  /* Dashboard (W4-C16) — amostrados do design (cards claros sobre o shell #eaeaea,
+     número grande preto, título cinza; atalho Escanear preto, Nova Prova amarelo). */
+  --dash-card: #f6f6f6; /* fundo dos cards de contador */
+  --dash-title: #9a9a9a; /* título dos cards (cinza claro) */
+  --dash-row: #efefef; /* linha da lista de "Atrasadas" */
+  --dash-row-hover: #e7e7e7; /* hover da linha de vendedor (clicável) */
+
   /* Unidade de ESCALA do design (Figma desenhado num quadro de 1080px de
      altura): 1 "pixel de design" = calc(N * var(--u)). Em viewport 1080 →
      1px exato; em janelas menores tudo encolhe proporcionalmente, com piso
