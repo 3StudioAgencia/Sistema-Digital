@@ -47,6 +47,11 @@ dev = [
 target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
+# `audit/` é scaffolding DESCARTÁVEL da auditoria (scripts one-shot que dirigem os
+# endpoints para evidenciar concorrência/RLS — docs/audits/AUDITORIA-WAVE-3.md §4),
+# não é código de produção nem entra na suíte. mypy (`files`) e pytest (`testpaths`)
+# já o ignoram; alinhar o ruff mantém `ruff check .` verde sem lintar throwaway.
+extend-exclude = ["audit"]
 
 [tool.ruff.lint]
 select = [
