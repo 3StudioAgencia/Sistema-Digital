@@ -250,6 +250,43 @@ async def get_transicao_service(
         )
 
 
+async def get_cancelamento_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[ProvasTransicaoService]:
+    """Serviço de CANCELAMENTO (W3-C14) — o MESMO motor de transição (uma fonte
+    única de mudança de status; ADR-062), mas gateado por ``CANCELAR_PROVA``.
+
+    Cancelar é "Exclusivo 3Studio" na Matriz §7 — exige a flag ``administrador``
+    (ADR-023/ADR-064). Diferente de ``get_transicao_service`` (gate amplo
+    ``ESCANEAR``, porque o fluxo de escaneamento é universal e a autorização fina é
+    do motor), aqui a BORDA já barra o não-admin: defesa em DUAS camadas (gate de
+    recurso + ``Autorizacao.ADMIN`` do motor). O motor ainda revalida — negar em
+    qualquer camada basta (CLAUDE.md §5.4). Mesma sessão RLS fail-closed; o ``ator``
+    carregado para o gate vai ao motor. Negação ÚNICA para sem-linha/inativo/não-
+    admin (403 ``Acesso negado.``)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.CANCELAR_PROVA):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield ProvasTransicaoService(
+            repo=SqlAlchemyProvasRepository(session),
+            movs=SqlAlchemyMovimentacoesRepository(session),
+            assinaturas=SqlAlchemyAssinaturasRepository(session),
+            uow=SqlAlchemyUnitOfWork(session),
+            ator=ator,
+        )
+
+
 async def get_settings_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),

@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, statu
 from pydantic import BaseModel, Field
 
 from src.adapters.inbound.http.dependencies import (
+    get_cancelamento_service,
     get_identificacao_service,
     get_provas_consulta_service,
     get_provas_service,
@@ -211,6 +212,20 @@ class TransicaoIn(BaseModel):
     assinatura: str = Field(min_length=1, max_length=ASSINATURA_BASE64_MAXIMO)
     idempotency_key: uuid.UUID
     motivo: str | None = Field(default=None, max_length=500)
+
+
+class CancelarIn(BaseModel):
+    """Entrada do cancelamento administrativo (W3-C14 — RF-011/§6.6).
+
+    Cancelar é "Ação administrativa: Cancelar Prova. Motivo obrigatório." (§6.6) —
+    SEM assinatura desenhada (DP-2/ADR-066), ao contrário de Reprovar. Daí o corpo
+    NÃO carregar ``assinatura``: só o ``motivo`` (obrigatório — ``min_length=1``,
+    revalidado no domínio contra espaços) e a ``idempotency_key`` por operação
+    (RNF-015: reenvio converge, sem duplicar). O ator + data/hora ficam gravados na
+    movimentação pelo motor (RNF-006). Terminal e irreversível (RN-005)."""
+
+    motivo: str = Field(min_length=1, max_length=500)
+    idempotency_key: uuid.UUID
 
 
 class AcaoDisponivelOut(BaseModel):
@@ -445,6 +460,39 @@ async def transicionar(
         prova_id=str(prova_id),
         acao=body.acao,
         assinatura_imagem=_decodificar_assinatura(body.assinatura),
+        idempotency_key=str(body.idempotency_key),
+        motivo=body.motivo,
+    )
+    return ProvaDetalheOut.de_dominio(item)
+
+
+@router.post("/{prova_id}/cancelar", response_model=ProvaDetalheOut)
+async def cancelar(
+    prova_id: uuid.UUID,
+    body: CancelarIn,
+    service: Annotated[ProvasTransicaoService, Depends(get_cancelamento_service)],
+) -> ProvaDetalheOut:
+    """Cancela uma prova (W3-C14 — RF-011/§6.6/RN-005): ação ADMINISTRATIVA,
+    exclusiva do 3Studio (flag ``administrador`` — ADR-064), disponível em qualquer
+    estado ATIVO. Terminal e IRREVERSÍVEL: a prova vira ``Cancelada`` e não pode ser
+    reativada (cria-se uma nova prova se preciso); o histórico é preservado.
+
+    INVOCA o motor de transição do C11 (``executar`` com ``acao=cancelar``) — fonte
+    ÚNICA de mudança de status (ADR-062): atômico, idempotente, gravando a
+    movimentação (ator + data/hora + motivo) no log imutável (RNF-006). SEM
+    assinatura desenhada (``assinatura_imagem=None`` — DP-2): a movimentação nasce
+    com ``assinatura_ref`` NULL (ADR-066).
+
+    Acesso em DUAS camadas: a borda (``get_cancelamento_service``) já barra o
+    não-admin → 403; o motor revalida (``Autorizacao.ADMIN``). Erros: motivo ausente
+    → 422 (schema/domínio); prova já Cancelada/Recebida-Clicheria (terminal) →
+    transição indefinida → 422; prova fora do escopo / inexistente → 404 genérico
+    (anti-enumeração); chave reusada para outra operação → 409.
+    """
+    item = await service.executar(
+        prova_id=str(prova_id),
+        acao=Acao.CANCELAR,
+        assinatura_imagem=None,
         idempotency_key=str(body.idempotency_key),
         motivo=body.motivo,
     )

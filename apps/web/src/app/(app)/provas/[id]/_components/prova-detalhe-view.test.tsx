@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   baixarEtiqueta: vi.fn(),
   salvarArquivo: vi.fn(),
   obterMovimentacoes: vi.fn(),
+  cancelarProva: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
@@ -30,6 +31,12 @@ vi.mock("@/lib/api/provas", async (importOriginal) => {
     baixarEtiqueta: mocks.baixarEtiqueta,
     salvarArquivo: mocks.salvarArquivo,
   };
+});
+
+// A ação de cancelar (C14) chama o endpoint dedicado; mockado para isolar a UI.
+vi.mock("@/lib/api/transicoes", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/api/transicoes")>();
+  return { ...original, cancelarProva: mocks.cancelarProva };
 });
 
 // A timeline (C13) faz seu próprio fetch; mockado aqui para isolar o detalhe.
@@ -55,10 +62,10 @@ const PROVA: ProvaDetalhe = {
   finalizada_em: null,
 };
 
-function renderView() {
+function renderView(opts?: { podeCancelar?: boolean }) {
   return render(
     <ToastProvider>
-      <ProvaDetalheView provaId="p-1" />
+      <ProvaDetalheView provaId="p-1" podeCancelar={opts?.podeCancelar ?? false} />
     </ToastProvider>,
   );
 }
@@ -66,6 +73,11 @@ function renderView() {
 beforeEach(() => {
   for (const m of Object.values(mocks)) m.mockReset();
   mocks.obterProva.mockResolvedValue(PROVA);
+  mocks.cancelarProva.mockResolvedValue({
+    ...PROVA,
+    status: "cancelada",
+    finalizada_em: "2026-06-17T12:00:00Z",
+  });
   mocks.baixarArte.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
   mocks.baixarEtiqueta.mockResolvedValue(
     new Blob([new Uint8Array([4, 5, 6])], { type: "application/pdf" }),
@@ -94,6 +106,13 @@ beforeEach(() => {
   let n = 0;
   global.URL.createObjectURL = vi.fn(() => `blob:mock-${++n}`);
   global.URL.revokeObjectURL = vi.fn();
+  // crypto.randomUUID (chave de idempotência do modal de cancelar) — garante o env.
+  if (typeof globalThis.crypto?.randomUUID !== "function") {
+    Object.defineProperty(globalThis, "crypto", {
+      value: { ...globalThis.crypto, randomUUID: () => "11111111-1111-1111-1111-111111111111" },
+      configurable: true,
+    });
+  }
   // history.length é 1 no jsdom (entrada direta) por padrão.
 });
 
@@ -194,5 +213,82 @@ describe("ProvaDetalheView (W2-C08)", () => {
     expect(
       await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Cancelamento de prova (W3-C14)", () => {
+  it("não oferece 'Cancelar prova' a quem não pode (não-3Studio)", async () => {
+    renderView({ podeCancelar: false });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+    expect(screen.queryByRole("button", { name: "Cancelar prova" })).not.toBeInTheDocument();
+  });
+
+  it("não oferece 'Cancelar prova' em estado terminal, mesmo ao 3Studio (irreversível)", async () => {
+    mocks.obterProva.mockResolvedValue({ ...PROVA, status: "recebida_clicheria" });
+    renderView({ podeCancelar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+    expect(screen.queryByRole("button", { name: "Cancelar prova" })).not.toBeInTheDocument();
+  });
+
+  it("3Studio em estado ativo: abre o modal, exige motivo e cancela refletindo 'Cancelada'", async () => {
+    const user = userEvent.setup();
+    renderView({ podeCancelar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+
+    // Abre o modal destrutivo a partir do detalhe.
+    await user.click(screen.getByRole("button", { name: "Cancelar prova" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/irreversível/i)).toBeInTheDocument(); // aviso RN-005
+
+    // Sem motivo, o confirmar está BLOQUEADO (desabilitado) — nada é enviado.
+    const confirmar = within(dialog).getByRole("button", { name: "Cancelar prova" });
+    expect(confirmar).toBeDisabled();
+    expect(mocks.cancelarProva).not.toHaveBeenCalled();
+
+    // Com motivo, confirma → o motor é invocado (endpoint dedicado).
+    await user.type(within(dialog).getByLabelText(/Motivo/i), "cliente desistiu");
+    expect(confirmar).toBeEnabled();
+    await user.click(confirmar);
+
+    await waitFor(() =>
+      expect(mocks.cancelarProva).toHaveBeenCalledWith("p-1", {
+        motivo: "cliente desistiu",
+        idempotencyKey: expect.any(String),
+      }),
+    );
+    // Sucesso: toast + estado reflete "Cancelada" e a ação some (terminal).
+    expect(await screen.findByText("Prova cancelada.")).toBeInTheDocument();
+    const statusRotulo = await screen.findByText("Status:");
+    await waitFor(() =>
+      expect(
+        within(statusRotulo.closest("div") as HTMLElement).getByText("Cancelada"),
+      ).toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Cancelar prova" })).not.toBeInTheDocument(),
+    );
+    // A timeline recarrega para mostrar a nova movimentação (recarregar bumpado).
+    await waitFor(() => expect(mocks.obterMovimentacoes.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("erro de regra (já terminal) vira toast e fecha sem alterar o detalhe", async () => {
+    const user = userEvent.setup();
+    mocks.cancelarProva.mockRejectedValue(
+      new ApiError(
+        422,
+        "transicao_invalida",
+        "Esta ação não é válida para a prova no estado atual.",
+      ),
+    );
+    renderView({ podeCancelar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+
+    await user.click(screen.getByRole("button", { name: "Cancelar prova" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/Motivo/i), "tentativa tardia");
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar prova" }));
+
+    expect(await screen.findByText(/não é válida para a prova/i)).toBeInTheDocument(); // toast da regra
+    expect(mocks.replace).not.toHaveBeenCalled(); // 422 não redireciona (≠ 404)
   });
 });

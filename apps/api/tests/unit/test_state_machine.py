@@ -17,12 +17,14 @@ from src.domain.provas import Rota
 from src.domain.state_machine.enums import Acao
 from src.domain.state_machine.enums import Autorizacao as Az
 from src.domain.state_machine.machine import (
+    ACOES_ADMINISTRATIVAS,
     ACOES_AVANCO,
     MotivoObrigatorioError,
     TransicaoInvalidaError,
     TransicaoNaoAutorizadaError,
     autoriza,
     avaliar_transicao,
+    exige_assinatura,
     sequencia_canonica,
     transicoes_de,
 )
@@ -408,3 +410,31 @@ def test_autoriza_admin_por_flag_independe_do_setor() -> None:
     assert autoriza(Az.ADMIN, Setor.VENDEDOR, administrador=True)
     assert autoriza(Az.ADMIN, Setor.STUDIO, administrador=True)
     assert not autoriza(Az.ADMIN, Setor.STUDIO, administrador=False)
+
+
+# ---------------------------------------------------------------------------
+# Ações administrativas e assinatura (W3-C14/§6.6) — Cancelar/Reiniciar não
+# capturam traço (assinatura_ref NULL — ADR-066). Derivado de TRANSITION_RULES.
+# ---------------------------------------------------------------------------
+def test_acoes_administrativas_sao_exatamente_as_gated_por_admin() -> None:
+    # As administrativas são EXATAMENTE as ações cujas transições na §6 são TODAS
+    # gated por Autorizacao.ADMIN — trava o drift entre o conjunto e a máquina.
+    todas_admin: dict[Acao, bool] = {}
+    for transicoes in TRANSITION_RULES.values():
+        for t in transicoes:
+            todas_admin[t.acao] = todas_admin.get(t.acao, True) and (
+                t.perfil_autorizado is Az.ADMIN
+            )
+    so_admin = {acao for acao, e_admin in todas_admin.items() if e_admin}
+    assert so_admin == ACOES_ADMINISTRATIVAS == {CANCELAR, REINICIAR}
+
+
+def test_exige_assinatura_so_e_falso_para_administrativas() -> None:
+    assert not exige_assinatura(CANCELAR)
+    assert not exige_assinatura(REINICIAR)
+    assert exige_assinatura(ID)
+    assert exige_assinatura(APROVAR)
+    assert exige_assinatura(REPROVAR)
+    # Total: toda ação NÃO-administrativa exige assinatura (RN-003 vs. §6.6).
+    for acao in Acao:
+        assert exige_assinatura(acao) is (acao not in ACOES_ADMINISTRATIVAS)

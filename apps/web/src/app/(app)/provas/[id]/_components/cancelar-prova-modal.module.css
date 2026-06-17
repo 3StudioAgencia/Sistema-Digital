@@ -1,0 +1,148 @@
+/* Cancelar prova (W3-C14) — modal de confirmação DESTRUTIVA, no padrão do C04
+   (confirmar-status-modal): painel escuro estreito, aviso de irreversibilidade,
+   textarea de motivo obrigatório e botão de perigo (--app-danger). Mede em --um
+   (definido no .panel do MotionModal). */
+
+.painel {
+  width: min(calc(560 * var(--um, var(--u, 1px))), 100%);
+  padding: calc(44 * var(--um, var(--u, 1px))) calc(48 * var(--um, var(--u, 1px)))
+    calc(40 * var(--um, var(--u, 1px)));
+  border-radius: calc(32 * var(--um, var(--u, 1px)));
+}
+
+.titulo {
+  font-size: calc(44 * var(--um, var(--u, 1px)));
+  line-height: 1.15;
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.separador {
+  /* como no design do C04, o separador excede a largura dos campos em 18px/lado */
+  margin: calc(32 * var(--um, var(--u, 1px))) -18px 0;
+  border: 0;
+  border-top: 1px solid var(--auth-text);
+}
+
+.aviso {
+  margin-top: calc(28 * var(--um, var(--u, 1px)));
+  font-size: calc(18 * var(--um, var(--u, 1px)));
+  line-height: 1.5;
+  color: var(--auth-text-muted);
+}
+
+.aviso strong {
+  color: var(--auth-text);
+}
+
+.campo {
+  margin-top: calc(28 * var(--um, var(--u, 1px)));
+}
+
+.label {
+  display: block;
+  font-size: calc(22 * var(--um, var(--u, 1px)));
+  color: var(--auth-text);
+}
+
+.textarea {
+  margin-top: calc(14 * var(--um, var(--u, 1px)));
+  width: 100%;
+  min-height: calc(120 * var(--um, var(--u, 1px)));
+  resize: vertical;
+  border: 1px solid transparent;
+  border-radius: calc(18 * var(--um, var(--u, 1px)));
+  background: var(--app-modal-field);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: calc(18 * var(--um, var(--u, 1px)));
+  line-height: 1.45;
+  padding: calc(16 * var(--um, var(--u, 1px))) calc(20 * var(--um, var(--u, 1px)));
+}
+
+.textarea::placeholder {
+  color: var(--auth-text-muted);
+}
+
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--auth-text);
+}
+
+.textarea[data-erro] {
+  border-color: var(--app-danger);
+}
+
+.textarea:disabled {
+  color: var(--auth-text-muted);
+  cursor: not-allowed;
+}
+
+.erro {
+  margin-top: 8px;
+  font-size: calc(14 * var(--um, var(--u, 1px)));
+  color: var(--auth-error);
+}
+
+.acoes {
+  margin-top: calc(36 * var(--um, var(--u, 1px)));
+  display: flex;
+  gap: calc(19 * var(--um, var(--u, 1px)));
+}
+
+.botaoVoltar {
+  flex: 1;
+  height: calc(56 * var(--um, var(--u, 1px)));
+  border: 1px solid var(--auth-text-muted);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-modal-field);
+  color: var(--auth-text-muted);
+  font: inherit;
+  font-size: calc(22 * var(--um, var(--u, 1px)));
+  cursor: pointer;
+}
+
+.botaoPerigo {
+  flex: 1;
+  height: calc(56 * var(--um, var(--u, 1px)));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-danger);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(22 * var(--um, var(--u, 1px)));
+  cursor: pointer;
+}
+
+.botaoVoltar:disabled,
+.botaoPerigo:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.botaoVoltar:focus-visible,
+.botaoPerigo:focus-visible {
+  outline: 2px solid var(--auth-text);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .painel {
+    padding: 24px 20px 28px;
+    border-radius: 0;
+  }
+
+  .titulo {
+    font-size: 28px;
+  }
+
+  .acoes {
+    flex-direction: column-reverse;
+  }
+
+  .botaoVoltar,
+  .botaoPerigo {
+    min-height: 48px;
+    font-size: 18px;
+  }
+}

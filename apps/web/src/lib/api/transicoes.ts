@@ -58,3 +58,28 @@ export function executarTransicao(
     timeoutMs: 30_000,
   });
 }
+
+export type CancelarPayload = {
+  /** Motivo obrigatório (RF-011/§6.6) — revalidado no backend (sem espaços). */
+  motivo: string;
+  /** Chave de idempotência (RNF-015): reusada nas retentativas → converge. */
+  idempotencyKey: string;
+};
+
+/**
+ * Cancela uma prova (W3-C14) — ação ADMINISTRATIVA exclusiva do 3Studio, terminal
+ * e irreversível (RN-005). Endpoint DEDICADO `POST /provas/{id}/cancelar` (gate de
+ * borda `cancelar_prova` + motor do C11): NÃO leva assinatura desenhada (DP-2 —
+ * cancelar é administrativo, sem traço). O reenvio com a mesma `idempotencyKey`
+ * converge sem duplicar (base da resiliência — ADR-068).
+ */
+export function cancelarProva(provaId: string, payload: CancelarPayload): Promise<ProvaDetalhe> {
+  return apiFetch<ProvaDetalhe>(`/provas/${provaId}/cancelar`, {
+    method: "POST",
+    body: {
+      motivo: payload.motivo,
+      idempotency_key: payload.idempotencyKey,
+    },
+    timeoutMs: 30_000,
+  });
+}

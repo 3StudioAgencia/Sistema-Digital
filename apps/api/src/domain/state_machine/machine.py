@@ -81,6 +81,27 @@ def transicoes_de(rota: Rota, estado: EstadoProva) -> tuple[Transicao, ...]:
 ACOES_AVANCO: frozenset[Acao] = frozenset({Acao.IDENTIFICAR_E_ASSINAR, Acao.APROVAR})
 
 
+# Ações ADMINISTRATIVAS transversais ("Exclusivo 3Studio" — §6.6): Cancelar (C14)
+# e Reiniciar Ciclo (C15). Duas propriedades as distinguem do fluxo operacional:
+# (1) autorizadas pela FLAG ``administrador`` (``Autorizacao.ADMIN``), não pelo
+# setor (ADR-064); (2) NÃO capturam assinatura desenhada — a §6.6 define o
+# cancelamento como "Ação administrativa: Cancelar Prova. Motivo obrigatório.",
+# SEM o passo "Assinar" (ao contrário de Reprovar). Por isso a coluna
+# ``movimentacoes.assinatura_ref`` nasceu nullable (ADR-066): essas ações gravam
+# a movimentação SEM comprovante desenhado. São exatamente as transições da §6
+# cujo perfil exigido é ``Autorizacao.ADMIN`` (consistência travada por teste).
+ACOES_ADMINISTRATIVAS: frozenset[Acao] = frozenset({Acao.CANCELAR, Acao.REINICIAR_CICLO})
+
+
+def exige_assinatura(acao: Acao) -> bool:
+    """RN-003 vs. §6.6: toda movimentação OPERACIONAL (identificar/aprovar/
+    reprovar) é comprovada pela assinatura DESENHADA (W3-C12); as ações
+    ADMINISTRATIVAS (Cancelar/Reiniciar — §6.6) são a exceção autorizada e gravam
+    a movimentação sem traço (``assinatura_ref`` NULL — ADR-066). Fonte única do
+    "quem assina" para o serviço de transição (W3-C14)."""
+    return acao not in ACOES_ADMINISTRATIVAS
+
+
 def sequencia_canonica(rota: Rota) -> tuple[EstadoProva, ...]:
     """Sequência ordenada de estados do caminho NORMAL de uma rota (W3-C13/DP-1).
 
@@ -130,12 +151,14 @@ def avaliar_transicao(
 
 
 __all__ = [
+    "ACOES_ADMINISTRATIVAS",
     "ACOES_AVANCO",
     "MotivoObrigatorioError",
     "TransicaoInvalidaError",
     "TransicaoNaoAutorizadaError",
     "autoriza",
     "avaliar_transicao",
+    "exige_assinatura",
     "sequencia_canonica",
     "transicoes_de",
 ]

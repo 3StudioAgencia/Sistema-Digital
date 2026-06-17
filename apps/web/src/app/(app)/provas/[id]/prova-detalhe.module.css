@@ -187,6 +187,39 @@
   cursor: progress;
 }
 
+/* Ação destrutiva (W3-C14): separada das ações de etiqueta, alinhada à direita,
+   estilo de perigo discreto (contorno) — só aparece ao 3Studio em estados ativos. */
+.acoesPerigo {
+  margin-top: calc(20 * var(--u));
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btnPerigo {
+  height: calc(56 * var(--u));
+  padding: 0 calc(34 * var(--u));
+  border: 1px solid var(--app-danger);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--app-danger);
+  font: inherit;
+  font-size: calc(20 * var(--u));
+  cursor: pointer;
+  transition:
+    background var(--motion-micro) var(--motion-ease-standard),
+    color var(--motion-micro) var(--motion-ease-standard);
+}
+
+.btnPerigo:hover {
+  background: var(--app-danger);
+  color: var(--auth-text);
+}
+
+.btnPerigo:focus-visible {
+  outline: 2px solid var(--app-danger);
+  outline-offset: 2px;
+}
+
 /* -------------------------------------------------- histórico (preto, vazio) */
 .historico {
   background: var(--app-ink);
@@ -316,8 +349,17 @@
     grid-template-columns: 1fr;
   }
 
+  .acoesPerigo {
+    justify-content: stretch;
+  }
+
+  .btnPerigo {
+    width: 100%;
+  }
+
   .btnPrimario,
   .btnSecundario,
+  .btnPerigo,
   .voltar {
     min-height: 48px;
     font-size: 16px;

@@ -10,18 +10,22 @@ Orquestra a §6 de forma ATÔMICA (RNF-017) e IDEMPOTENTE (RNF-015/DP-2):
    recriar a assinatura; 200). Operação diferente sob a mesma chave → 409.
 3. VALIDAÇÃO pura (``machine.avaliar_transicao``): indefinida → 422; perfil
    errado → 403; motivo obrigatório ausente → 422.
-4. ASSINATURA (W3-C12/RN-003): valida a imagem desenhada (``validar_assinatura``)
-   e INSERE a linha ``assinaturas`` ANTES da movimentação (a FK aponta para ela).
+4. ASSINATURA (W3-C12/RN-003): para as ações OPERACIONAIS (identificar/aprovar/
+   reprovar — ``exige_assinatura``), valida a imagem desenhada
+   (``validar_assinatura``) e INSERE a linha ``assinaturas`` ANTES da movimentação
+   (a FK aponta para ela). As ações ADMINISTRATIVAS (Cancelar/Reiniciar — §6.6)
+   NÃO capturam traço: gravam a movimentação com ``assinatura_ref`` NULL (ADR-066).
 5. APLICA na MESMA transação: ``status`` (+ ``finalizada_em`` nos terminais), a
-   ``assinaturas`` e UMA linha em ``movimentacoes`` (append-only) com
-   ``assinatura_ref`` = a assinatura recém-criada. Commit atômico — falha no meio
-   → rollback completo: assinatura e movimentação **nascem/falham juntas**, a
-   prova nunca fica em estado inconsistente nem com assinatura órfã.
+   ``assinaturas`` (quando há) e UMA linha em ``movimentacoes`` (append-only) com
+   ``assinatura_ref`` = a assinatura recém-criada (ou NULL). Commit atômico —
+   falha no meio → rollback completo: assinatura e movimentação **nascem/falham
+   juntas**, a prova nunca fica em estado inconsistente nem com assinatura órfã.
 
-NÃO desenha timeline (C13), não mexe em ``ciclo_atual`` nem oferece UI de
-cancelar/reiniciar (C14/C15) — apenas MODELA e EXECUTA as transições; aquelas
-camadas INVOCAM este motor. ``acoes_disponiveis`` reusa as regras do C11 para
-orientar a tela de confirmação do C12 (DP-3), sem duplicar a §6.
+NÃO desenha timeline (C13) nem mexe em ``ciclo_atual`` (C15) — apenas MODELA e
+EXECUTA as transições; as camadas de UI/ação (Cancelar=C14, Reiniciar=C15)
+INVOCAM este motor (Cancelar pelo endpoint dedicado ``POST /provas/{id}/cancelar``
+— ação administrativa sem assinatura). ``acoes_disponiveis`` reusa as regras do
+C11 para orientar a tela de confirmação do C12 (DP-3), sem duplicar a §6.
 """
 
 import logging
@@ -38,11 +42,16 @@ from src.application.ports.movimentacoes_repository import (
 from src.application.ports.provas_repository import ProvasRepositoryPort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.provas import ProvaListagem
-from src.domain.assinaturas import Assinatura, validar_assinatura
+from src.domain.assinaturas import Assinatura, AssinaturaInvalidaError, validar_assinatura
 from src.domain.movimentacoes import Movimentacao, TransicaoIdempotenciaConflitoError
 from src.domain.provas import ProvaNaoEncontradaError
 from src.domain.state_machine.enums import Acao
-from src.domain.state_machine.machine import autoriza, avaliar_transicao, transicoes_de
+from src.domain.state_machine.machine import (
+    autoriza,
+    avaliar_transicao,
+    exige_assinatura,
+    transicoes_de,
+)
 from src.domain.state_machine.rules import ESTADOS_TERMINAIS, Transicao
 from src.domain.usuarios import Usuario
 
@@ -109,13 +118,15 @@ class ProvasTransicaoService:
         *,
         prova_id: str,
         acao: Acao,
-        assinatura_imagem: bytes,
+        assinatura_imagem: bytes | None,
         idempotency_key: str,
         motivo: str | None = None,
     ) -> ProvaListagem:
-        """Move a prova conforme a §6, atômica e idempotente, gravando a assinatura
-        como comprovante (RN-003). Devolve a prova atualizada (+ nome do vendedor)
-        para a borda renderizar o novo estado."""
+        """Move a prova conforme a §6, atômica e idempotente. Ações operacionais
+        gravam a assinatura desenhada como comprovante (RN-003); ações
+        administrativas (Cancelar/Reiniciar — §6.6) passam ``assinatura_imagem``
+        ``None`` e gravam a movimentação sem traço (ADR-066). Devolve a prova
+        atualizada (+ nome do vendedor) para a borda renderizar o novo estado."""
         async with self._uow:
             prova = await self._repo.obter_para_transicao(prova_id)
             if prova is None:
@@ -141,19 +152,26 @@ class ProvasTransicaoService:
                     administrador=self._ator.administrador,
                     motivo=motivo,
                 )
-                # W3-C12 (RN-003): valida a imagem desenhada e cria o comprovante
-                # ANTES da movimentação (a FK aponta para a assinatura), tudo na
-                # MESMA transação — nascem/falham juntas (RNF-017/DP-1).
-                content_type = validar_assinatura(assinatura_imagem)
-                assinatura = await self._assinaturas.registrar(
-                    Assinatura(
-                        id=str(uuid.uuid4()),
-                        prova_id=prova_id,
-                        ator_id=self._ator.id,
-                        imagem=assinatura_imagem,
-                        content_type=content_type,
+                # W3-C12 (RN-003): nas ações OPERACIONAIS, valida a imagem desenhada
+                # e cria o comprovante ANTES da movimentação (a FK aponta para a
+                # assinatura), tudo na MESMA transação — nascem/falham juntas
+                # (RNF-017/DP-1). Ações ADMINISTRATIVAS (Cancelar/Reiniciar — §6.6)
+                # não capturam traço: ``assinatura_ref`` fica NULL (ADR-066/W3-C14).
+                assinatura_ref: str | None = None
+                if exige_assinatura(acao):
+                    if assinatura_imagem is None:  # contrato: operacional exige traço
+                        raise AssinaturaInvalidaError("Assinatura obrigatória para esta ação.")
+                    content_type = validar_assinatura(assinatura_imagem)
+                    assinatura = await self._assinaturas.registrar(
+                        Assinatura(
+                            id=str(uuid.uuid4()),
+                            prova_id=prova_id,
+                            ator_id=self._ator.id,
+                            imagem=assinatura_imagem,
+                            content_type=content_type,
+                        )
                     )
-                )
+                    assinatura_ref = assinatura.id
                 quando = self._relogio()
                 finalizada = quando if transicao.estado_destino in ESTADOS_TERMINAIS else None
                 # status + movimentação na MESMA transação (RNF-017).
@@ -170,7 +188,7 @@ class ProvasTransicaoService:
                     idempotency_key=idempotency_key,
                     ciclo=prova.ciclo_atual,
                     motivo=motivo.strip() if (transicao.exige_motivo and motivo) else None,
-                    assinatura_ref=assinatura.id,
+                    assinatura_ref=assinatura_ref,
                 )
                 try:
                     await self._movs.registrar(mov)
@@ -194,7 +212,7 @@ class ProvasTransicaoService:
                         "para": transicao.estado_destino.value,
                         "acao": acao.value,
                         "ator_id": self._ator.id,
-                        "assinatura_id": assinatura.id,
+                        "assinatura_id": assinatura_ref,
                     },
                 )
 

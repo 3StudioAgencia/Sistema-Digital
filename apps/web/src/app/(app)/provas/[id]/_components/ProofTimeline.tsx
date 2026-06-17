@@ -138,12 +138,20 @@ function NoItem({
   );
 }
 
-export function ProofTimeline({ provaId }: { provaId: string }) {
+export function ProofTimeline({
+  provaId,
+  recarregar = 0,
+}: {
+  provaId: string;
+  recarregar?: number;
+}) {
   const reduced = useReducedMotion();
   const [estado, setEstado] = useState<"carregando" | "pronto" | "erro">("carregando");
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [tentativa, setTentativa] = useState(0);
 
+  // `recarregar` é bumpado pelo detalhe após uma mutação (ex.: cancelamento — C14)
+  // para a timeline refletir o novo evento sem remontar nem piscar o skeleton.
   useEffect(() => {
     const controller = new AbortController();
     obterMovimentacoes(provaId, controller.signal)
@@ -158,7 +166,7 @@ export function ProofTimeline({ provaId }: { provaId: string }) {
         setEstado("erro");
       });
     return () => controller.abort();
-  }, [provaId, tentativa]);
+  }, [provaId, tentativa, recarregar]);
 
   if (estado === "carregando") {
     return (

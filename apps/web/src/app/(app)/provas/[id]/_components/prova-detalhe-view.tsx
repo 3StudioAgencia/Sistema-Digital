@@ -36,8 +36,9 @@ import {
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import { rotuloRota } from "@/lib/provas/rota-labels";
-import { rotuloStatus } from "@/lib/provas/status-labels";
+import { estaAtiva, rotuloStatus } from "@/lib/provas/status-labels";
 
+import { CancelarProvaModal } from "./cancelar-prova-modal";
 import { ProofTimeline } from "./ProofTimeline";
 
 import styles from "../prova-detalhe.module.css";
@@ -55,7 +56,14 @@ function formatarData(iso: string | null): string {
   return `${dd}/${mm}/${d.getUTCFullYear()}`;
 }
 
-export function ProvaDetalheView({ provaId }: { provaId: string }) {
+export function ProvaDetalheView({
+  provaId,
+  podeCancelar = false,
+}: {
+  provaId: string;
+  /** W3-C14: o servidor já resolveu se este perfil pode cancelar (Matriz §7). */
+  podeCancelar?: boolean;
+}) {
   const reduced = useReducedMotion();
   const router = useRouter();
   const toast = useToast();
@@ -71,6 +79,18 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
   const [visualizando, setVisualizando] = useState(false);
   const [etiquetaUrl, setEtiquetaUrl] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+
+  // W3-C14: cancelamento (modal destrutivo) + gatilho de recarga da timeline.
+  // `aberturaCancelar` bumpa a cada abertura e vira a `key` do modal: ele REMONTA
+  // com estado fresco (motivo vazio + nova chave de idempotência) a cada vez.
+  const [cancelarAberto, setCancelarAberto] = useState(false);
+  const [aberturaCancelar, setAberturaCancelar] = useState(0);
+  const [recarregarTimeline, setRecarregarTimeline] = useState(0);
+
+  function abrirCancelar() {
+    setAberturaCancelar((n) => n + 1);
+    setCancelarAberto(true);
+  }
 
   // `router`/`toast` são estáveis em produção, mas mantidos FORA das deps do
   // efeito de busca via ref (mesmo padrão do C07 provas-view): evita refetch a
@@ -171,6 +191,15 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
     setEtiquetaUrl(null); // o efeito de cleanup revoga o objectURL anterior
   }
 
+  // W3-C14: cancelamento concluído — reflete o novo estado (Cancelada) a partir da
+  // resposta (sem refetch — §3.3), fecha o modal e recarrega a timeline (a nova
+  // movimentação aparece). A irreversibilidade some o botão (estado terminal).
+  function aoCancelar(atualizada: ProvaDetalhe) {
+    setProva(atualizada);
+    setCancelarAberto(false);
+    setRecarregarTimeline((n) => n + 1);
+  }
+
   const duracao = reduced ? DURATION.instant : DURATION.medium;
   // Entrada suave dos cartões (opacity + leve y), com pequeno stagger entre eles;
   // instantânea sob prefers-reduced-motion. Só transform/opacity (GPU — §3.4).
@@ -264,6 +293,21 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
                   {baixando ? "Baixando…" : "Baixar etiqueta"}
                 </motion.button>
               </div>
+
+              {/* W3-C14: ação destrutiva — só ao 3Studio (podeCancelar) e só em
+                  estados ATIVOS (irreversível: some em Cancelada/Recebida). */}
+              {podeCancelar && estaAtiva(prova.status) && (
+                <div className={styles.acoesPerigo}>
+                  <motion.button
+                    type="button"
+                    className={styles.btnPerigo}
+                    onClick={abrirCancelar}
+                    {...toque}
+                  >
+                    Cancelar prova
+                  </motion.button>
+                </div>
+              )}
             </div>
           </motion.article>
 
@@ -276,7 +320,7 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
             {...entrada(0.07)}
           >
             <h2 className={styles.historicoTitulo}>Histórico de movimentações</h2>
-            <ProofTimeline provaId={prova.id} />
+            <ProofTimeline provaId={prova.id} recarregar={recarregarTimeline} />
           </motion.section>
 
           <MotionModal
@@ -301,6 +345,16 @@ export function ProvaDetalheView({ provaId }: { provaId: string }) {
               />
             )}
           </MotionModal>
+
+          {podeCancelar && (
+            <CancelarProvaModal
+              key={aberturaCancelar}
+              prova={prova}
+              aberto={cancelarAberto}
+              onFechar={() => setCancelarAberto(false)}
+              onCancelada={aoCancelar}
+            />
+          )}
         </>
       ) : null}
     </section>

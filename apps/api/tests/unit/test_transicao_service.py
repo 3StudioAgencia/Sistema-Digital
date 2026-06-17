@@ -380,6 +380,49 @@ async def test_admin_cancela_com_motivo_e_grava_movimentacao() -> None:
     assert uow.commits == 1
 
 
+async def test_cancelar_sem_assinatura_grava_movimentacao_sem_comprovante() -> None:
+    """W3-C14/§6.6/DP-2: o cancelamento é ADMINISTRATIVO, sem traço desenhado — o
+    endpoint passa ``assinatura_imagem=None``; a movimentação nasce com
+    ``assinatura_ref`` NULL (ADR-066) e NENHUMA assinatura é registrada. O carimbo
+    terminal (``finalizada_em``) é gravado (CANCELADA é terminal)."""
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _admin(), assin)
+    out = await svc.executar(
+        prova_id="a", acao=Acao.CANCELAR,
+        assinatura_imagem=None,  # ação administrativa: sem assinatura desenhada
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+        motivo="cliente desistiu",
+    )
+    assert out.prova.status == EstadoProva.CANCELADA
+    assert out.prova.finalizada_em == QUANDO  # terminal carimbado
+    assert repo.status_atualizado == (EstadoProva.CANCELADA, QUANDO)
+    assert assin.registradas == []  # NÃO criou assinatura
+    assert len(movs.registradas) == 1
+    assert movs.registradas[0].assinatura_ref is None  # comprovante ausente (NULL)
+    assert movs.registradas[0].motivo == "cliente desistiu"
+    assert movs.registradas[0].ator_id == ADMIN_ID
+    assert uow.commits == 1
+
+
+async def test_acao_operacional_sem_assinatura_e_422() -> None:
+    """Contrato: uma ação OPERACIONAL (identificar/aprovar/reprovar) exige o traço
+    desenhado (RN-003). ``assinatura_imagem=None`` para ela → 422, nada persiste
+    (defesa do serviço; pela borda o schema já exige ``assinatura``)."""
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _vendedor(), assin)
+    with pytest.raises(AssinaturaInvalidaError):
+        await svc.executar(
+            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            assinatura_imagem=None,
+            idempotency_key="33333333-3333-3333-3333-333333333333",
+        )
+    assert assin.registradas == []
+    assert movs.registradas == []
+    assert uow.commits == 0 and repo.status_atualizado is None
+
+
 # ---------------------------------------------------------------------------
 # acoes_disponiveis (W3-C12/DP-3) — reusa as regras do C11
 # ---------------------------------------------------------------------------

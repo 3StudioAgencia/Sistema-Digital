@@ -64,3 +64,19 @@ export const STATUS_PROVA_ORDEM: EstadoProva[] = [
 export function rotuloStatus(status: string): string {
   return STATUS_PROVA_LABELS[status as EstadoProva] ?? status;
 }
+
+/**
+ * Estados TERMINAIS (≠ ativo) — espelham `ESTADOS_TERMINAIS` do backend (§6):
+ * uma prova nesses estados não tem transição de saída. Usado pelo C14 para só
+ * oferecer "Cancelar" em estados ATIVOS (a fonte da verdade é o motor — aqui é a
+ * mesma regra estável dos 2 terminais, como os 14 rótulos espelham o enum).
+ */
+export const ESTADOS_TERMINAIS: ReadonlySet<EstadoProva> = new Set<EstadoProva>([
+  "recebida_clicheria",
+  "cancelada",
+]);
+
+/** Uma prova ATIVA (≠ terminal) pode ser cancelada (W3-C14 — RF-011/§6.6). */
+export function estaAtiva(status: EstadoProva): boolean {
+  return !ESTADOS_TERMINAIS.has(status);
+}
