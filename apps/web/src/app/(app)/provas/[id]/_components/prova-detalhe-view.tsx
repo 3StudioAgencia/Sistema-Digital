@@ -292,12 +292,10 @@ export function ProvaDetalheView({
                 >
                   {baixando ? "Baixando…" : "Baixar etiqueta"}
                 </motion.button>
-              </div>
 
-              {/* W3-C14: ação destrutiva — só ao 3Studio (podeCancelar) e só em
-                  estados ATIVOS (irreversível: some em Cancelada/Recebida). */}
-              {podeCancelar && estaAtiva(prova.status) && (
-                <div className={styles.acoesPerigo}>
+                {/* W3-C14: ação destrutiva na MESMA linha (3 botões) — só ao 3Studio
+                    (podeCancelar) e só em estados ATIVOS (some em Cancelada/Recebida). */}
+                {podeCancelar && estaAtiva(prova.status) && (
                   <motion.button
                     type="button"
                     className={styles.btnPerigo}
@@ -306,8 +304,8 @@ export function ProvaDetalheView({
                   >
                     Cancelar prova
                   </motion.button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </motion.article>
 
