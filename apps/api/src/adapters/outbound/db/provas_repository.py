@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.adapters.outbound.db.atraso_sql import SQL_PREDICADO_ATRASADA
 from src.adapters.outbound.db.models import ProvaRow
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
@@ -146,6 +147,13 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         for cond in condicoes:
             total_stmt = total_stmt.where(cond)
             page_stmt = page_stmt.where(cond)
+        # Filtro "Atrasadas" (W4-C16/DP-6): MESMA regra do Dashboard (horas úteis,
+        # limiar do C09), aplicada como cláusula SQL na PRÓPRIA consulta (delay lido
+        # inline — sem 2ª ida). ``text`` é seguro (sem entrada do usuário no SQL).
+        if filtros.atrasada:
+            clausula = text(SQL_PREDICADO_ATRASADA)
+            total_stmt = total_stmt.where(clausula)
+            page_stmt = page_stmt.where(clausula)
         total = (await self._session.execute(total_stmt)).scalar_one()
         page_stmt = (
             # Mais recentes primeiro (design); ``id`` desempata para ordenação
@@ -193,8 +201,10 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         if filtros.cliente:
             padrao = f"%{_escapar_like(filtros.cliente)}%"
             condicoes.append(ProvaRow.cliente.ilike(padrao, escape="\\"))
-        if filtros.status is not None:
-            condicoes.append(ProvaRow.status == filtros.status)
+        # status agora é tupla (W4-C16): um valor = filtro simples; vários = IN
+        # (contadores multi-status do Dashboard). Vazia = sem filtro.
+        if filtros.status:
+            condicoes.append(ProvaRow.status.in_(filtros.status))
         if filtros.rota is not None:
             condicoes.append(ProvaRow.rota == filtros.rota)
         if filtros.vendedor_id is not None:

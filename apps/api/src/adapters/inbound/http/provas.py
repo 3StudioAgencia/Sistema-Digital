@@ -326,13 +326,19 @@ async def listar(
     # Busca (RF-013): nome E/OU requerimento. Filtros combináveis (RF-014).
     busca: Annotated[str | None, Query(max_length=200)] = None,
     cliente: Annotated[str | None, Query(max_length=200)] = None,
-    status_filtro: Annotated[EstadoProva | None, Query(alias="status")] = None,
+    # status aceita MÚLTIPLOS valores (W4-C16): ?status=a&status=b → "qualquer um"
+    # (IN). Um único valor segue funcionando (compat. C07). ``alias`` mantém o nome
+    # ``status`` na query string.
+    status_filtro: Annotated[list[EstadoProva] | None, Query(alias="status")] = None,
     rota: Rota | None = None,
     vendedor_id: uuid.UUID | None = None,
     criada_de: date | None = None,
     criada_ate: date | None = None,
     finalizada_de: date | None = None,
     finalizada_ate: date | None = None,
+    # Filtro "Atrasadas" (W4-C16/DP-6): destino do clique no card de Atrasadas do
+    # Dashboard. Reusa a regra de horas úteis + limiar do C09 no backend.
+    atrasada: Annotated[bool, Query()] = False,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAXIMO)] = PAGE_SIZE_PADRAO,
 ) -> PaginaProvasOut:
@@ -345,13 +351,14 @@ async def listar(
         FiltrosProvas(
             busca=busca,
             cliente=cliente,
-            status=status_filtro,
+            status=tuple(status_filtro) if status_filtro else (),
             rota=rota,
             vendedor_id=str(vendedor_id) if vendedor_id is not None else None,
             criada_de=criada_de,
             criada_ate=criada_ate,
             finalizada_de=finalizada_de,
             finalizada_ate=finalizada_ate,
+            atrasada=atrasada,
             page=page,
             page_size=page_size,
         )

@@ -26,17 +26,25 @@ class FiltrosProvas:
     repositório aplica os limites de dia. Filtros combináveis (AND); ``busca``
     cobre nome E requerimento; ``cliente`` é "contém". O ESCOPO por perfil NÃO
     está aqui — é da RLS de ``provas`` (C06).
+
+    ``status`` é uma TUPLA (W4-C16): vazia = sem filtro; um valor = filtro simples
+    (compatível com o C07); vários = "qualquer um destes" (``IN``) — alimenta os
+    contadores multi-status do Dashboard (ex.: "Com Vendedor" = retirada +
+    encaminhada). ``atrasada`` ativa o filtro "Atrasadas" (W4-C16/DP-6): provas
+    ativas paradas além do delay (C09) em horas úteis — reusa a MESMA regra do
+    Dashboard (``private.instante_limite_atraso``), numa única consulta.
     """
 
     busca: str | None = None
     cliente: str | None = None
-    status: EstadoProva | None = None
+    status: tuple[EstadoProva, ...] = ()
     rota: Rota | None = None
     vendedor_id: str | None = None
     criada_de: date | None = None
     criada_ate: date | None = None
     finalizada_de: date | None = None
     finalizada_ate: date | None = None
+    atrasada: bool = False
     page: int = 1
     page_size: int = PAGE_SIZE_PADRAO
 

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.auth import router as auth_router
+from src.adapters.inbound.http.dashboard import router as dashboard_router
 from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
 from src.adapters.inbound.http.health import router as health_router
@@ -102,6 +103,7 @@ def create_app(
     app.include_router(usuarios_router)
     app.include_router(provas_router)
     app.include_router(settings_router)
+    app.include_router(dashboard_router)
     return app
 
 

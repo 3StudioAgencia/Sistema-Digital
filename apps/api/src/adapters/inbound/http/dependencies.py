@@ -16,12 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
 from src.adapters.outbound.db.assinaturas_repository import SqlAlchemyAssinaturasRepository
+from src.adapters.outbound.db.dashboard_repository import SqlAlchemyDashboardRepository
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
 from src.adapters.outbound.db.rate_limiter import SqlAlchemyRateLimiter
 from src.adapters.outbound.db.settings_repository import SqlAlchemySettingsRepository
 from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
+from src.application.dashboard import DashboardService
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
@@ -322,6 +324,34 @@ async def get_reinicio_service(
         )
 
 
+async def get_dashboard_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[DashboardService]:
+    """Serviço do Dashboard (W4-C16), gateado por ``DASHBOARD`` (universal).
+
+    O Dashboard é ● na Matriz §7 — acessível a qualquer perfil ativo; o que muda
+    por perfil é o ESCOPO dos números, garantido pela RLS de ``provas`` (claims
+    propagados — ADR-008), não pela borda. Gate + serviço numa ÚNICA sessão RLS
+    fail-closed (a linha do ator é legível por ``usuarios_select_self``), evitando
+    duas conexões NullPool (RNF-020). Negação ÚNICA para sem-linha/inativo/não-
+    autorizado (anti-enumeração — CLAUDE.md §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.DASHBOARD):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield DashboardService(repo=SqlAlchemyDashboardRepository(session))
+
+
 async def get_settings_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
@@ -354,6 +384,7 @@ async def get_settings_service(
 
 __all__ = [
     "get_admin_corrente",
+    "get_dashboard_service",
     "get_identificacao_service",
     "get_provas_consulta_service",
     "get_provas_service",
