@@ -24,6 +24,7 @@ from src.adapters.inbound.http.middleware import (
     RequestIdMiddleware,
 )
 from src.adapters.inbound.http.provas import router as provas_router
+from src.adapters.inbound.http.relatorios import router as relatorios_router
 from src.adapters.inbound.http.settings import router as settings_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
@@ -104,6 +105,7 @@ def create_app(
     app.include_router(provas_router)
     app.include_router(settings_router)
     app.include_router(dashboard_router)
+    app.include_router(relatorios_router)
     return app
 
 

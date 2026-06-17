@@ -1,0 +1,570 @@
+/* Relatórios (W5-C17) — fiel ao design (sobre o shell #eaeaea). Cabeçalho +
+   Exportar CSV, chip de período, tab bar (4 abas), barra de filtros compartilhada
+   e o conteúdo da aba ativa (cards/gráficos/tabelas). Escala pela unidade --u (como
+   o resto da plataforma); só transform/opacity nas transições (GPU); reduced-motion
+   já zera --motion-* no globals. Recharts para barras/donut (decisão DP-8). */
+
+.pagina {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(44 * var(--u)) calc(56 * var(--u)) calc(40 * var(--u));
+  overflow-y: auto;
+}
+
+/* -------------------------------------------------- cabeçalho */
+.cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.titulo {
+  font-size: calc(56 * var(--u));
+  line-height: 1.05;
+  font-weight: 500;
+  color: var(--app-ink);
+  letter-spacing: -0.02em;
+}
+
+.chipPeriodo {
+  margin-top: calc(10 * var(--u));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: calc(15 * var(--u));
+  color: var(--app-text-gray);
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(7 * var(--u)) calc(16 * var(--u));
+  width: fit-content;
+}
+.chipPeriodo b {
+  color: var(--app-ink);
+  font-weight: 600;
+}
+
+/* Exportar CSV (preto, com caret + menu de abas) */
+.exportWrap {
+  position: relative;
+  flex: none;
+}
+.btnExportar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(17 * var(--u));
+  background: var(--app-ink);
+  color: var(--auth-text);
+  border-radius: var(--app-radius-pill);
+  padding: calc(13 * var(--u)) calc(26 * var(--u));
+  transition: transform var(--motion-micro) var(--motion-ease-standard);
+}
+.btnExportar:hover {
+  transform: translateY(-1px);
+}
+.btnExportar svg {
+  width: 18px;
+  height: 18px;
+}
+.menuExport {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 5;
+  background: var(--app-ink);
+  border-radius: calc(18 * var(--u));
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: calc(220 * var(--u));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.menuExport button {
+  border: 0;
+  background: none;
+  color: var(--auth-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: calc(10 * var(--u)) calc(16 * var(--u));
+  border-radius: calc(12 * var(--u));
+}
+.menuExport button:hover {
+  background: var(--app-modal-field-hover);
+}
+
+/* -------------------------------------------------- tab bar */
+.tabBar {
+  margin-top: calc(26 * var(--u));
+  display: flex;
+  gap: 4px;
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(8 * var(--u));
+}
+.tab {
+  flex: 1;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+  background: none;
+  border-radius: var(--app-radius-pill);
+  padding: calc(13 * var(--u)) calc(20 * var(--u));
+  transition:
+    background-color var(--motion-micro) var(--motion-ease-standard),
+    color var(--motion-micro) var(--motion-ease-standard);
+}
+.tab:hover {
+  color: var(--app-ink);
+}
+.tabAtiva,
+.tabAtiva:hover {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+/* -------------------------------------------------- filtros */
+.filtros {
+  margin-top: calc(16 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+}
+.linhaFiltros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(12 * var(--u));
+}
+.campoData {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(10 * var(--u)) calc(18 * var(--u));
+  font-size: calc(15 * var(--u));
+  color: var(--app-text-gray);
+}
+.campoData input {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--app-ink);
+  outline: none;
+}
+.presets {
+  display: inline-flex;
+  gap: 4px;
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(6 * var(--u));
+}
+.preset {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--app-text-gray);
+  background: none;
+  border-radius: var(--app-radius-pill);
+  padding: calc(8 * var(--u)) calc(18 * var(--u));
+}
+.presetAtivo,
+.preset:hover {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+.dropdownCampo {
+  min-width: calc(190 * var(--u));
+}
+.busca {
+  flex: 1;
+  min-width: calc(240 * var(--u));
+}
+.busca input {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(13 * var(--u)) calc(22 * var(--u));
+  font: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--app-ink);
+  outline: none;
+}
+.toggleRota {
+  display: inline-flex;
+  gap: 4px;
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: calc(6 * var(--u));
+}
+.opcaoRota {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--app-text-gray);
+  background: none;
+  border-radius: var(--app-radius-pill);
+  padding: calc(8 * var(--u)) calc(20 * var(--u));
+}
+.opcaoRotaAtiva,
+.opcaoRota:hover {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+/* -------------------------------------------------- conteúdo / grid */
+.conteudo {
+  margin-top: calc(22 * var(--u));
+  flex: 1;
+  min-height: 0;
+}
+.grid {
+  display: grid;
+  gap: calc(18 * var(--u));
+  grid-template-columns: repeat(4, 1fr);
+  align-content: start;
+}
+
+/* -------------------------------------------------- cards */
+.card {
+  background: #fff;
+  border-radius: var(--app-card-radius);
+  padding: calc(26 * var(--u)) calc(30 * var(--u));
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+}
+.cardEscuro {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+.span2 {
+  grid-column: span 2;
+}
+.span4 {
+  grid-column: 1 / -1;
+}
+.clicavel {
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  transition: transform var(--motion-micro) var(--motion-ease-standard);
+}
+.clicavel:hover {
+  transform: translateY(-2px);
+}
+.cardRotulo {
+  font-size: calc(16 * var(--u));
+  color: var(--app-text-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cardEscuro .cardRotulo {
+  color: var(--app-sidebar-muted);
+}
+.cardNumero {
+  font-size: calc(64 * var(--u));
+  line-height: 1;
+  font-weight: 500;
+  color: var(--app-ink);
+  letter-spacing: -0.01em;
+}
+.cardEscuro .cardNumero {
+  color: var(--auth-text);
+}
+.cardNumeroVermelho {
+  color: var(--app-danger);
+}
+.cardSub {
+  font-size: calc(14 * var(--u));
+  color: var(--app-text-gray);
+}
+.cardUnidade {
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+  margin-left: 6px;
+}
+
+/* sub-stats do card escuro (Vendedores Filial) */
+.subStats {
+  display: flex;
+  gap: calc(24 * var(--u));
+  margin-top: auto;
+  padding-top: calc(16 * var(--u));
+}
+.subStat {
+  display: flex;
+  flex-direction: column;
+}
+.subStatRotulo {
+  font-size: calc(12 * var(--u));
+  color: var(--app-sidebar-muted);
+  text-transform: uppercase;
+}
+.subStatValor {
+  font-size: calc(28 * var(--u));
+  font-weight: 500;
+}
+
+/* -------------------------------------------------- listas (distribuição/ranking/motivos) */
+.lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+}
+.linhaLista {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  font-size: calc(15 * var(--u));
+  color: var(--app-ink);
+}
+.linhaListaRotulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barraTrilha {
+  height: calc(8 * var(--u));
+  min-height: 5px;
+  background: #ededed;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.barraFill {
+  height: 100%;
+  background: var(--app-ink);
+  border-radius: 999px;
+  transform-origin: left center;
+}
+.barraFillAmarela {
+  background: var(--app-accent);
+}
+.barraFillVermelha {
+  background: var(--app-danger);
+}
+.linhaListaValor {
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-gray);
+}
+.ordinal {
+  color: var(--app-text-gray);
+  font-variant-numeric: tabular-nums;
+  font-size: calc(13 * var(--u));
+}
+
+/* -------------------------------------------------- tabelas */
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(15 * var(--u));
+}
+.tabela th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--app-text-gray);
+  text-transform: uppercase;
+  font-size: calc(12 * var(--u));
+  letter-spacing: 0.04em;
+  padding: 0 calc(10 * var(--u)) calc(12 * var(--u));
+}
+.tabela td {
+  padding: calc(12 * var(--u)) calc(10 * var(--u));
+  border-top: 1px solid #efefef;
+  color: var(--app-ink);
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.vermelho {
+  color: var(--app-danger);
+}
+.verde {
+  color: #1f9d57;
+}
+.scrollTabela {
+  overflow-x: auto;
+}
+.avatarNome {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar {
+  flex: none;
+  width: calc(30 * var(--u));
+  height: calc(30 * var(--u));
+  border-radius: 50%;
+  background: var(--app-avatar);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(12 * var(--u));
+  color: var(--app-ink);
+}
+.localPill {
+  font-size: calc(12 * var(--u));
+  color: var(--app-text-gray);
+  background: #f0f0f0;
+  border-radius: 999px;
+  padding: 2px 12px;
+}
+
+/* -------------------------------------------------- gráficos */
+.chart {
+  width: 100%;
+  height: calc(150 * var(--u));
+  min-height: 110px;
+}
+.chartMini {
+  height: calc(90 * var(--u));
+  min-height: 70px;
+  margin-top: auto;
+}
+.donutWrap {
+  display: flex;
+  align-items: center;
+  gap: calc(20 * var(--u));
+}
+.donut {
+  position: relative;
+  width: calc(160 * var(--u));
+  height: calc(160 * var(--u));
+  flex: none;
+}
+.donutCentro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(40 * var(--u));
+  font-weight: 500;
+  color: var(--app-ink);
+}
+.legenda {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10 * var(--u));
+  font-size: calc(15 * var(--u));
+  color: var(--app-ink);
+}
+.legendaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.legendaPonto {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* -------------------------------------------------- empty / loading / erro */
+.vazio {
+  color: var(--app-text-gray);
+  font-size: calc(15 * var(--u));
+  padding: calc(20 * var(--u)) 0;
+  text-align: center;
+}
+.vazioSub {
+  font-size: calc(13 * var(--u));
+  color: var(--app-divider);
+  font-style: italic;
+}
+.skeleton {
+  animation: pulso var(--motion-pulse) ease-in-out infinite;
+  min-height: calc(120 * var(--u));
+}
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+.estadoErro {
+  margin: calc(40 * var(--u)) auto;
+  text-align: center;
+  color: var(--app-text-gray);
+  font-size: calc(16 * var(--u));
+}
+.tentarNovamente {
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* foco acessível */
+.tab:focus-visible,
+.preset:focus-visible,
+.opcaoRota:focus-visible,
+.btnExportar:focus-visible,
+.clicavel:focus-visible,
+.tentarNovamente:focus-visible,
+.menuExport button:focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 3px;
+}
+
+/* -------------------------------------------------- responsivo */
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .span2,
+  .span4 {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 767px) {
+  .pagina {
+    padding: 20px 16px 28px;
+  }
+  .titulo {
+    font-size: 32px;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 20px 22px;
+  }
+  .cardNumero {
+    font-size: 44px;
+  }
+  .tab {
+    font-size: 14px;
+    padding: 10px 8px;
+  }
+}

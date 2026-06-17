@@ -566,6 +566,63 @@
 
 ---
 
+## ADR-086 — Sequenciamento do C17: as 4 abas + fundação numa sessão (W5-C17/DP-1)
+- **Contexto:** Componente grande; o prompt recomendava fatiar (fundação + Geral, demais abas em passes). O dono optou pelo escopo completo.
+- **Decisão:** Entregar nesta sessão a **fundação compartilhada** (shell, tab bar, barra de filtros, infra de CSV, camada de agregação reusando o C16, acesso) **+ as 4 abas** (Geral, 3Studio, Vendedores, Clicheria).
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono (AskUserQuestion).
+- **Consequências:** Todas as fórmulas (DP-3) precisaram ser confirmadas de imediato. A separação por aba (lazy) mantém cada uma verificável; cada agregação é independente.
+
+## ADR-087 — Conjunto de métricas: seguir o design (§0.2); RF-016 é o piso (W5-C17/DP-2)
+- **Contexto:** O design amplia muito o RF-016 (Should) com métricas extras por aba.
+- **Decisão:** Implementar o **conjunto completo do design (§0.2)**, com RF-016 como mínimo obrigatório; cada métrica extra só entra com fórmula confirmada (ADR-088).
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono.
+- **Consequências:** As métricas vivem em `domain/relatorios.py`; estender/remover é localizado (dataclass + query).
+
+## ADR-088 — Fórmulas das métricas e base de tempo (W5-C17/DP-3) — a decisão mais importante
+- **Contexto:** Várias métricas eram ambíguas; o prompt alerta que uma fórmula errada "mente porque parece confiável".
+- **Decisão (fonte única `domain/relatorios.py`; base = HORAS ÚTEIS seg–sex 07–18 America/São_Paulo, igual ao C16):**
+  - **Tempo médio de aprovação** (geral e por vendedor): horas úteis entre a **chegada ao vendedor** (`retirada_vendedor`/`encaminhada_para_vendedor`) e a **aprovação** (`acao=aprovar`). Âncora = chegada-ao-vendedor (isola a resposta do vendedor — objetivo da US-014).
+  - **Taxa de reprovação** = `reprovadas ÷ (aprovadas + reprovadas)` (eventos); `null`→"—" sem decisões (corroborado pelo design: Aprov%+Reprov%=100%).
+  - **Atrasadas** = MESMA regra do C16 (`private.instante_limite_atraso` + delay do C09); **atraso exibido em HORAS** (≠ "dias" da US-014 — segue o design).
+  - **Donut "Provas Ativas"** = 2 segmentos: aguardando vendedor (`retirada_vendedor`+`encaminhada_para_vendedor`) vs reprovada (`reprovada_vendedor`).
+  - **Vendedor com mais artes** = contagem de provas por vendedor (top 1).
+  - **3Studio:** Provas criadas (`count` por `created_at`) + média diária; Reinícios (`acao=reiniciar_ciclo`); **Devolvidas = reprovações no período (`acao=reprovar`)**; Cancelamentos (`acao=cancelar`); Reprov. aguardando (status `reprovada_vendedor`); Tempo até 1ª mov (`created_at`→min mov); Top motivos = `movimentacoes.motivo WHERE acao=cancelar` (não há tabela separada — o log É o `movimentacoes`).
+  - **Clicheria** (perspectiva "rumo à clicheria"): Em trânsito = `com_motorista_entrega_final`; Recebidas = `recebida_clicheria`; Tempo médio aguardando = envio (→`com_motorista_entrega_final`)→recebimento (`recebida_clicheria`); Origens = rotas distintas entre as recebidas.
+- **Status:** **Aceita** (W5-C17). Cada fórmula confirmada pelo dono (AskUserQuestion).
+- **Consequências:** Atrasadas e os tempos ficam **consistentes com o C16** (mesma janela/função). Reversível: estender o mapeamento + a query.
+
+## ADR-089 — Export CSV: endpoint server-side por aba, UTF-8 BOM + `;` (W5-C17/DP-5)
+- **Contexto:** Não havia nenhuma infra de CSV; critério exige preservar campos + respeitar filtros + gate 3Studio nos endpoints.
+- **Decisão:** **Endpoint server-side** `GET /relatorios/exportar?aba=…` (gateado por `RELATORIOS` → 403 no não-admin), reusando a MESMA agregação da tela; **UTF-8 com BOM + separador `;`** (Excel pt-BR, acentuação/colunas corretas; decimais com vírgula); botão com **caret** p/ escolher a aba; consumido via `apiFetchBlob` + download no browser.
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono.
+- **Consequências:** O gate de borda no export satisfaz a defesa em 2 camadas (§6.4) sem nova dependência no front. Os rótulos no CSV espelham `status-labels.ts`/`rota-labels.ts`.
+
+## ADR-090 — Agregação por aba, lazy, server-side, sem Realtime + função `horas_uteis_entre` (W5-C17/DP-6)
+- **Contexto:** RNF-022 (sem N+1) + ≤3s; relatórios são snapshots por período (não contadores ao vivo como o C16).
+- **Decisão:** **Uma operação por aba**, em poucas consultas SET-BASED (sem N+1), sob `abrir_sessao_rls`; **lazy** (o endpoint serve uma aba; o front monta só a ativa); **sem Realtime**. Reusa `instante_limite_atraso` (0020) + os fragmentos de atraso do C16; nova função **`private.horas_uteis_entre(inicio, fim)`** (migration **0021**, mesmo perfil de segurança da 0020) para os DURADOS (chegada→aprovação, criação→1ª mov, envio→recebimento). Filtros entram como bind params; só enum validado é interpolado.
+- **Status:** **Aceita** (W5-C17).
+- **Consequências:** A 0021 complementa a 0020 sem substituí-la. Aplicada no Supabase real (`alembic_version=0021`).
+
+## ADR-091 — Filtros compartilhados, população por `created_at` e "nº requerimento" (W5-C17/DP-4)
+- **Contexto:** Barra de filtros compartilhada; toggle de rota 2-vias vs domínio de 4 rotas; "nº requerimento" ambíguo.
+- **Decisão:** Estado de filtros na **URL** (reusa C07: `useSearchParams`+`replace`+debounce ≥300ms). Presets (Hoje/7d/30d/90d) preenchem De/Até; edição manual prevalece. **Toggle de rota 2-vias** mapeado p/ multi-valor (Matriz→{matriz, lam_matriz}, Filial→{filial, lam_filial}); a **distribuição sempre exibe as 4 rotas somando 100%**. **"nº requerimento" = coluna `provas.requerimento`** (já no `busca` do C07 — RF-013), **não** o código PRV. **População base:** o período recorta por **`created_at`** (provas criadas na janela); todas as métricas da aba usam essa mesma população (definição única e consistente).
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono.
+- **Consequências:** O critério §6.3 (distribuição soma 100% no período) é satisfeito. O toggle 2-vias não impede a distribuição de 4 fatias.
+
+## ADR-092 — Recharts adicionado no C17 (correção de drift do prompt/CLAUDE.md §4) (W5-C17/DP-8)
+- **Contexto:** O prompt (e CLAUDE.md §4) afirmavam "Recharts já usada no C16" — **falso**: o C16 foi entregue **sem gráficos** (`AnimatedCounter`) e o Recharts **não estava instalado**. A decisão de gráfico nunca havia sido tomada.
+- **Decisão:** **Adicionar Recharts** (`recharts@3.8.1`, compatível com React 19) para as barras de volume + donut de provas ativas; distribuição/ranking/motivos como barras CSS (`scaleX`, GPU). Animações respeitam `prefers-reduced-motion` (`isAnimationActive`/tokens).
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono (AskUserQuestion).
+- **Consequências:** CLAUDE.md §4 ("Recharts — gráficos/contadores do dashboard") fica enfim verdadeiro a partir do C17; o C16 segue chart-free.
+
+## ADR-093 — Acesso a Relatórios: flag `administrador`, recurso já existente (W5-C17/DP-7)
+- **Contexto:** §7 marca "Relatórios" como "Exclusivo 3Studio". O modelo ortogonal (ADR-023) chaveia essas linhas pela **flag** `administrador`, não pelo setor.
+- **Decisão:** Gate pela **flag `administrador`** (igual a Configurações/Usuários). `Recurso.RELATORIOS` **já existia** nos 3 espelhos RBAC + item de menu + proxy — **sem PR de Matriz**; só faltava o **gate de backend** (`get_relatorios_service`) + endpoints + página. Um Vendedor-com-admin vê os relatórios; um 3Studio não-admin, não.
+- **Status:** **Aceita** (W5-C17). Confirmada pelo dono.
+- **Consequências:** Nenhuma migration de RLS nova (relatórios só agregam tabelas existentes; admin vê tudo pela RLS).
+
+---
+
 ### Próximas decisões a confirmar (checklist vivo)
 - [x] ADR-007 — validado: pooler/NullPool + caches off, suíte contra PostgreSQL 17.10 real (W0/C01).
 - [x] ADR-008 — propagação de claims/RLS por request **entregue** (W1/C05): listener `after_begin` + `SET LOCAL ROLE authenticated` em `propagar_claims_rls` (ADR-031).
@@ -597,4 +654,5 @@
 - [x] **ADR-073..075 (W3-C14 — cancelamento)** — cancelar via o motor do C11 por **endpoint dedicado `POST /provas/{id}/cancelar`** com gate de borda `Recurso.CANCELAR_PROVA` (2 camadas — DP-1/DP-4), **sem assinatura desenhada** (`exige_assinatura`/`ACOES_ADMINISTRATIVAS`, `assinatura_ref` NULL — DP-2), e UX destrutiva no detalhe (gating server-side por `podeCancelar`, modal remontado por `key` — DP-3/DP-5): entregues e testados (**api 714 verdes/94,2% · machine.py 100% · web 161 + E2E**), `ruff`/`mypy --strict`/`lint`/`build`/`prettier` limpos. **Sem migration nova** (a coluna `movimentacoes.assinatura_ref` já era nullable — ADR-066; head segue `0017`).
 - [x] **ADR-076..078 (W3-C15 — fecha a Wave 3)** — reinício via o motor do C11 + incremento atômico de `ciclo_atual` por endpoint dedicado (DP-1), sem assinatura/motivo (DP-2), carimbo de ciclo pré-incremento + UX construtiva (DP-3/4/5): entregues e testados. **Migration `0018` aplicada no Supabase real** (`alembic_version=0018`). **Wave 3 concluída** (auditada — GO, ADR-079).
 - [x] **ADR-080..085 (W4-C16 — abre a Wave 4: Dashboard em tempo real)** — design exato (DP-1: desvio consciente do RF-015 em §2.1), mapeamento contador→status em `domain/dashboard.py` (DP-2), atalhos role-aware (DP-3), "Atrasadas" por vendedor + horas úteis via instante-limite único `private.instante_limite_atraso` sem polling (DP-4), Realtime único + agregação ÚNICA RLS-escopada / mínimo de requisições (DP-5), bento sem Recharts + count-up + C07 multi-status/`atrasada` (DP-6): entregues e testados (**api unit + @db verdes · web 173**), `ruff`/`mypy --strict`/`lint`/`build`/`prettier` limpos. **Migration `0020` aplicada no Supabase real** (`alembic_version=0020`).
-- [ ] **Próximo passo:** **W5-C17 — Relatórios Gerenciais com Distribuição por Rota** (abre a Wave 5): tempo médio por etapa, taxa de reprovação, distribuição por rota e export CSV — agregações analíticas sobre `provas`/`movimentacoes` (o Dashboard **mostra** contadores operacionais; os Relatórios **analisam** o histórico). NÃO é do C16.
+- [x] **ADR-086..093 (W5-C17 — abre a Wave 5: Relatórios gerenciais)** — sequenciamento (4 abas + fundação numa sessão, DP-1), conjunto de métricas seguindo o design (DP-2), **fórmulas confirmadas** (DP-3: tempo médio = chegada→aprovação, taxa = reprov/(aprov+reprov), Devolvidas = reprovações, donut 2 segmentos, Clicheria rumo-à-clicheria, atraso em horas), CSV server-side UTF-8 BOM+`;` (DP-5), agregação por aba lazy sem Realtime + `private.horas_uteis_entre` (DP-6), filtros/população por `created_at`/nº requerimento (DP-4), Recharts adicionado corrigindo drift (DP-8), acesso flag admin com recurso já existente (DP-7): entregues e testados (**api 807 @db · web 178**), `ruff`/`mypy --strict`/`lint`/`build`/`prettier` limpos. **Migration `0021` aplicada no Supabase real** (`alembic_version=0021`).
+- [ ] **Próximo passo:** **W5-C18 — Atalhos rápidos** (RF-017): seção de atalhos role-aware (escanear / provas / relatórios), respeitando o perfil logado. Encerra a Wave 5 com o C17.

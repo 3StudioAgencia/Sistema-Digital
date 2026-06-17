@@ -53,9 +53,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0020", (
-        "head deve registrar a revisão 0020 (instante_limite_atraso: função de horas "
-        "úteis do Dashboard — W4-C16)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0021", (
+        "head deve registrar a revisão 0021 (horas_uteis_entre: função de horas "
+        "úteis dos Relatórios — W5-C17)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -255,6 +255,15 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0020 deve criar private.instante_limite_atraso (horas úteis — W4-C16)"
+    # W5-C17: função de duração em horas úteis dos Relatórios (0021), schema private.
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE p.proname = 'horas_uteis_entre' AND n.nspname = 'private'",
+        )
+        == 1
+    ), "0021 deve criar private.horas_uteis_entre (horas úteis — W5-C17)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -318,6 +327,10 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 0
     ), "downgrade da 0020 deve remover a função instante_limite_atraso"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_proc WHERE proname = 'horas_uteis_entre'")
+        == 0
+    ), "downgrade da 0021 deve remover a função horas_uteis_entre"
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")
         == 0

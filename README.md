@@ -99,6 +99,8 @@ pnpm dev                                  # http://localhost:3000
 >
 > **Dashboard (W4-C16 — abre a Wave 4):** `uv run alembic upgrade head` chega à **`0020`** (função de horas úteis **`private.instante_limite_atraso`** do cálculo de "Atrasadas"; **já aplicada no Supabase real**, `alembic_version=0020`). A tela inicial **`/dashboard`** mostra, **fiel ao design** (layout bento), os 5 contadores (**Criadas hoje, Com Vendedor, Aprovadas, Na clicheria, Atrasadas**) **em tempo real** (count-up) e o card **"Atrasadas"** como **lista por vendedor + total**; os números são **escopados por perfil** (RLS) e vêm de **uma única consulta** server-side (sem N+1). Clicar num card abre a **listagem (C07) pré-filtrada**; os atalhos **Escanear** (todos) e **Nova Prova** (só 3Studio) respeitam o perfil. **Operação (opcional, para o push em tempo real):** habilitar a **replicação da tabela `provas`** no painel do Supabase (Database → Replication / publication `supabase_realtime`) — sem isso o painel funciona com a carga SSR (só não recebe atualização automática). Detalhes em [`docs/dashboard.md`](./docs/dashboard.md). **Wave 4 concluída.**
 
+> **Relatórios (W5-C17 — abre a Wave 5):** `uv run alembic upgrade head` chega à **`0021`** (função de horas úteis **`private.horas_uteis_entre`** dos tempos analíticos; **já aplicada no Supabase real**, `alembic_version=0021`). A tela **`/relatorios`** (**exclusiva do 3Studio** — gate de página + endpoints → 403 aos demais) traz **4 abas** (Geral / 3Studio / Vendedores / Clicheria) com uma **barra de filtros compartilhada** (De/Até + presets + Status + busca + rota + Vendedor, estado na URL), **gráficos Recharts** (barras + donut), **tabelas** e **Exportar CSV** (UTF-8 + `;`, Excel pt-BR). As métricas (tempo médio de aprovação, taxa de reprovação, **distribuição por rota somando 100%**, atrasadas — **mesma regra do Dashboard**, devolvidas, tempo médio aguardando da clicheria, etc.) são **agregadas server-side por aba** (lazy, sem N+1), **sem Realtime** (snapshot do período). **Operação:** se `pnpm add` não tiver sido sincronizado, rodar `pnpm install` (o C17 adicionou **`recharts`**). Detalhes em [`docs/relatorios.md`](./docs/relatorios.md).
+
 ---
 
 ## Testes
@@ -143,7 +145,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
 | **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline ✅ · 14 Cancelamento ✅ · 15 Reinício ✅ | **Concluída** ✅ |
 | **4 · Dashboard** | 16 Dashboard Realtime ✅ | **Concluída** ✅ |
-| **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |
+| **5 · Relatórios/UX** | 17 Relatórios ✅ · 18 Atalhos | 🔄 em andamento |
 | **6 · Animações/Auditoria** | 19 Animações · 20 Log de Auditoria | ⬜ |
 
 > Cada wave só inicia após concluir as dependências da anterior. **Uma sessão = um componente completo.**

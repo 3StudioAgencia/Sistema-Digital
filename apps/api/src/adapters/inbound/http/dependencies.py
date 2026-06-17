@@ -20,6 +20,7 @@ from src.adapters.outbound.db.dashboard_repository import SqlAlchemyDashboardRep
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
 from src.adapters.outbound.db.rate_limiter import SqlAlchemyRateLimiter
+from src.adapters.outbound.db.relatorios_repository import SqlAlchemyRelatoriosRepository
 from src.adapters.outbound.db.settings_repository import SqlAlchemySettingsRepository
 from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
@@ -32,6 +33,7 @@ from src.application.provas import (
     ProvasIdentificacaoService,
     ProvasService,
 )
+from src.application.relatorios import RelatoriosService
 from src.application.settings import SettingsService
 from src.application.transicoes import ProvasTransicaoService
 from src.application.usuarios import UsuariosService
@@ -382,12 +384,42 @@ async def get_settings_service(
         )
 
 
+async def get_relatorios_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[RelatoriosService]:
+    """Serviço de Relatórios por requisição, JÁ gateado por ``RELATORIOS`` (W5-C17).
+
+    Relatórios é "Exclusivo 3Studio" (Matriz §7 — flag ``administrador``, ADR-023),
+    igual a Configurações: gate + serviço numa ÚNICA sessão RLS (a linha do ator é
+    legível por ``usuarios_select_self``), evitando duas conexões NullPool (RNF-020).
+    Os endpoints de agregação E de export CSV passam por aqui → ambos respondem 403
+    ao não-admin (defesa em duas camadas — DP-7). Os números são escopados pela RLS
+    de ``provas``/``usuarios`` (na prática, todos, pois o ator é admin). Negação
+    ÚNICA para sem-linha/inativo/não-admin (anti-enumeração — CLAUDE.md §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.RELATORIOS):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield RelatoriosService(repo=SqlAlchemyRelatoriosRepository(session))
+
+
 __all__ = [
     "get_admin_corrente",
     "get_dashboard_service",
     "get_identificacao_service",
     "get_provas_consulta_service",
     "get_provas_service",
+    "get_relatorios_service",
     "get_settings_service",
     "get_transicao_service",
     "get_usuarios_service",

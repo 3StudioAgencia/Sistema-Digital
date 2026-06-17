@@ -32,6 +32,35 @@
 
 ---
 
+## Sessão 22 — 2026-06-17 — [Wave 5 / Componente C17] Relatórios Gerenciais (4 abas) — **abre a Wave 5**
+
+**Objetivo:** Entregar a seção de relatórios gerenciais **exclusiva do 3Studio**, **fiel ao design** (abas Geral / 3Studio / Vendedores / Clicheria, filtros compartilhados, gráficos, tabelas, **export CSV**), reusando a função de horas úteis e o padrão de agregação do C16, com a distribuição por rota somando 100% e o CSV preservando os campos exibidos.
+
+**Feito:**
+- **Scout (workflow, 7 agentes) + leitura do RequisitosProvasDigitais_v1_0.docx** ANTES de decidir: aterrou C16 (`atraso_sql`/`instante_limite_atraso`/`dashboard_repository`), C11 (`movimentacoes`), C07 (filtros/URL-state), C09 (delay), RBAC, e o §7 (Relatórios = "Exclusivo 3Studio" → flag admin). Resolveu drifts do prompt (Recharts NÃO instalado; `Recurso.RELATORIOS` JÁ existia; toggle de rota 2-vias × 4 rotas; delay lido inline; motivo em `movimentacoes.motivo`).
+- **Pontos de Decisão (§4) apresentados em bloco e respondidos pelo dono** (2 rodadas de AskUserQuestion) ANTES de codificar.
+- **Backend:** migration **`0021`** `private.horas_uteis_entre(inicio, fim)` (+ espelho RLS); `domain/relatorios.py` (fórmulas DP-3 — fonte única); `application/ports/relatorios_repository.py`; `adapters/outbound/db/relatorios_repository.py` (4 agregações SET-BASED, sem N+1, reusando os fragmentos de atraso do C16 verbatim); `application/relatorios.py` (serviço + **CSV** UTF-8 BOM+`;`); `adapters/inbound/http/relatorios.py` (4 endpoints por aba + `/exportar` + filtros compartilhados); `get_relatorios_service` (gate `RELATORIOS` → 403) + router em `app.py`.
+- **Frontend:** `lib/api/relatorios.ts` (tipos + fetch por aba + download CSV), `lib/relatorios/format.ts`; `/relatorios` (`page.tsx` Suspense, `error.tsx`, `relatorios.module.css`) + `_components/` (view com tab bar + filtros + Exportar CSV caret, 4 tabs lazy, `charts.tsx` Recharts barras+donut, `widgets.tsx` StatCard/ListaBarra, `use-relatorio.tsx` hook stale-safe). **Recharts adicionado** (`recharts@3.8.1`).
+- **Migration `0021` aplicada no Supabase real** via MCP (`apply_migration` + bump `alembic_version=0021`); função verificada (2h dentro da janela, 2h cruzando o fim de semana).
+
+**Decisões (ADRs):**
+- ADR-086 sequenciamento (4 abas numa sessão) · ADR-087 conjunto de métricas (segue o design) · **ADR-088 fórmulas (DP-3 — a mais importante)** · ADR-089 CSV server-side UTF-8 BOM+`;` · ADR-090 agregação lazy sem Realtime + `horas_uteis_entre` · ADR-091 filtros/população por `created_at`/nº requerimento · ADR-092 Recharts (corrige drift do prompt/CLAUDE.md §4) · ADR-093 acesso flag admin (recurso já existia).
+
+**Testes / cobertura:**
+- api: **807 verdes** (offline + `@db`, PG local 5432) — `test_relatorios.py` (CSV/BOM/campos/acentuação, `_taxa`, `dias_no_periodo`, zero-fill rotas), `test_relatorios_endpoints.py` (`private.horas_uteis_entre` parametrizado; 4 abas com fórmulas conferidas; **distribuição soma 100%**; **atrasadas = regra do C16**; filtros rota-multi/vendedor/status/período; **403 não-admin** em todas as abas + export; **CSV** BOM/campos/filtros), `test_migrations.py` (head **0021** + cria/remove `horas_uteis_entre`). `ruff`/`mypy --strict` limpos.
+- web: **178 verdes** (`relatorios-view.test.tsx`: shell + 4 abas + Exportar CSV; **lazy** — só a aba ativa busca; troca de aba → `?aba=`; export dispara download; preset escreve De/Até). `lint`/`build`/`prettier` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Dívida pré-existente de lint (NÃO do C17):** `ruff check .` acusa **E501** em 2 arquivos de teste do W4 (`tests/integration/test_dashboard_endpoints.py`, `test_provas_listagem_atrasada_endpoints.py`) + 1 `set-state-in-effect` — chips de tarefa de limpeza sugeridos. Meus arquivos novos estão 100% limpos.
+- [ ] **Operação (push em tempo real não se aplica aqui — relatórios são snapshot):** nada novo. O role de runtime e as 4 `R2_*` seguem como pendências de operação herdadas.
+
+**Próximo passo:**
+- **W5-C18 — Atalhos rápidos** (RF-017): seção de atalhos role-aware (escanear / provas / relatórios). Comando: cole o prompt do C18 com os docs de contexto + Wave 4/C16 e C17 mergeados.
+
+**Definition of Done:** ✅ atendida — code review (multi-agente recomendado), testes ≥ alvo, migration versionada/aplicada/round-trip, critérios §6 demonstrados (acesso 3Studio, soma 100%, CSV preserva campos, consistência com o C16), sem Realtime, `prefers-reduced-motion`, sem segredos, docs (`docs/relatorios.md`).
+
+---
+
 ## Sessão 21 — 2026-06-17 — [Wave 4 / Componente C16] Dashboard com Contadores em Tempo Real — **abre a Wave 4**
 
 **Objetivo:** Entregar o dashboard de visibilidade operacional **fiel ao design** (layout bento), com contadores em tempo real, clicáveis, escopados por perfil (RLS), via **uma única** subscription Realtime e **uma única** consulta de agregação — reconciliando o design com o RF-015.
