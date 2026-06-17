@@ -83,3 +83,27 @@ export function cancelarProva(provaId: string, payload: CancelarPayload): Promis
     timeoutMs: 30_000,
   });
 }
+
+export type ReiniciarPayload = {
+  /** Chave de idempotência (RNF-015): reusada nas retentativas → converge (sem reincrementar). */
+  idempotencyKey: string;
+};
+
+/**
+ * Reinicia o ciclo de uma prova reprovada (W3-C15) — ação ADMINISTRATIVA exclusiva
+ * do 3Studio, disponível SÓ em "Reprovada pelo Vendedor". Endpoint DEDICADO
+ * `POST /provas/{id}/reiniciar` (gate de borda `reiniciar_ciclo` + motor do C11):
+ * volta o status a "Criada", PRESERVA a rota e o histórico, e INCREMENTA o ciclo
+ * — a mesma prova ganha um novo ciclo. NÃO leva assinatura desenhada NEM motivo
+ * (DP-2 — só confirmação). O reenvio com a mesma `idempotencyKey` converge sem
+ * duplicar nem incrementar duas vezes (base da resiliência).
+ */
+export function reiniciarCiclo(provaId: string, payload: ReiniciarPayload): Promise<ProvaDetalhe> {
+  return apiFetch<ProvaDetalhe>(`/provas/${provaId}/reiniciar`, {
+    method: "POST",
+    body: {
+      idempotency_key: payload.idempotencyKey,
+    },
+    timeoutMs: 30_000,
+  });
+}

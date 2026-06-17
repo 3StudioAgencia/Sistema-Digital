@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   salvarArquivo: vi.fn(),
   obterMovimentacoes: vi.fn(),
   cancelarProva: vi.fn(),
+  reiniciarCiclo: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
@@ -33,10 +34,15 @@ vi.mock("@/lib/api/provas", async (importOriginal) => {
   };
 });
 
-// A ação de cancelar (C14) chama o endpoint dedicado; mockado para isolar a UI.
+// As ações administrativas (Cancelar=C14, Reiniciar=C15) chamam endpoints
+// dedicados; mockadas para isolar a UI.
 vi.mock("@/lib/api/transicoes", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/api/transicoes")>();
-  return { ...original, cancelarProva: mocks.cancelarProva };
+  return {
+    ...original,
+    cancelarProva: mocks.cancelarProva,
+    reiniciarCiclo: mocks.reiniciarCiclo,
+  };
 });
 
 // A timeline (C13) faz seu próprio fetch; mockado aqui para isolar o detalhe.
@@ -62,10 +68,14 @@ const PROVA: ProvaDetalhe = {
   finalizada_em: null,
 };
 
-function renderView(opts?: { podeCancelar?: boolean }) {
+function renderView(opts?: { podeCancelar?: boolean; podeReiniciar?: boolean }) {
   return render(
     <ToastProvider>
-      <ProvaDetalheView provaId="p-1" podeCancelar={opts?.podeCancelar ?? false} />
+      <ProvaDetalheView
+        provaId="p-1"
+        podeCancelar={opts?.podeCancelar ?? false}
+        podeReiniciar={opts?.podeReiniciar ?? false}
+      />
     </ToastProvider>,
   );
 }
@@ -78,6 +88,8 @@ beforeEach(() => {
     status: "cancelada",
     finalizada_em: "2026-06-17T12:00:00Z",
   });
+  // Reinício devolve a prova já em "Criada" no novo ciclo (status + ciclo_atual).
+  mocks.reiniciarCiclo.mockResolvedValue({ ...PROVA, status: "criada", ciclo_atual: 2 });
   mocks.baixarArte.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
   mocks.baixarEtiqueta.mockResolvedValue(
     new Blob([new Uint8Array([4, 5, 6])], { type: "application/pdf" }),
@@ -287,6 +299,80 @@ describe("Cancelamento de prova (W3-C14)", () => {
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText(/Motivo/i), "tentativa tardia");
     await user.click(within(dialog).getByRole("button", { name: "Cancelar prova" }));
+
+    expect(await screen.findByText(/não é válida para a prova/i)).toBeInTheDocument(); // toast da regra
+    expect(mocks.replace).not.toHaveBeenCalled(); // 422 não redireciona (≠ 404)
+  });
+});
+
+describe("Reinício de ciclo (W3-C15)", () => {
+  const REPROVADA: ProvaDetalhe = { ...PROVA, status: "reprovada_vendedor" };
+
+  it("não oferece 'Reiniciar ciclo' a quem não pode (não-3Studio)", async () => {
+    mocks.obterProva.mockResolvedValue(REPROVADA);
+    renderView({ podeReiniciar: false });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+    expect(screen.queryByRole("button", { name: "Reiniciar ciclo" })).not.toBeInTheDocument();
+  });
+
+  it("não oferece 'Reiniciar ciclo' fora de 'Reprovada pelo Vendedor', mesmo ao 3Studio", async () => {
+    // PROVA padrão está em 'encaminhada_para_vendedor' (≠ reprovada): botão ausente.
+    renderView({ podeReiniciar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+    expect(screen.queryByRole("button", { name: "Reiniciar ciclo" })).not.toBeInTheDocument();
+  });
+
+  it("3Studio em 'Reprovada pelo Vendedor': abre o modal (sem motivo), reinicia e reflete 'Criada' + ciclo 2", async () => {
+    const user = userEvent.setup();
+    mocks.obterProva.mockResolvedValue(REPROVADA);
+    renderView({ podeReiniciar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+
+    // Abre o modal de confirmação a partir do detalhe.
+    await user.click(screen.getByRole("button", { name: "Reiniciar ciclo" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/novo ciclo/i)).toBeInTheDocument(); // explica o reinício
+    expect(within(dialog).getByText(/histórico do ciclo anterior é preservado/i)).toBeInTheDocument();
+    // NÃO há campo de motivo (≠ cancelar — DP-2).
+    expect(within(dialog).queryByLabelText(/Motivo/i)).not.toBeInTheDocument();
+
+    // Confirma → o motor é invocado (endpoint dedicado), só com a chave de idempotência.
+    await user.click(within(dialog).getByRole("button", { name: "Reiniciar ciclo" }));
+    await waitFor(() =>
+      expect(mocks.reiniciarCiclo).toHaveBeenCalledWith("p-1", {
+        idempotencyKey: expect.any(String),
+      }),
+    );
+
+    // Sucesso: toast + estado reflete "Criada" e o ciclo incrementado (2); a ação some.
+    expect(await screen.findByText("Ciclo reiniciado.")).toBeInTheDocument();
+    const statusRotulo = await screen.findByText("Status:");
+    await waitFor(() =>
+      expect(
+        within(statusRotulo.closest("div") as HTMLElement).getByText("Criada"),
+      ).toBeInTheDocument(),
+    );
+    const cicloRotulo = screen.getByText("Ciclo Atual:");
+    expect(within(cicloRotulo.closest("div") as HTMLElement).getByText("2")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Reiniciar ciclo" })).not.toBeInTheDocument(),
+    );
+    // A timeline recarrega para mostrar o novo ciclo separado (recarregar bumpado).
+    await waitFor(() => expect(mocks.obterMovimentacoes.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("erro de regra (já não reprovada) vira toast e fecha sem alterar o detalhe", async () => {
+    const user = userEvent.setup();
+    mocks.obterProva.mockResolvedValue(REPROVADA);
+    mocks.reiniciarCiclo.mockRejectedValue(
+      new ApiError(422, "transicao_invalida", "Esta ação não é válida para a prova no estado atual."),
+    );
+    renderView({ podeReiniciar: true });
+    await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
+
+    await user.click(screen.getByRole("button", { name: "Reiniciar ciclo" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Reiniciar ciclo" }));
 
     expect(await screen.findByText(/não é válida para a prova/i)).toBeInTheDocument(); // toast da regra
     expect(mocks.replace).not.toHaveBeenCalled(); // 422 não redireciona (≠ 404)

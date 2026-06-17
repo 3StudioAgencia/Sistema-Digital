@@ -28,6 +28,7 @@ from src.adapters.inbound.http.dependencies import (
     get_identificacao_service,
     get_provas_consulta_service,
     get_provas_service,
+    get_reinicio_service,
     get_transicao_service,
 )
 from src.application.ports.provas_repository import (
@@ -225,6 +226,19 @@ class CancelarIn(BaseModel):
     movimentação pelo motor (RNF-006). Terminal e irreversível (RN-005)."""
 
     motivo: str = Field(min_length=1, max_length=500)
+    idempotency_key: uuid.UUID
+
+
+class ReiniciarIn(BaseModel):
+    """Entrada do reinício de ciclo administrativo (W3-C15 — RF-009/§6.6).
+
+    Reiniciar é "Ação administrativa: Reiniciar Ciclo" (§6.6): só CONFIRMAÇÃO —
+    SEM assinatura desenhada E SEM motivo (DP-2), ao contrário de Cancelar (motivo
+    obrigatório) e de Reprovar (assinatura). Daí o corpo carregar APENAS a
+    ``idempotency_key`` por operação (RNF-015: reenvio converge, sem duplicar nem
+    incrementar o ciclo duas vezes). O ator + data/hora ficam gravados na
+    movimentação pelo motor (RNF-006)."""
+
     idempotency_key: uuid.UUID
 
 
@@ -495,6 +509,42 @@ async def cancelar(
         assinatura_imagem=None,
         idempotency_key=str(body.idempotency_key),
         motivo=body.motivo,
+    )
+    return ProvaDetalheOut.de_dominio(item)
+
+
+@router.post("/{prova_id}/reiniciar", response_model=ProvaDetalheOut)
+async def reiniciar(
+    prova_id: uuid.UUID,
+    body: ReiniciarIn,
+    service: Annotated[ProvasTransicaoService, Depends(get_reinicio_service)],
+) -> ProvaDetalheOut:
+    """Reinicia o ciclo de uma prova reprovada (W3-C15 — RF-009/§6.6/RN-006): ação
+    ADMINISTRATIVA, exclusiva do 3Studio (flag ``administrador`` — ADR-064),
+    disponível SÓ em ``Reprovada pelo Vendedor``. Volta o status a ``Criada``,
+    PRESERVA a rota (imutável) e o histórico integral do ciclo anterior, e
+    INCREMENTA ``ciclo_atual`` — a MESMA prova ganha um novo ciclo (mesmo código/QR/
+    etiqueta).
+
+    INVOCA o motor de transição do C11 (``executar`` com ``acao=reiniciar_ciclo``) —
+    fonte ÚNICA de mudança de status (ADR-062): a transição (``reprovada_vendedor``
+    → ``criada``) e o incremento de ``ciclo_atual`` caem na MESMA transação atômica
+    (RNF-017 — juntos ou nenhum), gravando UMA movimentação (ator + data/hora) no
+    log imutável (RNF-006). SEM assinatura desenhada E SEM motivo (DP-2): a
+    movimentação nasce com ``assinatura_ref`` NULL (ADR-066).
+
+    Acesso em DUAS camadas: a borda (``get_reinicio_service``) já barra o não-admin
+    → 403; o motor revalida (``Autorizacao.ADMIN``). Erros: prova fora de
+    ``Reprovada pelo Vendedor`` → transição indefinida → 422; prova fora do escopo /
+    inexistente → 404 genérico (anti-enumeração); chave reusada para outra operação
+    → 409. Reenvio com a mesma chave converge (200) sem reincrementar o ciclo.
+    """
+    item = await service.executar(
+        prova_id=str(prova_id),
+        acao=Acao.REINICIAR_CICLO,
+        assinatura_imagem=None,
+        idempotency_key=str(body.idempotency_key),
+        motivo=None,
     )
     return ProvaDetalheOut.de_dominio(item)
 

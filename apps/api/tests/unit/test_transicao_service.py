@@ -69,6 +69,7 @@ class FakeProvasRepo(ProvasRepositoryPort):
     def __init__(self, prova: Prova | None) -> None:
         self._prova = prova
         self.status_atualizado: tuple[EstadoProva, dt.datetime | None] | None = None
+        self.ciclos_incrementados = 0
 
     async def obter_para_transicao(self, prova_id: str) -> Prova | None:
         return self._prova
@@ -84,6 +85,12 @@ class FakeProvasRepo(ProvasRepositoryPort):
         quando: dt.datetime,
     ) -> None:
         self.status_atualizado = (novo_status, finalizada_em)
+
+    async def incrementar_ciclo(self, prova_id: str) -> int:
+        # Espelha o UPDATE atômico do banco: devolve o NOVO ciclo (pré-incremento+1).
+        self.ciclos_incrementados += 1
+        assert self._prova is not None
+        return self._prova.ciclo_atual + 1
 
     async def nomes_de_vendedores(self, ids: list[str]) -> dict[str, str]:
         return {VENDEDOR_ID: "Regiane"}
@@ -403,6 +410,100 @@ async def test_cancelar_sem_assinatura_grava_movimentacao_sem_comprovante() -> N
     assert movs.registradas[0].motivo == "cliente desistiu"
     assert movs.registradas[0].ator_id == ADMIN_ID
     assert uow.commits == 1
+
+
+# ---------------------------------------------------------------------------
+# Reinício de Ciclo (W3-C15) — administrativo, sem assinatura nem motivo,
+# incrementa ciclo_atual ATÔMICO; a movimentação carimba o ciclo PRÉ-incremento.
+# ---------------------------------------------------------------------------
+async def test_reiniciar_incrementa_ciclo_grava_movimentacao_sem_assinatura() -> None:
+    """W3-C15/DP-1/DP-3: o reinício leva REPROVADA_VENDEDOR → CRIADA, INCREMENTA
+    ``ciclo_atual`` (1→2) na MESMA transação e grava UMA movimentação SEM assinatura
+    (administrativa — ADR-066) nem motivo, carimbada com o ciclo que se ENCERRA (1)."""
+    repo = FakeProvasRepo(_prova(status=EstadoProva.REPROVADA_VENDEDOR))
+    movs, uow = FakeMovsRepo(), FakeUoW()
+    assin = FakeAssinaturasRepo()
+    svc = _servico(repo, movs, uow, _admin(), assin)
+    out = await svc.executar(
+        prova_id="a",
+        acao=Acao.REINICIAR_CICLO,
+        assinatura_imagem=None,  # administrativa: sem traço desenhado
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    assert out.prova.status == EstadoProva.CRIADA  # volta ao início (mesma prova)
+    assert out.prova.ciclo_atual == 2  # ciclo incrementado (efeito do reinício)
+    assert out.prova.finalizada_em is None  # CRIADA não é terminal
+    assert repo.ciclos_incrementados == 1  # incremento atômico aconteceu UMA vez
+    assert assin.registradas == []  # NÃO criou assinatura
+    assert len(movs.registradas) == 1
+    (mov,) = movs.registradas
+    assert mov.acao is Acao.REINICIAR_CICLO
+    assert mov.estado_destino == EstadoProva.CRIADA
+    assert mov.ciclo == 1  # carimbada com o ciclo ANTERIOR (pré-incremento — DP-3)
+    assert mov.assinatura_ref is None  # comprovante ausente (NULL)
+    assert mov.motivo is None  # reinício NÃO leva motivo (≠ cancelar)
+    assert mov.ator_id == ADMIN_ID
+    assert uow.commits == 1
+
+
+async def test_reiniciar_idempotente_nao_reincrementa() -> None:
+    """RNF-015: reenvio do reinício com a mesma chave converge (200) e NÃO
+    incrementa o ciclo de novo — a prova relida já está em CRIADA no ciclo novo."""
+    prova = _prova(status=EstadoProva.CRIADA)  # já reiniciada (relida do banco)
+    existente = Movimentacao(
+        id="m1",
+        prova_id=prova.id,
+        estado_origem=EstadoProva.REPROVADA_VENDEDOR,
+        estado_destino=EstadoProva.CRIADA,
+        acao=Acao.REINICIAR_CICLO,
+        ator_id=ADMIN_ID,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    repo, movs, uow = FakeProvasRepo(prova), FakeMovsRepo(existente=existente), FakeUoW()
+    svc = _servico(repo, movs, uow, _admin())
+    out = await svc.executar(
+        prova_id=prova.id,
+        acao=Acao.REINICIAR_CICLO,
+        assinatura_imagem=None,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    assert out.prova.status == EstadoProva.CRIADA
+    assert repo.ciclos_incrementados == 0  # NÃO reincrementou
+    assert repo.status_atualizado is None  # NÃO reaplicou
+    assert movs.registradas == []  # NÃO duplicou
+    assert uow.commits == 0
+
+
+async def test_acao_normal_nao_incrementa_ciclo() -> None:
+    """Só o reinício mexe em ``ciclo_atual``: um avanço normal (identificar) NÃO o
+    toca (``incrementa_ciclo`` é fonte única — parelha de ``exige_assinatura``)."""
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _vendedor())
+    out = await svc.executar(
+        prova_id="a",
+        acao=Acao.IDENTIFICAR_E_ASSINAR,
+        assinatura_imagem=PNG,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    assert repo.ciclos_incrementados == 0
+    assert out.prova.ciclo_atual == 1  # inalterado
+
+
+async def test_reiniciar_de_estado_nao_reprovado_e_422_sem_incremento() -> None:
+    """RN-006: reiniciar só vale em REPROVADA_VENDEDOR. De qualquer outro estado a
+    transição é indefinida → 422, sem incremento nem movimentação."""
+    repo, movs, uow = FakeProvasRepo(_prova(status=EstadoProva.CRIADA)), FakeMovsRepo(), FakeUoW()
+    svc = _servico(repo, movs, uow, _admin())
+    with pytest.raises(TransicaoInvalidaError):
+        await svc.executar(
+            prova_id="a",
+            acao=Acao.REINICIAR_CICLO,
+            assinatura_imagem=None,
+            idempotency_key="33333333-3333-3333-3333-333333333333",
+        )
+    assert repo.ciclos_incrementados == 0
+    assert movs.registradas == []
+    assert uow.commits == 0
 
 
 async def test_acao_operacional_sem_assinatura_e_422() -> None:

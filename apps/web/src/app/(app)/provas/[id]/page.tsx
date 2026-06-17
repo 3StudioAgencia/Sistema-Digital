@@ -12,19 +12,27 @@ import { ProvaDetalheView } from "./_components/prova-detalhe-view";
  * toast — sem revelar se a prova existe (anti-enumeração — §11). A rota cai no
  * recurso universal `provas` na Matriz §7; o ESCOPO de dado é da RLS, no servidor.
  *
- * W3-C14: resolve no SERVIDOR (sem ida extra ao backend — `fetchUsuarioAtual` é
- * memoizado por requisição) se este perfil pode CANCELAR (Matriz §7 →
- * `can(perfil, "cancelar_prova")` = flag `administrador`) e passa o booleano ao
- * view, que mostra a ação destrutiva só ao 3Studio e só em estados ativos. A
+ * W3-C14/C15: resolve no SERVIDOR (sem ida extra ao backend — `fetchUsuarioAtual` é
+ * memoizado por requisição) se este perfil pode CANCELAR e REINICIAR (ambas
+ * "Exclusivo 3Studio" na Matriz §7 → `can(perfil, ...)` = flag `administrador`) e
+ * passa os booleanos ao view, que mostra as ações administrativas só ao 3Studio
+ * (cancelar em estados ativos; reiniciar só em "Reprovada pelo Vendedor"). A
  * autorização real é em duas camadas (borda do backend + motor do C11).
  */
 export default async function ProvaDetalhePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const usuario = await fetchUsuarioAtual();
-  const podeCancelar = usuario
-    ? can({ setor: usuario.setor, administrador: usuario.administrador }, "cancelar_prova")
-    : false;
+  const perfil = usuario ? { setor: usuario.setor, administrador: usuario.administrador } : null;
+  const podeCancelar = perfil ? can(perfil, "cancelar_prova") : false;
+  const podeReiniciar = perfil ? can(perfil, "reiniciar_ciclo") : false;
   // `key={id}`: navegar entre provas REMONTA o view (estado fresco — sem resets
   // síncronos de estado dentro de efeitos; o skeleton reaparece a cada prova).
-  return <ProvaDetalheView key={id} provaId={id} podeCancelar={podeCancelar} />;
+  return (
+    <ProvaDetalheView
+      key={id}
+      provaId={id}
+      podeCancelar={podeCancelar}
+      podeReiniciar={podeReiniciar}
+    />
+  );
 }

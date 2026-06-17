@@ -53,8 +53,8 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0017", (
-        "head deve registrar a revisão 0017 (nomes_de_usuarios — W3-C13)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0018", (
+        "head deve registrar a revisão 0018 (provas: GRANT UPDATE(ciclo_atual) — W3-C15)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -139,6 +139,17 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0012 deve adicionar provas.ciclo_atual NOT NULL (DP-1)"
+    # W3-C15: 0018 acrescenta ciclo_atual ao GRANT de UPDATE de provas a authenticated
+    # (o Reinício de Ciclo incrementa o contador — sem o grant, "permission denied").
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.column_privileges "
+            "WHERE table_name = 'provas' AND column_name = 'ciclo_atual' "
+            "AND privilege_type = 'UPDATE' AND grantee = 'authenticated'",
+        )
+        == 1
+    ), "0018 deve conceder UPDATE(ciclo_atual) em provas a authenticated (W3-C15)"
     # W2-C09: tabela system_settings (0013) + RLS (leitura authenticated, escrita admin).
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'system_settings'")

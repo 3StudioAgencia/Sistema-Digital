@@ -287,6 +287,41 @@ async def get_cancelamento_service(
         )
 
 
+async def get_reinicio_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[ProvasTransicaoService]:
+    """Serviço de REINÍCIO DE CICLO (W3-C15) — o MESMO motor de transição (fonte
+    ÚNICA de mudança de status; ADR-062), gateado por ``REINICIAR_CICLO``.
+
+    Reiniciar é "Exclusivo 3Studio" na Matriz §7 — exige a flag ``administrador``
+    (ADR-023/ADR-064), idêntico ao cancelamento (C14). A BORDA já barra o não-admin:
+    defesa em DUAS camadas (gate de recurso ``REINICIAR_CICLO`` + ``Autorizacao.ADMIN``
+    do motor). Negar em qualquer camada basta (CLAUDE.md §5.4); o motor revalida.
+    Mesma sessão RLS fail-closed; o ``ator`` carregado para o gate vai ao motor.
+    Negação ÚNICA para sem-linha/inativo/não-admin (403 ``Acesso negado.``)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.REINICIAR_CICLO):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield ProvasTransicaoService(
+            repo=SqlAlchemyProvasRepository(session),
+            movs=SqlAlchemyMovimentacoesRepository(session),
+            assinaturas=SqlAlchemyAssinaturasRepository(session),
+            uow=SqlAlchemyUnitOfWork(session),
+            ator=ator,
+        )
+
+
 async def get_settings_service(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),

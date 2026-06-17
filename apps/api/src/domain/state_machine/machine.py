@@ -102,6 +102,23 @@ def exige_assinatura(acao: Acao) -> bool:
     return acao not in ACOES_ADMINISTRATIVAS
 
 
+# Ações que abrem um NOVO ciclo de revisão (W3-C15): só o Reinício de Ciclo
+# (§6.6/RN-006). Reiniciar leva "Reprovada pelo Vendedor" → "Criada" e é a ÚNICA
+# transição que INCREMENTA ``provas.ciclo_atual`` — o "efeito especial" do reinício
+# que o motor (``application/transicoes.py``) aplica na MESMA transação atômica da
+# mudança de status (RNF-017). Cancelar NÃO entra: é terminal, não reabre ciclo.
+ACOES_REINICIO: frozenset[Acao] = frozenset({Acao.REINICIAR_CICLO})
+
+
+def incrementa_ciclo(acao: Acao) -> bool:
+    """``True`` para a ação que reinicia o ciclo (REINICIAR_CICLO — W3-C15): o
+    serviço de transição incrementa ``provas.ciclo_atual`` na MESMA transação,
+    DEPOIS de carimbar a movimentação com o ciclo que se ENCERRA (pré-incremento —
+    DP-3), para a Timeline (C13) separar os ciclos. Fonte única do "quem reinicia"
+    para o motor — parelha de ``exige_assinatura``."""
+    return acao in ACOES_REINICIO
+
+
 def sequencia_canonica(rota: Rota) -> tuple[EstadoProva, ...]:
     """Sequência ordenada de estados do caminho NORMAL de uma rota (W3-C13/DP-1).
 
@@ -153,12 +170,14 @@ def avaliar_transicao(
 __all__ = [
     "ACOES_ADMINISTRATIVAS",
     "ACOES_AVANCO",
+    "ACOES_REINICIO",
     "MotivoObrigatorioError",
     "TransicaoInvalidaError",
     "TransicaoNaoAutorizadaError",
     "autoriza",
     "avaliar_transicao",
     "exige_assinatura",
+    "incrementa_ciclo",
     "sequencia_canonica",
     "transicoes_de",
 ]

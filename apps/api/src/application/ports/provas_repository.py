@@ -103,8 +103,21 @@ class ProvasRepositoryPort(ABC):
         """Aplica a transição: ``status`` + ``finalizada_em`` (carimbo terminal) +
         ``updated_at`` na transação corrente (RNF-017 — commit é do caso de uso).
         NÃO toca ``rota`` (RN-007; o trigger do banco rejeitaria) nem
-        ``ciclo_atual`` (incremento é do C15). A RLS de UPDATE por perfil escopa a
-        escrita (defesa em profundidade)."""
+        ``ciclo_atual`` (incremento é do C15, em ``incrementar_ciclo``). A RLS de
+        UPDATE por perfil escopa a escrita (defesa em profundidade)."""
+
+    @abstractmethod
+    async def incrementar_ciclo(self, prova_id: str) -> int:
+        """Incrementa ``provas.ciclo_atual`` em 1 e devolve o NOVO valor (W3-C15 —
+        o "efeito especial" do Reinício de Ciclo). UPDATE atômico
+        (``ciclo_atual = ciclo_atual + 1`` com ``RETURNING``) na transação corrente
+        do ``UnitOfWork``: cai na MESMA transação da mudança de status do reinício
+        (RNF-017 — transição e incremento juntos, ou nenhum). É chamado DEPOIS de
+        registrar a movimentação (carimbada com o ciclo PRÉ-incremento — DP-3),
+        então a movimentação de reinício pertence ao ciclo que se ENCERRA e o novo
+        ciclo nasce vazio. A coluna ``ciclo_atual`` ganha GRANT de UPDATE a
+        ``authenticated`` na migration 0018; a RLS ``provas_update_admin`` escopa a
+        linha (só admin reinicia — Autorizacao.ADMIN no motor)."""
 
     @abstractmethod
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:

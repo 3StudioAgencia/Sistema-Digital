@@ -19,12 +19,14 @@ from src.domain.state_machine.enums import Autorizacao as Az
 from src.domain.state_machine.machine import (
     ACOES_ADMINISTRATIVAS,
     ACOES_AVANCO,
+    ACOES_REINICIO,
     MotivoObrigatorioError,
     TransicaoInvalidaError,
     TransicaoNaoAutorizadaError,
     autoriza,
     avaliar_transicao,
     exige_assinatura,
+    incrementa_ciclo,
     sequencia_canonica,
     transicoes_de,
 )
@@ -438,3 +440,35 @@ def test_exige_assinatura_so_e_falso_para_administrativas() -> None:
     # Total: toda ação NÃO-administrativa exige assinatura (RN-003 vs. §6.6).
     for acao in Acao:
         assert exige_assinatura(acao) is (acao not in ACOES_ADMINISTRATIVAS)
+
+
+# ---------------------------------------------------------------------------
+# Incremento de ciclo (W3-C15) — só o Reinício de Ciclo abre um novo ciclo.
+# ---------------------------------------------------------------------------
+def test_incrementa_ciclo_so_para_reiniciar() -> None:
+    assert ACOES_REINICIO == {REINICIAR}
+    assert incrementa_ciclo(REINICIAR)
+    assert not incrementa_ciclo(CANCELAR)  # cancelar é terminal, não reabre ciclo
+    assert not incrementa_ciclo(ID)
+    assert not incrementa_ciclo(APROVAR)
+    assert not incrementa_ciclo(REPROVAR)
+    # Total: incrementa_ciclo é True só para as ações de ACOES_REINICIO.
+    for acao in Acao:
+        assert incrementa_ciclo(acao) is (acao in ACOES_REINICIO)
+
+
+def test_reinicio_e_a_unica_aresta_que_incrementa_e_so_de_reprovada() -> None:
+    # A ação que incrementa o ciclo é EXATAMENTE a que leva REPROVADA_VENDEDOR →
+    # CRIADA em toda rota (RN-006) — trava o drift entre incrementa_ciclo e a §6.
+    origens_reinicio = {
+        (rota, estado)
+        for (rota, estado), transicoes in TRANSITION_RULES.items()
+        for t in transicoes
+        if incrementa_ciclo(t.acao)
+    }
+    assert origens_reinicio == {(rota, E.REPROVADA_VENDEDOR) for rota in Rota}
+    # E todo destino do reinício é CRIADA (mesma prova, novo ciclo — preserva rota).
+    for transicoes in TRANSITION_RULES.values():
+        for t in transicoes:
+            if incrementa_ciclo(t.acao):
+                assert t.estado_destino is E.CRIADA

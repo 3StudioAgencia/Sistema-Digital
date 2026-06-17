@@ -1,0 +1,99 @@
+/* Reiniciar ciclo (W3-C15) — modal de CONFIRMAÇÃO (não-destrutivo), no padrão do
+   C04/C14: painel escuro estreito, aviso do que acontece (volta a "Criada", novo
+   ciclo, rota e histórico preservados) e botão CONSTRUTIVO (--app-accent), ≠ do
+   botão de perigo do cancelar. Mede em --um (definido no .panel do MotionModal). */
+
+.painel {
+  width: min(calc(560 * var(--um, var(--u, 1px))), 100%);
+  padding: calc(44 * var(--um, var(--u, 1px))) calc(48 * var(--um, var(--u, 1px)))
+    calc(40 * var(--um, var(--u, 1px)));
+  border-radius: calc(32 * var(--um, var(--u, 1px)));
+}
+
+.titulo {
+  font-size: calc(44 * var(--um, var(--u, 1px)));
+  line-height: 1.15;
+  font-weight: 400;
+  color: var(--auth-text);
+}
+
+.separador {
+  /* como no design do C04, o separador excede a largura dos campos em 18px/lado */
+  margin: calc(32 * var(--um, var(--u, 1px))) -18px 0;
+  border: 0;
+  border-top: 1px solid var(--auth-text);
+}
+
+.aviso {
+  margin-top: calc(28 * var(--um, var(--u, 1px)));
+  font-size: calc(18 * var(--um, var(--u, 1px)));
+  line-height: 1.5;
+  color: var(--auth-text-muted);
+}
+
+.aviso strong {
+  color: var(--auth-text);
+}
+
+.acoes {
+  margin-top: calc(36 * var(--um, var(--u, 1px)));
+  display: flex;
+  gap: calc(19 * var(--um, var(--u, 1px)));
+}
+
+.botaoVoltar {
+  flex: 1;
+  height: calc(56 * var(--um, var(--u, 1px)));
+  border: 1px solid var(--auth-text-muted);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-modal-field);
+  color: var(--auth-text-muted);
+  font: inherit;
+  font-size: calc(22 * var(--um, var(--u, 1px)));
+  cursor: pointer;
+}
+
+.botaoConfirmar {
+  flex: 1;
+  height: calc(56 * var(--um, var(--u, 1px)));
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: calc(22 * var(--um, var(--u, 1px)));
+  cursor: pointer;
+}
+
+.botaoVoltar:disabled,
+.botaoConfirmar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.botaoVoltar:focus-visible,
+.botaoConfirmar:focus-visible {
+  outline: 2px solid var(--auth-text);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .painel {
+    padding: 24px 20px 28px;
+    border-radius: 0;
+  }
+
+  .titulo {
+    font-size: 28px;
+  }
+
+  .acoes {
+    flex-direction: column-reverse;
+  }
+
+  .botaoVoltar,
+  .botaoConfirmar {
+    min-height: 48px;
+    font-size: 18px;
+  }
+}

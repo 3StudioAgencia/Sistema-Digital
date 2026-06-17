@@ -114,6 +114,20 @@ class SqlAlchemyProvasRepository(ProvasRepositoryPort):
         )
         await self._session.execute(stmt)
 
+    async def incrementar_ciclo(self, prova_id: str) -> int:
+        # Incremento ATÔMICO no próprio banco (``ciclo_atual = ciclo_atual + 1``):
+        # sem ler-e-reescrever no app, sem corrida (a linha já está sob o lock
+        # ``FOR UPDATE`` do reinício). RETURNING devolve o NOVO valor para a borda
+        # refletir o novo ciclo. GRANT de UPDATE(ciclo_atual) a authenticated vem
+        # da migration 0018; o commit é do caso de uso (RNF-017).
+        stmt = (
+            update(ProvaRow)
+            .where(ProvaRow.id == prova_id)
+            .values(ciclo_atual=ProvaRow.ciclo_atual + 1)
+            .returning(ProvaRow.ciclo_atual)
+        )
+        return (await self._session.execute(stmt)).scalar_one()
+
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:
         # Resolve por código único (índice ``uq_provas_codigo`` — RNF-019),
         # escopado pela RLS da sessão: fora do escopo a linha simplesmente não

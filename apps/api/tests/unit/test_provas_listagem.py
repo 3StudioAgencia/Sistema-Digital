@@ -61,6 +61,9 @@ class FakeProvasRepo(ProvasRepositoryPort):
     ) -> None:  # pragma: no cover
         raise NotImplementedError
 
+    async def incrementar_ciclo(self, prova_id: str) -> int:  # pragma: no cover
+        raise NotImplementedError
+
     async def buscar_por_codigo(self, codigo: str) -> Prova | None:  # pragma: no cover - C10
         raise NotImplementedError
 

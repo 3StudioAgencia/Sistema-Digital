@@ -21,11 +21,14 @@ Orquestra a §6 de forma ATÔMICA (RNF-017) e IDEMPOTENTE (RNF-015/DP-2):
    falha no meio → rollback completo: assinatura e movimentação **nascem/falham
    juntas**, a prova nunca fica em estado inconsistente nem com assinatura órfã.
 
-NÃO desenha timeline (C13) nem mexe em ``ciclo_atual`` (C15) — apenas MODELA e
-EXECUTA as transições; as camadas de UI/ação (Cancelar=C14, Reiniciar=C15)
-INVOCAM este motor (Cancelar pelo endpoint dedicado ``POST /provas/{id}/cancelar``
-— ação administrativa sem assinatura). ``acoes_disponiveis`` reusa as regras do
-C11 para orientar a tela de confirmação do C12 (DP-3), sem duplicar a §6.
+NÃO desenha timeline (C13). O Reinício de Ciclo (W3-C15) é a ÚNICA ação que mexe
+em ``ciclo_atual``: ``executar`` o INCREMENTA na MESMA transação da mudança de
+status (``incrementa_ciclo`` — DP-1), DEPOIS de carimbar a movimentação com o
+ciclo que se encerra (pré-incremento — DP-3). As camadas de UI/ação (Cancelar=C14,
+Reiniciar=C15) INVOCAM este motor pelos endpoints dedicados
+(``POST /provas/{id}/cancelar`` e ``.../reiniciar`` — ações administrativas sem
+assinatura). ``acoes_disponiveis`` reusa as regras do C11 para orientar a tela de
+confirmação do C12 (DP-3), sem duplicar a §6.
 """
 
 import logging
@@ -50,6 +53,7 @@ from src.domain.state_machine.machine import (
     autoriza,
     avaliar_transicao,
     exige_assinatura,
+    incrementa_ciclo,
     transicoes_de,
 )
 from src.domain.state_machine.rules import ESTADOS_TERMINAIS, Transicao
@@ -125,8 +129,10 @@ class ProvasTransicaoService:
         """Move a prova conforme a §6, atômica e idempotente. Ações operacionais
         gravam a assinatura desenhada como comprovante (RN-003); ações
         administrativas (Cancelar/Reiniciar — §6.6) passam ``assinatura_imagem``
-        ``None`` e gravam a movimentação sem traço (ADR-066). Devolve a prova
-        atualizada (+ nome do vendedor) para a borda renderizar o novo estado."""
+        ``None`` e gravam a movimentação sem traço (ADR-066). O Reinício de Ciclo
+        (W3-C15) ainda INCREMENTA ``ciclo_atual`` na MESMA transação (DP-1).
+        Devolve a prova atualizada (+ nome do vendedor) para a borda renderizar o
+        novo estado e o novo ciclo."""
         async with self._uow:
             prova = await self._repo.obter_para_transicao(prova_id)
             if prova is None:
@@ -196,12 +202,22 @@ class ProvasTransicaoService:
                     # Corrida que escapou do lock (chave reusada em outra prova) —
                     # converge para conflito, nunca duplica (o rollback é do __aexit__).
                     raise TransicaoIdempotenciaConflitoError() from exc
+                # W3-C15/DP-1: o Reinício de Ciclo abre um NOVO ciclo — incrementa
+                # ``ciclo_atual`` na MESMA transação, DEPOIS de carimbar a
+                # movimentação (acima) com ``prova.ciclo_atual`` (o ciclo que se
+                # encerra — DP-3). Transição e incremento nascem/falham juntos
+                # (RNF-017). Idempotente: o reenvio cai no ramo ``existente`` acima
+                # e NÃO reincrementa (a prova relida já traz o ciclo novo).
+                ciclo_resultante = prova.ciclo_atual
+                if incrementa_ciclo(acao):
+                    ciclo_resultante = await self._repo.incrementar_ciclo(prova_id)
                 await self._uow.commit()
                 resultado = replace(
                     prova,
                     status=transicao.estado_destino,
                     finalizada_em=finalizada,
                     updated_at=quando,
+                    ciclo_atual=ciclo_resultante,
                 )
                 logger.info(
                     "prova transicionada",
@@ -213,6 +229,7 @@ class ProvasTransicaoService:
                         "acao": acao.value,
                         "ator_id": self._ator.id,
                         "assinatura_id": assinatura_ref,
+                        "ciclo": ciclo_resultante,
                     },
                 )
 

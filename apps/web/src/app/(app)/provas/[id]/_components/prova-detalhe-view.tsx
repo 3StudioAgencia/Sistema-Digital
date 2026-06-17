@@ -40,6 +40,7 @@ import { estaAtiva, rotuloStatus } from "@/lib/provas/status-labels";
 
 import { CancelarProvaModal } from "./cancelar-prova-modal";
 import { ProofTimeline } from "./ProofTimeline";
+import { ReiniciarCicloModal } from "./reiniciar-ciclo-modal";
 
 import styles from "../prova-detalhe.module.css";
 
@@ -59,10 +60,13 @@ function formatarData(iso: string | null): string {
 export function ProvaDetalheView({
   provaId,
   podeCancelar = false,
+  podeReiniciar = false,
 }: {
   provaId: string;
   /** W3-C14: o servidor já resolveu se este perfil pode cancelar (Matriz §7). */
   podeCancelar?: boolean;
+  /** W3-C15: o servidor já resolveu se este perfil pode reiniciar ciclo (Matriz §7). */
+  podeReiniciar?: boolean;
 }) {
   const reduced = useReducedMotion();
   const router = useRouter();
@@ -87,9 +91,19 @@ export function ProvaDetalheView({
   const [aberturaCancelar, setAberturaCancelar] = useState(0);
   const [recarregarTimeline, setRecarregarTimeline] = useState(0);
 
+  // W3-C15: reinício de ciclo (modal de confirmação) — mesma técnica de remontagem
+  // por `key` (estado fresco + nova chave de idempotência a cada abertura).
+  const [reiniciarAberto, setReiniciarAberto] = useState(false);
+  const [aberturaReiniciar, setAberturaReiniciar] = useState(0);
+
   function abrirCancelar() {
     setAberturaCancelar((n) => n + 1);
     setCancelarAberto(true);
+  }
+
+  function abrirReiniciar() {
+    setAberturaReiniciar((n) => n + 1);
+    setReiniciarAberto(true);
   }
 
   // `router`/`toast` são estáveis em produção, mas mantidos FORA das deps do
@@ -200,6 +214,16 @@ export function ProvaDetalheView({
     setRecarregarTimeline((n) => n + 1);
   }
 
+  // W3-C15: reinício concluído — reflete o novo estado ("Criada" + ciclo_atual
+  // incrementado) a partir da resposta (sem refetch), fecha o modal e recarrega a
+  // timeline (a movimentação de reinício e o novo ciclo aparecem separados — C13).
+  // O botão some sozinho (a prova não está mais em "Reprovada pelo Vendedor").
+  function aoReiniciar(atualizada: ProvaDetalhe) {
+    setProva(atualizada);
+    setReiniciarAberto(false);
+    setRecarregarTimeline((n) => n + 1);
+  }
+
   const duracao = reduced ? DURATION.instant : DURATION.medium;
   // Entrada suave dos cartões (opacity + leve y), com pequeno stagger entre eles;
   // instantânea sob prefers-reduced-motion. Só transform/opacity (GPU — §3.4).
@@ -293,7 +317,21 @@ export function ProvaDetalheView({
                   {baixando ? "Baixando…" : "Baixar etiqueta"}
                 </motion.button>
 
-                {/* W3-C14: ação destrutiva na MESMA linha (3 botões) — só ao 3Studio
+                {/* W3-C15: reiniciar ciclo (construtivo) na MESMA linha — só ao
+                    3Studio (podeReiniciar) e SÓ em "Reprovada pelo Vendedor" (o único
+                    estado onde o motor do C11 aceita o reinício — RN-006). */}
+                {podeReiniciar && prova.status === "reprovada_vendedor" && (
+                  <motion.button
+                    type="button"
+                    className={styles.btnReiniciar}
+                    onClick={abrirReiniciar}
+                    {...toque}
+                  >
+                    Reiniciar ciclo
+                  </motion.button>
+                )}
+
+                {/* W3-C14: ação destrutiva na MESMA linha — só ao 3Studio
                     (podeCancelar) e só em estados ATIVOS (some em Cancelada/Recebida). */}
                 {podeCancelar && estaAtiva(prova.status) && (
                   <motion.button
@@ -351,6 +389,16 @@ export function ProvaDetalheView({
               aberto={cancelarAberto}
               onFechar={() => setCancelarAberto(false)}
               onCancelada={aoCancelar}
+            />
+          )}
+
+          {podeReiniciar && (
+            <ReiniciarCicloModal
+              key={aberturaReiniciar}
+              prova={prova}
+              aberto={reiniciarAberto}
+              onFechar={() => setReiniciarAberto(false)}
+              onReiniciada={aoReiniciar}
             />
           )}
         </>

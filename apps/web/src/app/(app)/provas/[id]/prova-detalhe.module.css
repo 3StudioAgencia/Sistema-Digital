@@ -147,9 +147,10 @@
   overflow-wrap: anywhere;
 }
 
-/* Ações: Visualizar etiqueta (amarelo) · Baixar etiqueta (preto) · Cancelar prova
-   (perigo — W3-C14). Flex com larguras IGUAIS: 2 botões → 50/50; com a ação de
-   cancelar (3Studio em estado ativo) → 3 botões a 1/3 cada, na MESMA linha. */
+/* Ações: Visualizar etiqueta (amarelo) · Baixar etiqueta (preto) · Reiniciar ciclo
+   (construtivo — W3-C15, só em "Reprovada pelo Vendedor") · Cancelar prova (perigo
+   — W3-C14). Flex com larguras IGUAIS (flex: 1 1 0): 2 botões → 50/50; com as ações
+   administrativas do 3Studio → até 4 botões na MESMA linha (cada um 1/N). */
 .acoes {
   margin-top: calc(40 * var(--u));
   display: flex;
@@ -158,7 +159,8 @@
 
 .btnPrimario,
 .btnSecundario,
-.btnPerigo {
+.btnPerigo,
+.btnReiniciar {
   flex: 1 1 0;
   min-width: 0;
   height: calc(68 * var(--u));
@@ -213,6 +215,28 @@
 
 .btnPerigo:focus-visible {
   outline: 2px solid var(--app-danger);
+  outline-offset: 2px;
+}
+
+/* Reiniciar ciclo (W3-C15): ação CONSTRUTIVA (a prova "renasce") — contorno
+   discreto na cor da tinta (≠ do perigo vermelho do cancelar), na MESMA linha das
+   ações de etiqueta — só aparece ao 3Studio em "Reprovada pelo Vendedor". */
+.btnReiniciar {
+  border: 1px solid var(--app-ink);
+  background: transparent;
+  color: var(--app-ink);
+  transition:
+    background var(--motion-micro) var(--motion-ease-standard),
+    color var(--motion-micro) var(--motion-ease-standard);
+}
+
+.btnReiniciar:hover {
+  background: var(--app-ink);
+  color: var(--auth-text);
+}
+
+.btnReiniciar:focus-visible {
+  outline: 2px solid var(--app-ink);
   outline-offset: 2px;
 }
 
@@ -348,6 +372,7 @@
   .btnPrimario,
   .btnSecundario,
   .btnPerigo,
+  .btnReiniciar,
   .voltar {
     min-height: 48px;
     font-size: 16px;
