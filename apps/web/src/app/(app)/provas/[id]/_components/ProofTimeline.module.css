@@ -128,7 +128,7 @@
   inset: calc(-6 * var(--u));
   border-radius: 50%;
   border: calc(2 * var(--u)) solid var(--app-accent);
-  animation: tlPulse 1600ms ease-in-out infinite;
+  animation: tlPulse var(--motion-pulse) ease-in-out infinite;
 }
 
 @keyframes tlPulse {

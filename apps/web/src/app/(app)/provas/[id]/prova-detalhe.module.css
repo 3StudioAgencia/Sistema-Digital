@@ -203,11 +203,11 @@
   border: 1px solid var(--app-danger);
   background: transparent;
   color: var(--app-danger);
-  transition:
-    background var(--motion-micro) var(--motion-ease-standard),
-    color var(--motion-micro) var(--motion-ease-standard);
 }
 
+/* Preenchimento de perigo INSTANTÂNEO no hover: background/color estão fora do
+   allowlist de animação (só transform/opacity — CLAUDE.md §3 pilar 4), então a
+   mudança de estado não é transicionada. */
 .btnPerigo:hover {
   background: var(--app-danger);
   color: var(--auth-text);
@@ -225,11 +225,10 @@
   border: 1px solid var(--app-ink);
   background: transparent;
   color: var(--app-ink);
-  transition:
-    background var(--motion-micro) var(--motion-ease-standard),
-    color var(--motion-micro) var(--motion-ease-standard);
 }
 
+/* Mesma regra do .btnPerigo: a mudança de background/color no hover é instantânea
+   (fora do allowlist transform/opacity — CLAUDE.md §3 pilar 4). */
 .btnReiniciar:hover {
   background: var(--app-ink);
   color: var(--auth-text);

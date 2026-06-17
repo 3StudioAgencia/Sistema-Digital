@@ -29,7 +29,9 @@ type DropdownProps<T extends string> = {
   labelledBy?: string;
   /** id do texto de erro a anunciar (aria-describedby), quando inválido. */
   describedBy?: string;
-  /** Marca o gatilho como inválido (aria-invalid) — feedback de erro do form. */
+  /** Marca o gatilho como inválido: anuncia o erro via aria-describedby. (O role
+      implícito `button` não suporta aria-invalid — jsx-a11y; por isso o feedback
+      de erro vem do describedBy + estilo visual, não do atributo.) */
   invalido?: boolean;
   /** Desabilita o gatilho (ex.: enquanto as opções carregam) — não abre. */
   disabled?: boolean;
@@ -154,7 +156,6 @@ export function Dropdown<T extends string>({
         aria-label={ariaLabel}
         aria-labelledby={labelledBy}
         aria-describedby={invalido ? describedBy : undefined}
-        aria-invalid={invalido || undefined}
         disabled={disabled}
         onClick={() => (aberto ? fechar() : abrir())}
         onKeyDown={(event) => {

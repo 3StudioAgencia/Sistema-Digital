@@ -109,7 +109,6 @@ export function NovaProvaView() {
         // excedentes não apareceriam no select — alerta em vez de truncar mudo
         // (o paginador chega com o C07). Improvável no porte da 3Studio.
         if (pagina.total > pagina.items.length) {
-          // eslint-disable-next-line no-console
           console.warn(
             `Nova prova: ${pagina.total} vendedores ativos, exibindo ${pagina.items.length} ` +
               "(teto da API). Vendedores além do limite não aparecem no select.",
