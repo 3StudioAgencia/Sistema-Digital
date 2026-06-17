@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 18 — 2026-06-17 — [Wave 3 / Componente C15] Reinício de Ciclo (Reprovação) — **fecha a Wave 3**
+
+**Objetivo:** Entregar a **ação administrativa de reiniciar o ciclo** de uma prova reprovada — disponível ao 3Studio **só em "Reprovada pelo Vendedor"**, **invocando o motor do C11** (→ `criada`), **incrementando `ciclo_atual` na mesma transação atômica**, preservando rota e histórico, **sem assinatura e sem motivo** (§6.6 — só confirmação).
+
+**Feito:**
+- **Grounding (régua PARE E PERGUNTE):** workflow de 7 leitores paralelos sobre o motor do C11 (`rules.py`/`machine.py`/`enums.py`/`transicoes.py`), o cancelamento do C14 (molde), schema de `movimentacoes`/grants, RBAC, a timeline do C13 e o slot do botão no C08 — corroborado por leituras diretas dos arquivos decisivos. **Achados que encolheram o C15:** (1) a aresta `_REINICIAR` (`reprovada_vendedor → criada`, ADMIN) **já existia em todas as 4 rotas**; (2) `Recurso.REINICIAR_CICLO` **já existia** nos 3 espelhos RBAC (admin-only); (3) o motor **já carimbava** `movimentacoes.ciclo` — DP-3 **sem retroação**; (4) o motor **deliberadamente não** mexia em `ciclo_atual`. **Bloqueador descoberto:** o GRANT de UPDATE de `provas` a `authenticated` é de **coluna** (3 colunas) e **não** incluía `ciclo_atual` → o incremento falharia com *"permission denied for column"* no role NOBYPASSRLS. Apresentei os 5 Pontos de Decisão e **aguardei** as respostas.
+- **Decisões do dono (DP-1..5):** Pré-incremento (a movimentação de reinício fecha o ciclo N); **sem motivo** (só confirmação); botão **construtivo** (não-perigo); seguir o padrão C04/C08 (sem Figma).
+- **Backend:** `incrementa_ciclo(acao)` + `ACOES_REINICIO` (domínio, fonte única); `ProvasRepositoryPort.incrementar_ciclo` (UPDATE atômico `ciclo_atual+1 RETURNING`); `executar` chama o incremento na mesma transação **depois** de registrar a movimentação (carimbo pré-incremento) e reflete o novo ciclo no resultado; **migration `0018`** (GRANT `UPDATE(ciclo_atual)` + mirror `provas_grants.sql` com as 4 colunas); `get_reinicio_service` (gate `REINICIAR_CICLO`) + endpoint dedicado **`POST /provas/{id}/reiniciar`** (`ReiniciarIn{idempotency_key}`).
+- **Frontend:** `reiniciarCiclo` (`lib/api/transicoes.ts`); `podeReiniciar` resolvido no servidor (`page.tsx`, mesmo `fetchUsuarioAtual`); botão `.btnReiniciar` (construtivo) no `.acoes`, gated `podeReiniciar && status === "reprovada_vendedor"`; `ReiniciarCicloModal` (sem motivo) reusando `MotionModal`; sucesso reflete "Criada" + ciclo da resposta e recarrega a timeline.
+- **Deploy:** migration `0018` **aplicada no Supabase real** (`alembic_version=0018`; grant de `provas` agora `ciclo_atual, finalizada_em, status, updated_at`; advisors **sem achados novos** — só os 2 pré-existentes).
+
+**Decisões (ADRs):**
+- **ADR-076:** reiniciar via o motor do C11 + incremento atômico de `ciclo_atual`, endpoint dedicado + 2 camadas + GRANT 0018 (DP-1).
+- **ADR-077:** reinício sem assinatura nem motivo — só confirmação (DP-2).
+- **ADR-078:** carimbo de ciclo pré-incremento + UX construtiva/gating server-side (DP-3·DP-4·DP-5).
+
+**Testes / cobertura:**
+- api: `test_state_machine.py` (+`incrementa_ciclo` e derivação travada), `test_transicao_service.py` (+incremento/idempotência/carimbo/estado inválido), **`test_reinicio_endpoints.py`** (@db: feliz/rota+histórico preservados/estados inválidos/403 borda/401/idempotência sem reincrementar/Vendedor-admin/404), `test_migrations.py` (head `0018` + asserção do grant). **735 verdes, 94,0%** (machine.py 100%, transicoes.py 99%, rules.py 100%) — `ruff`/`mypy --strict` limpos.
+- web: `prova-detalhe-view.test.tsx` (+4 casos de reinício). **165 verdes**; `lint`/`build` limpos (2 warnings pré-existentes alheios).
+
+**Pendências / em aberto:**
+- [ ] **Auditoria da Wave 3** (como nas waves anteriores) antes de iniciar a Wave 4 — Wave 3 (C10–C15) está completa.
+- [ ] Pendências de responsável herdadas (não-bloqueantes do C15): habilitar o hook de claims no dashboard, cadastrar `SUPABASE_SECRET_KEY`/`KEEPALIVE_DATABASE_URL`, política de senha, ativar o role `rastreio_runtime` (LOGIN/senha) em produção.
+
+**Próximo passo:**
+- **W4-C16 · Dashboard com Contadores em Tempo Real** (abre a Wave 4) — sugerida a **auditoria da Wave 3** antes.
+
+**Definition of Done:** ✅ atendida — code review (revisão própria + workflow de grounding), testes ≥80% domínio/serviço e **≥95% na máquina de estados (100%)**, integração @db verde, migration `0018` versionada/documentada/aplicada (upgrade+downgrade limpos), validada contra os critérios §6 e a Matriz §7 (acesso não-3Studio bloqueado em 2 camadas), sem erros de console/logs críticos, docs do módulo (`docs/reinicio-ciclo.md`), animação do modal com `prefers-reduced-motion`, idempotência verificada (sem duplo-incremento), sem segredos versionados.
+
+---
+
 ## Sessão 17 — 2026-06-17 — [Wave 3 / Componente C14] Cancelamento de Prova Digital
 
 **Objetivo:** Entregar a **ação administrativa de cancelar** uma prova — disponível ao 3Studio em qualquer estado ativo, com motivo obrigatório, **invocando o motor do C11** (→ `cancelada`), terminal e irreversível (RN-005), preservando o histórico.
