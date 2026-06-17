@@ -9,7 +9,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: calc(40 * var(--u)) 28px calc(28 * var(--u));
+  /* Padding mais generoso que as demais telas (só o dashboard): afasta o bento
+     das laterais do shell, fiel à referência. Escala com --u como o resto. */
+  padding: calc(56 * var(--u)) calc(64 * var(--u)) calc(48 * var(--u));
 }
 
 /* -------------------------------------------------- grade bento */
@@ -19,7 +21,10 @@
   display: grid;
   gap: calc(22 * var(--u));
   grid-template-columns: 1fr 1fr 0.92fr;
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  /* Linhas 3-4 (atalhos / Na clicheria) MENORES que os contadores: os botões de
+     atalho ficam baixos e "Na clicheria" (linhas 3+4) acompanha a altura dos dois
+     somados — fiel à referência. */
+  grid-template-rows: minmax(0, 2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "criadas comvend atras"
     "aprov   aprov   atras"
@@ -97,7 +102,7 @@
   height: calc(58 * var(--u));
   border-radius: calc(14 * var(--u));
   background: var(--app-accent);
-  color: #ffffff;
+  color: var(--app-ink); /* ícone PRETO no box amarelo (≠ placeholder do Figma) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,7 +236,9 @@
   cursor: pointer;
   font: inherit;
   border-radius: var(--app-card-radius);
-  padding: calc(28 * var(--u)) calc(40 * var(--u));
+  /* Atalhos mais baixos (a referência os tem curtos); a altura final vem da linha
+     do grid (1fr, menor que os contadores) — o padding só garante respiro. */
+  padding: calc(20 * var(--u)) calc(40 * var(--u));
   transition: transform var(--motion-micro) var(--motion-ease-standard);
 }
 

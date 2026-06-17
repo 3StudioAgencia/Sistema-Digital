@@ -13,7 +13,16 @@
  * polling, sem refetch por card. A queda do Realtime degrada graciosamente
  * (mantém o último valor); a carga inicial vem SSR (sem waterfall).
  */
-import { FileText, Plus, QrCode } from "lucide-react";
+import {
+  Clock,
+  FileCheck2,
+  FilePlus2,
+  Plus,
+  Printer,
+  QrCode,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -128,6 +137,7 @@ export function DashboardView({
     rotulo: string,
     valor: number,
     area: string,
+    Icone: LucideIcon,
     onClick: () => void,
     largo = false,
   ) => (
@@ -139,7 +149,7 @@ export function DashboardView({
       <span className={styles.cardTopo}>
         <span className={styles.cardTitulo}>{rotulo}</span>
         <span className={styles.cardIcone} aria-hidden>
-          <FileText strokeWidth={2} />
+          <Icone strokeWidth={2} />
         </span>
       </span>
       <AnimatedCounter value={valor} className={styles.cardNumero} />
@@ -149,10 +159,10 @@ export function DashboardView({
   return (
     <section className={styles.pagina} aria-label="Dashboard">
       <div className={styles.bento}>
-        {cardContador("Criadas hoje", dados.criadas_hoje, styles.criadas, () =>
+        {cardContador("Criadas hoje", dados.criadas_hoje, styles.criadas, FilePlus2, () =>
           irPara([["criada", hojeSaoPaulo()]]),
         )}
-        {cardContador("Com Vendedor", dados.com_vendedor, styles.comVendedor, () =>
+        {cardContador("Com Vendedor", dados.com_vendedor, styles.comVendedor, UserRound, () =>
           irPara([
             ["status", "retirada_vendedor"],
             ["status", "encaminhada_para_vendedor"],
@@ -162,10 +172,11 @@ export function DashboardView({
           "Aprovadas",
           dados.aprovadas,
           styles.aprovadas,
+          FileCheck2,
           () => irPara([["status", "aprovada_vendedor"]]),
           true,
         )}
-        {cardContador("Na clicheria", dados.na_clicheria, styles.naClicheria, () =>
+        {cardContador("Na clicheria", dados.na_clicheria, styles.naClicheria, Printer, () =>
           irPara([["status", "recebida_clicheria"]]),
         )}
 
@@ -174,7 +185,7 @@ export function DashboardView({
           <span className={styles.cardTopo}>
             <span className={styles.cardTitulo}>Atrasadas</span>
             <span className={styles.cardIcone} aria-hidden>
-              <FileText strokeWidth={2} />
+              <Clock strokeWidth={2} />
             </span>
           </span>
           <ul className={styles.atrasadasLista} aria-label="Atrasadas por vendedor">
