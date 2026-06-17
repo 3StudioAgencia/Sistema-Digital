@@ -32,6 +32,36 @@
 
 ---
 
+## Sessão 21 — 2026-06-17 — [Wave 4 / Componente C16] Dashboard com Contadores em Tempo Real — **abre a Wave 4**
+
+**Objetivo:** Entregar o dashboard de visibilidade operacional **fiel ao design** (layout bento), com contadores em tempo real, clicáveis, escopados por perfil (RLS), via **uma única** subscription Realtime e **uma única** consulta de agregação — reconciliando o design com o RF-015.
+
+**Feito:**
+- **Pontos de Decisão (§4) apresentados em bloco e respondidos pelo dono** (AskUserQuestion) ANTES de codificar.
+- **Backend (consulta única — RNF-022, mínimo de requisições):** `domain/dashboard.py` (DTOs + mapeamento contador→status DP-2 + janela comercial de referência); `application/ports/dashboard_repository.py` + `adapters/outbound/db/dashboard_repository.py` (UMA query SQL retornando os 5 contadores + breakdown de "Atrasadas" por vendedor/total, lendo o delay do C09 inline e chamando `private.instante_limite_atraso`/`private.nomes_de_vendedores` na mesma ida); `application/dashboard.py` (serviço fino); `adapters/inbound/http/dashboard.py` (`GET /dashboard`); `get_dashboard_service` (gate `DASHBOARD` universal, sessão RLS) + router em `app.py`.
+- **Migration `0020`** — `private.instante_limite_atraso(timestamptz, integer)` (horas úteis seg–sex 07–18, fuso America/São_Paulo, instante-limite por monotonicidade; schema `private` não exposto; `STABLE`/`SECURITY INVOKER`/`search_path=''`) + grant + espelho `migrations/rls/instante_limite_atraso.sql`. `upgrade`/`downgrade` testados.
+- **Shared SQL** `adapters/outbound/db/atraso_sql.py` (predicado "atrasada" — fonte única; terminais derivados de `ESTADOS_TERMINAIS`).
+- **C07 estendido (DP-6, sem regressão):** `FiltrosProvas.status` virou tupla (multi-valor → `IN`) + `atrasada`; endpoint aceita `status` repetido + `atrasada`; repo aplica os filtros. Front: `listarProvas` envia múltiplos `status`/`atrasada`; `provas-view` lê `getAll("status")` + `atrasada` + chip "Atrasadas ✕".
+- **Frontend:** `components/ui/animated-counter/AnimatedCounter.tsx` (count-up RF-025, reduced-motion); `lib/api/dashboard.ts` + `fetchDashboard` server (SSR) em `lib/api/server.ts`; `app/(app)/dashboard/page.tsx` (perfil + carga SSR) + `_components/dashboard-view.tsx` (bento, cards clicáveis, Atrasadas lista+total, atalhos role-aware, **UMA** subscription Realtime → refetch único debounced, degradação graciosa) + `dashboard.module.css` + tokens `--dash-*` em `globals.css`.
+- `docs/dashboard.md` (conjunto reconciliado, agregação única, cálculo de atraso, breakdown, Realtime, escopo, navegação, checklist §6).
+
+**Decisões (ADRs):** ADR-080 (DP-1: design exato, desvio consciente do RF-015 — §2.1) · ADR-081 (DP-2: mapeamento contador→status, "Na clicheria"=`recebida_clicheria`) · ADR-082 (DP-3: atalhos role-aware) · ADR-083 (DP-4: "Atrasadas" por vendedor + horas úteis via instante-limite único, sem polling) · ADR-084 (DP-5: Realtime único + agregação única RLS-escopada / mínimo de requisições) · ADR-085 (DP-6: bento sem Recharts + count-up + C07 multi-status/`atrasada`).
+
+**Testes / cobertura:**
+- Backend (@db, Postgres real `.tmp-pg` na 5432): `test_dashboard.py` (unit: serviço + mapeamento DP-2), `test_dashboard_endpoints.py` (função de horas úteis — 5 casos noite/fim de semana; escopo por perfil studio/admin/vendedor/motorista; breakdown ordenado; última movimentação ≠ created_at; terminal excluído; **sem N+1**; 401/403), `test_provas_listagem_atrasada_endpoints.py` (multi-status `IN`, status único intacto, `atrasada`, combinação). `test_migrations.py` atualizado (head `0020` + função no `private` no upgrade, removida no downgrade). **Suíte completa: 778 testes verdes** (`ruff`/`mypy --strict` limpos).
+- Frontend: `dashboard-view.test.tsx` (render fiel, count-up, **uma** subscription + cleanup, evento → refetch único debounced + update, degradação graciosa, cliques → deep-links, atalho Nova Prova oculto p/ não-3Studio, carga sem SSR). **173 testes verdes** (`pnpm lint`/`build`/`format:check` limpos). **C07 sem regressão.**
+
+**Pendências / em aberto:**
+- [ ] **Operação (push em tempo real):** habilitar a replicação da tabela `provas` no painel do Supabase (Database → Replication / `supabase_realtime`) — sem isso o painel funciona com a carga SSR, só não recebe push automático.
+- [ ] (latente, fora de escopo) — o `prettier --check` da Wave anterior estava com um arquivo de teste do C08 dessincronizado; reformatado nesta sessão para manter `format:check` verde.
+
+**Próximo passo:**
+- **W5-C17 — Relatórios Gerenciais com Distribuição por Rota** (abre a Wave 5): tempo médio por etapa, taxa de reprovação, distribuição por rota, export CSV (agregações analíticas sobre `provas`/`movimentacoes`). Comando: cole o prompt do C17 com os docs de contexto + Waves 0–4.
+
+**Definition of Done:** ✅ atendida — code review interno, testes (escopo por perfil, sem N+1, horas úteis, breakdown), migration versionada/`upgrade`+`downgrade`, sem polling (RNF-021), agregação única (RNF-022), count-up com `prefers-reduced-motion`, sem segredos versionados, docs do módulo, **migration `0020` aplicada no Supabase real**.
+
+---
+
 ## Sessão 20 — 2026-06-17 — [Wave 3 / Remediação] Fechamento dos achados da auditoria da Wave 3
 
 **Objetivo:** Sessão de **remediação dirigida pelo relatório** `docs/audits/AUDITORIA-WAVE-3.md` (veredito GO, 0 Críticos/0 Altos). Fechar os 3 Médios + os Baixos endereçáveis, cada correção blindada por teste de regressão, sem abrir novo buraco (nenhum caminho de status fora do motor, sem perda de atomicidade/idempotência, sem enfraquecer RLS/anti-enumeração). Re-auditável ao final.
