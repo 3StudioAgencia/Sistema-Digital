@@ -4,8 +4,10 @@
    escala --u, tokens --app-*, raios e pills da plataforma. */
 
 .pagina {
-  flex: 1;
-  min-height: 0;
+  /* Cresce com o conteúdo (flex-shrink 0) em vez de ficar preso à altura do
+     viewport: assim a página inteira rola no `.conteudoInterno` (overflow-y:auto)
+     quando a timeline é longa, em vez de transbordar para fora do card. */
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: calc(28 * var(--u));
@@ -193,6 +195,9 @@
   min-height: calc(320 * var(--u));
   display: flex;
   flex-direction: column;
+  /* Nunca encolher abaixo do conteúdo: a timeline (até 11 etapas) cresce o card,
+     que estende a página (rolável) — sem transbordar para fora do card. */
+  flex-shrink: 0;
 }
 
 .historicoTitulo {
