@@ -135,6 +135,17 @@ e apontar `DATABASE_URL` para ele (no pooler do Supabase, usuário
 `rastreio_runtime.<project-ref>`). Tarefas de sistema (migrations,
 `bootstrap_admin`, keep-alive) permanecem no owner via `MIGRATIONS_DATABASE_URL`.
 
+> **Obrigatório em staging/produção (M-01 — remediação W3).** Apontar `DATABASE_URL`
+> ao owner/superuser deixaria a RLS inerte (BYPASSRLS ignora as policies; o
+> `FORCE` não anula). Por isso a app faz uma **checagem de boot**
+> (`verificar_role_runtime_nao_privilegiado`, em `infrastructure/database.py`):
+> em `staging`/`production`, **recusa subir** se o role de conexão for
+> superuser/`BYPASSRLS`. Em `dev`/`test` o gate é no-op (conecta-se como `postgres`
+> de propósito). `FORCE ROW LEVEL SECURITY` **não** foi adicionado: um superuser o
+> ignora de qualquer modo e ele quebraria os resolvedores `private.*`
+> (`SECURITY DEFINER` rodam como owner) — o controle que fecha o cenário é o role
+> NOBYPASSRLS acima. Detalhe em `docs/rbac.md` §"Role de runtime".
+
 **Equivalência (extensão do harness do C05):** `test_equivalencia_rls_provas.py`
 trava domínio ↔ `rls/*.sql` ↔ migration (offline); `test_rls_provas.py` (@db)
 valida cada célula da Matriz com provas semeadas em vários status, **sem**

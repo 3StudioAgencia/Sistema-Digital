@@ -111,6 +111,78 @@ async def ping(engine: AsyncEngine) -> bool:
     return True
 
 
+# Ambientes de deploy onde a checagem de role privilegiado vale. Em dev/test
+# conecta-se de propósito como owner (`postgres`) — ver o gate abaixo.
+_AMBIENTES_COM_CHECAGEM_DE_ROLE = frozenset({"staging", "production"})
+
+
+class RoleDeRuntimePrivilegiadoError(RuntimeError):
+    """Boot recusado: o runtime conectou com um role superuser/``BYPASSRLS``.
+
+    Endurecimento operacional do achado M-01 (auditoria W3). A camada inferior do
+    RBAC (RLS) só é uma defesa INDEPENDENTE se o role de conexão não puder
+    ignorá-la — um superuser ou um role com ``BYPASSRLS`` passa por cima das
+    policies, e o ``FORCE ROW LEVEL SECURITY`` não anula isso. O controle que
+    realmente fecha o cenário é conectar como role não-owner/``NOBYPASSRLS``.
+    """
+
+
+def _exigir_role_runtime_nao_privilegiado(
+    *, app_env: str, role: str, is_superuser: bool, bypassrls: bool
+) -> None:
+    """Em staging/produção, recusa um role de conexão que ignore a RLS (M-01).
+
+    Pura e testável: decide só a partir dos flags lidos do catálogo. Em dev/test
+    NÃO faz nada — esses ambientes conectam como owner (`postgres`) de propósito
+    (a suíte @db, o seed e as migrations dependem disso)."""
+    if app_env not in _AMBIENTES_COM_CHECAGEM_DE_ROLE:
+        return
+    if is_superuser or bypassrls:
+        raise RoleDeRuntimePrivilegiadoError(
+            f"Runtime conectado como role privilegiado '{role}' "
+            f"(superuser={is_superuser}, bypassrls={bypassrls}) em '{app_env}': a RLS "
+            "seria ignorada (fail-open na camada de banco). Aponte DATABASE_URL para um "
+            "role não-owner NOBYPASSRLS (ex.: rastreio_runtime). Ver .env.example e "
+            "docs/rbac.md."
+        )
+
+
+_ROLE_INTROSPECT_SQL = (
+    "SELECT current_user AS role, "
+    "current_setting('is_superuser') = 'on' AS is_super, "
+    "COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user), false) "
+    "AS bypass_rls"
+)
+
+
+async def verificar_role_runtime_nao_privilegiado(engine: AsyncEngine, app_env: str) -> None:
+    """Checagem de boot (M-01): em staging/produção, recusa subir se o role de
+    CONEXÃO for superuser/``BYPASSRLS``.
+
+    Abre uma conexão Core curta (sem claims/`SET ROLE` — `current_user` é o role
+    da conexão). Se o banco estiver inacessível no boot, apenas registra um aviso
+    e segue: a app sobe degradada e o readiness reporta o banco "down" (preserva a
+    filosofia W0-C01 de não derrubar o processo por banco fora do ar). O gate
+    LEVANTA somente quando o banco responde E o role é privilegiado."""
+    if app_env not in _AMBIENTES_COM_CHECAGEM_DE_ROLE:
+        return
+    try:
+        async with engine.connect() as conn:
+            row = (await conn.execute(text(_ROLE_INTROSPECT_SQL))).one()
+    except Exception as exc:
+        logger.warning(
+            "checagem de role de runtime pulada: banco inacessível no boot",
+            extra={"event": "runtime_role_check_skipped", "error_type": type(exc).__name__},
+        )
+        return
+    _exigir_role_runtime_nao_privilegiado(
+        app_env=app_env,
+        role=str(row.role),
+        is_superuser=bool(row.is_super),
+        bypassrls=bool(row.bypass_rls),
+    )
+
+
 # Chave em ``session.info`` onde os claims do JWT ficam registrados para a RLS.
 # A presença dela distingue uma sessão de REQUEST (que DEVE rodar sob
 # ``authenticated`` com claims) de uma sessão de sistema (seed/CLI/migrations,

@@ -72,6 +72,9 @@ def build_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # Endurecimento operacional (M-01): em staging/produção, recusa subir se o
+        # role de conexão ignora a RLS (superuser/BYPASSRLS). No-op em dev/test.
+        await database.verificar_role_runtime_nao_privilegiado(engine, settings.app_env)
         logger.info(
             "api iniciada",
             extra={"env": settings.app_env, "r2_configured": settings.r2_configured},

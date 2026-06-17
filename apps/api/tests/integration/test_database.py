@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.config import Settings
 from src.infrastructure.database import (
+    RoleDeRuntimePrivilegiadoError,
     create_runtime_engine,
     create_session_factory,
     ping,
+    verificar_role_runtime_nao_privilegiado,
 )
 
 pytestmark = pytest.mark.db
@@ -65,3 +67,17 @@ async def test_unit_of_work_commit_e_rollback(engine: AsyncEngine) -> None:
             await uow.begin()
             await uow.session.execute(text("SELECT 1"))
         assert not session.in_transaction()
+
+
+# --- M-01 (remediação W3): checagem de role de runtime no boot --------------
+# A suíte conecta como `postgres` (superuser) — é o role privilegiado que o gate
+# deve recusar EM DEPLOY. Prova empírica de que o controle dispara de verdade.
+async def test_verificador_recusa_role_superuser_em_producao(engine: AsyncEngine) -> None:
+    with pytest.raises(RoleDeRuntimePrivilegiadoError):
+        await verificar_role_runtime_nao_privilegiado(engine, "production")
+
+
+async def test_verificador_aceita_mesmo_role_em_dev(engine: AsyncEngine) -> None:
+    # O MESMO role superuser passa fora de deploy (dev/test conectam como owner
+    # de propósito — migrations, seed e a suíte @db dependem disso).
+    await verificar_role_runtime_nao_privilegiado(engine, "dev")

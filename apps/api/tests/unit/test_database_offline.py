@@ -13,10 +13,13 @@ from sqlalchemy.pool import NullPool
 from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.config import Settings
 from src.infrastructure.database import (
+    RoleDeRuntimePrivilegiadoError,
+    _exigir_role_runtime_nao_privilegiado,
     create_runtime_engine,
     create_session_factory,
     get_session,
     ping,
+    verificar_role_runtime_nao_privilegiado,
 )
 
 # Porta 9 (discard): conexão recusada imediatamente, sem DNS nem timeout longo
@@ -91,6 +94,58 @@ class TestUnitOfWorkOffline:
                 assert not session.in_transaction()
         finally:
             await engine.dispose()
+
+
+class TestChecagemDeRolePrivilegiado:
+    """M-01 (remediação W3): o gate de role só vale em staging/produção e recusa um
+    role de conexão superuser/``BYPASSRLS`` (que ignoraria a RLS)."""
+
+    @pytest.mark.parametrize("app_env", ["staging", "production"])
+    @pytest.mark.parametrize(("is_super", "bypass"), [(True, False), (False, True), (True, True)])
+    def test_levanta_em_deploy_com_role_privilegiado(
+        self, app_env: str, is_super: bool, bypass: bool
+    ) -> None:
+        with pytest.raises(RoleDeRuntimePrivilegiadoError):
+            _exigir_role_runtime_nao_privilegiado(
+                app_env=app_env, role="postgres", is_superuser=is_super, bypassrls=bypass
+            )
+
+    @pytest.mark.parametrize("app_env", ["staging", "production"])
+    def test_passa_em_deploy_com_role_nao_owner(self, app_env: str) -> None:
+        # role NOBYPASSRLS não-owner (ex.: rastreio_runtime) sobe normalmente.
+        _exigir_role_runtime_nao_privilegiado(
+            app_env=app_env, role="rastreio_runtime", is_superuser=False, bypassrls=False
+        )
+
+    @pytest.mark.parametrize("app_env", ["dev", "test"])
+    def test_nao_checa_fora_de_deploy_mesmo_privilegiado(self, app_env: str) -> None:
+        # dev/test conectam como owner (`postgres`) de PROPÓSITO — gate não dispara.
+        _exigir_role_runtime_nao_privilegiado(
+            app_env=app_env, role="postgres", is_superuser=True, bypassrls=True
+        )
+
+    async def test_verificador_degrada_quando_banco_inacessivel_no_boot(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Banco fora do ar no boot em produção: a app NÃO derruba — loga e segue
+        (filosofia W0-C01). O gate só levanta quando o banco responde."""
+        engine = create_runtime_engine(
+            Settings(
+                _env_file=None,  # type: ignore[call-arg]
+                app_env="production",
+                database_url=URL_INALCANCAVEL,
+                migrations_database_url=URL_INALCANCAVEL,
+            )
+        )
+        try:
+            with caplog.at_level(logging.WARNING, logger="rastreio.database"):
+                await verificar_role_runtime_nao_privilegiado(engine, "production")
+        finally:
+            await engine.dispose()
+        assert any(
+            getattr(r, "event", None) == "runtime_role_check_skipped" for r in caplog.records
+        )
+        assert "nopass" not in caplog.text  # connection string não vaza no log
 
 
 class TestGetSession:

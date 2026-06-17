@@ -121,6 +121,28 @@ servidas pelo FastAPI respeitam a RLS** (sem isso, a conexão *owner* faria
 bypass). Por transação (`SET LOCAL`) → seguro com o pooler em modo transação
 (ADR-007).
 
+### Role de runtime (não-owner) e checagem de boot (M-01 — remediação W3)
+
+A propagação acima é *fail-closed* (`abrir_sessao_rls`/`_RlsSyncSession` levantam
+sem claims — ADR-034), mas em produção a RLS só é defesa **independente** se o
+role de **conexão** também não puder ignorá-la. Por isso:
+
+- **`DATABASE_URL` em staging/produção DEVE apontar para `rastreio_runtime`**
+  (`NOBYPASSRLS`, não-owner — `migrations/rls/_runtime_role.sql`), nunca o owner
+  `postgres`/superuser. Um role com `BYPASSRLS` passa por cima das policies, e o
+  `FORCE ROW LEVEL SECURITY` **não** anula isso.
+- **Checagem de boot:** `verificar_role_runtime_nao_privilegiado(engine, app_env)`
+  (`infrastructure/database.py`, chamada no `lifespan`) **recusa subir** em
+  `staging`/`production` se o role de conexão for superuser/`BYPASSRLS`. Em
+  `dev`/`test` é no-op (conecta-se como `postgres` de propósito; banco fora do ar
+  no boot apenas degrada — não derruba). Provas: `test_database_offline.py`
+  (`TestChecagemDeRolePrivilegiado`) e `test_database.py` (@db, recusa o superuser
+  real em `production`).
+- **`FORCE ROW LEVEL SECURITY` NÃO foi adotado:** um superuser o ignora de
+  qualquer forma (não fecharia o cenário) e quebraria os resolvedores `private.*`
+  (`SECURITY DEFINER` rodam como owner e re-aplicam o escopo do chamador). O
+  controle que importa é o role NOBYPASSRLS + a checagem de boot acima.
+
 A autorização de **recurso** no backend é a dependência reutilizável
 **`requer_acesso(Recurso)`** (`dependencies.py`), generalização do guard de admin
 do C04, alinhada à Matriz (`domain/rbac.py`). `get_admin_corrente =
