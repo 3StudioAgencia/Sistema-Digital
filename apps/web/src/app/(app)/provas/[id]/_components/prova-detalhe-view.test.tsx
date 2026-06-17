@@ -332,7 +332,9 @@ describe("Reinício de ciclo (W3-C15)", () => {
     await user.click(screen.getByRole("button", { name: "Reiniciar ciclo" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/novo ciclo/i)).toBeInTheDocument(); // explica o reinício
-    expect(within(dialog).getByText(/histórico do ciclo anterior é preservado/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/histórico do ciclo anterior é preservado/i),
+    ).toBeInTheDocument();
     // NÃO há campo de motivo (≠ cancelar — DP-2).
     expect(within(dialog).queryByLabelText(/Motivo/i)).not.toBeInTheDocument();
 
@@ -365,7 +367,11 @@ describe("Reinício de ciclo (W3-C15)", () => {
     const user = userEvent.setup();
     mocks.obterProva.mockResolvedValue(REPROVADA);
     mocks.reiniciarCiclo.mockRejectedValue(
-      new ApiError(422, "transicao_invalida", "Esta ação não é válida para a prova no estado atual."),
+      new ApiError(
+        422,
+        "transicao_invalida",
+        "Esta ação não é válida para a prova no estado atual.",
+      ),
     );
     renderView({ podeReiniciar: true });
     await screen.findByRole("heading", { name: "Mussarela fatiada", level: 1 });
