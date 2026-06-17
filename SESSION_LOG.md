@@ -32,6 +32,40 @@
 
 ---
 
+## Sessão 20 — 2026-06-17 — [Wave 3 / Remediação] Fechamento dos achados da auditoria da Wave 3
+
+**Objetivo:** Sessão de **remediação dirigida pelo relatório** `docs/audits/AUDITORIA-WAVE-3.md` (veredito GO, 0 Críticos/0 Altos). Fechar os 3 Médios + os Baixos endereçáveis, cada correção blindada por teste de regressão, sem abrir novo buraco (nenhum caminho de status fora do motor, sem perda de atomicidade/idempotência, sem enfraquecer RLS/anti-enumeração). Re-auditável ao final.
+
+**Ponto de decisão (apresentado ao dono, §4 do prompt):** como o escopo mandatório (Críticos/Altos) estava vazio, perguntei a **profundidade do M-01** e o tratamento dos Baixos. Dono escolheu **"Operational hardening"** (docs + checagem de boot; **sem `FORCE RLS`**) e **"Fix all addressable Lows"**. Registrado em ADR-079.
+
+**Feito (causa raiz, um teste por achado):**
+- **M-01** ✅ — `.env.example`/`docs/rbac.md`/`docs/provas.md` exigem `rastreio_runtime` (NOBYPASSRLS) em staging/produção; nova `verificar_role_runtime_nao_privilegiado` (`infrastructure/database.py` → `lifespan`) **recusa boot** com role superuser/BYPASSRLS em deploy (no-op dev/test; degrada se banco fora do ar). **`FORCE RLS` NÃO** (superuser o ignora; quebraria os `private.*`). Testes: `test_database_offline.py::TestChecagemDeRolePrivilegiado` + `test_database.py` (@db).
+- **M-02** ✅ — migration **`0019`** (`CREATE OR REPLACE private.nomes_de_vendedores` com 6 estados = `ESTADOS_ESCOPO_MOTORISTA`) + espelho; teste de equivalência do Motorista ganhou a 5ª fonte (a lacuna do drift) + asserção de `prosrc`.
+- **M-03** ✅ — novo `tests/unit/test_equivalencia_rls_wave3.py` (nomes + grants append-only + corpo) p/ `movimentacoes`/`assinaturas`/`rate_limit_contadores`.
+- **L-02/L-03/L-04** ✅ — token `--motion-pulse`; remoção das transições `background/color` dos botões admin; remoção da diretiva ESLint ociosa + `aria-invalid` no `button` do `Dropdown`.
+- **Processo** — `pyproject.toml` `extend-exclude=["audit"]` no ruff: os scripts descartáveis da auditoria estavam commitados *lint-dirty* (o "ruff clean" do relatório era pré-commit deles); alinhado ao escopo de `mypy`/`pytest`. `ruff check .` volta a 0.
+- **L-01/L-05** mantidos (aceites documentados — ADR-065 / ADR-063·RN-014; não-defeitos).
+- Relatório `AUDITORIA-WAVE-3.md` atualizado: "Status da remediação" no §1 + linha **✅ Resolvido**/**Mantido** por achado + conclusão recomendando re-auditoria.
+
+**Decisões (ADRs):**
+- **ADR-079** — Remediação da Wave 3: endurecimento operacional do role de runtime (M-01) sem `FORCE RLS`; alinhar (não documentar) o resolvedor (M-02); estender o harness (M-03); excluir `audit/` do ruff. **Aceita.**
+
+**Testes / cobertura:**
+- api: `pytest --cov` **758 passed / 94.07%** (motor `machine.py`/`rules.py`/`enums.py` **100%**, `transicoes.py` 99%) — **+22 testes de regressão** vs. os 736 do baseline, **zero regressão**. `ruff check .` **0**, `mypy --strict` **Success (85 arquivos)**.
+- migration `0019` up/down limpa (`test_migrations.py`, head `0019`).
+- web: `pnpm lint` **0 warnings**, `build` OK, `pnpm test` **165 passed**.
+
+**Pendências / em aberto:**
+- [x] **Migration `0019` aplicada no Supabase real** (`rastreio-provas-digitais`, `wmpxxrzbzqgsorjwczvz`) via MCP — `alembic_version=0019`, `private.nomes_de_vendedores` com as origens, ainda fora do schema exposto. **Advisors de segurança sem achados novos** (só os 2 pré-existentes: RLS-no-policy do `alembic_version` lockado e leaked-password).
+- [ ] **Re-auditar a Wave 3** (head `0019`) — a palavra final do GO é da auditoria, não da remediação.
+
+**Próximo passo:**
+- **Re-auditar a Wave 3**; se confirmar GO, seguir para **W4-C16 — Dashboard Realtime**.
+
+**Definition of Done:** ✅ atendida — todos os Médios/Baixos endereçáveis resolvidos com teste de regressão; suíte verde sem regressão (ruff/mypy/pytest+cobertura, web lint/build/test); migration `0019` up/down e RLS reaplicáveis; sem segredos versionados; nenhuma correção abriu novo buraco.
+
+---
+
 ## Sessão 19 — 2026-06-17 — [Wave 3 / Auditoria] Auditoria adversarial da Wave 3 (C10–C15) — **read-only**
 
 **Objetivo:** Auditoria independente e adversarial da Wave 3 inteira (Movimentação: C10 Escaneamento, C11 Máquina de Estados, C12 Assinatura, C13 Timeline, C14 Cancelamento, C15 Reinício) — verificar empiricamente a integridade do estado das provas e emitir veredito Go/No-Go. **Sessão read-only: nenhum código de produção foi alterado.**
