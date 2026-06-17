@@ -56,7 +56,7 @@
   background: var(--app-field);
   color: var(--app-text-gray);
   font: inherit;
-  font-size: calc(20 * var(--u));
+  font-size: calc(18 * var(--u));
   padding: 0 28px;
 }
 
@@ -74,9 +74,18 @@
   opacity: 0.6;
 }
 
-/* "Limpar": pill preto, sem rótulo, alinhado à base/direita da própria célula. */
+/* Dropdowns (Status/Rota/Vendedor) — o gatilho é o único <button> dentro de
+   .controle. Alinha a fonte dele aos inputs de texto (18px): a classe .trigger
+   vive no módulo do Dropdown e não é alcançável daqui, então miramos o elemento
+   (especificidade .controle button > .trigger, sem afetar os outros usos). */
+.controle button {
+  font-size: calc(18 * var(--u));
+}
+
+/* "Limpar": pill preto, sem rótulo. PREENCHE a própria célula (mesma largura e
+   altura dos inputs ao lado) e alinha à base — barra de filtros "blocada". */
 .botaoLimpar {
-  justify-self: end;
+  justify-self: stretch;
   align-self: end;
   height: calc(60 * var(--u));
   border: 0;
@@ -84,9 +93,9 @@
   background: var(--app-ink);
   color: var(--auth-text);
   font: inherit;
-  font-size: calc(20 * var(--u));
+  font-size: calc(18 * var(--u));
   cursor: pointer;
-  padding: 0 calc(64 * var(--u));
+  padding: 0;
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
@@ -394,7 +403,8 @@
 
   .input,
   .botaoLimpar,
-  .rotuloCampo {
+  .rotuloCampo,
+  .controle button {
     font-size: 16px;
   }
 
