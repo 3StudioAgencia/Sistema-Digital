@@ -92,6 +92,8 @@ pnpm dev                                  # http://localhost:3000
 > **Máquina de Estados (W3-C11 — o coração do domínio):** `uv run alembic upgrade head` chega à **`0015`** (tabela **`movimentacoes`** append-only = log de auditoria imutável + `acao_enum` + `provas` UPDATE/policies + RLS do Motorista ampliada). A **§6 inteira** (14 estados, 4 rotas) vive em **código** (`apps/api/src/domain/state_machine/`), nunca no banco. **`POST /provas/{id}/transicoes`** executa cada transição de forma **atômica** e **idempotente** (lock pessimista + `idempotency_key` UNIQUE): indefinida → 422, perfil errado → 403 (genérico), fora-de-escopo → 404, chave reusada → 409. Cada transição grava uma linha **imutável** em `movimentacoes`. Cobertura da máquina de estados **100%**. O C11 é o **motor**: quem assina é o **C12**, a timeline é o **C13**, cancelar/reiniciar (e o `ciclo_atual`) são **C14/C15** — todos invocam o motor. Detalhes em [`docs/maquina-estados.md`](./docs/maquina-estados.md).
 
 > **Timeline visual (W3-C13):** `uv run alembic upgrade head` chega à **`0017`** (função **`private.nomes_de_usuarios`** que resolve o nome do responsável de qualquer setor sem ampliar a Matriz §7; **já aplicada no Supabase real**, `alembic_version=0017`). O detalhe (`/provas/[id]`) deixa de mostrar empty state: o componente **`<ProofTimeline>`** lê **`GET /provas/{id}/movimentacoes`** (1 chamada, escopado pela RLS) e desenha o caminho da **rota** (esqueleto **derivado das regras do C11**, sem duplicar a §6), com a etapa **atual destacada** (animada), **laminação** e **travessias de motorista** diferenciadas, **reprovação/cancelamento** com **motivo em destaque** e **múltiplos ciclos** com separador. Animação só `transform`/`opacity`, instantânea sob `prefers-reduced-motion`; a falha do histórico não derruba o detalhe. Detalhes em [`docs/timeline.md`](./docs/timeline.md).
+>
+> **Cancelamento (W3-C14):** **sem migration nova** (head segue **`0017`**). A ação **"Cancelar prova"** aparece no detalhe (`/provas/[id]`) **só ao 3Studio** e **só em estados ativos**; abre um **modal destrutivo** (motivo obrigatório + aviso de irreversibilidade) que chama **`POST /provas/{id}/cancelar`** — endpoint **dedicado** (gate de borda `cancelar_prova`) que **invoca o motor do C11** (`Acao.CANCELAR` → `cancelada`), gravando a movimentação (ator + data/hora + motivo) no log imutável, **sem assinatura desenhada** (§6.6). **Terminal e irreversível** (RN-005): a prova não reativa; o histórico fica intacto. Acesso em **duas camadas** (borda + motor); perfil não-3Studio → 403. Detalhes em [`docs/cancelamento.md`](./docs/cancelamento.md).
 
 ---
 
@@ -135,7 +137,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **0 · Infra** | 01 Infraestrutura ✅ · 02 Keep-Alive ✅ | **Concluída** ✅ |
 | **1 · Auth/RBAC** | 03 Login ✅ · 04 Usuários (+ app shell) ✅ · 05 Matriz RBAC ✅ | **Concluída** ✅ |
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
-| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline ✅ · 14 Cancelamento · 15 Reinício | **Em andamento** 🚧 |
+| **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline ✅ · 14 Cancelamento ✅ · 15 Reinício | **Em andamento** 🚧 |
 | **4 · Dashboard** | 16 Dashboard Realtime | ⬜ |
 | **5 · Relatórios/UX** | 17 Relatórios · 18 Atalhos | ⬜ |
 | **6 · Animações/Auditoria** | 19 Animações · 20 Log de Auditoria | ⬜ |

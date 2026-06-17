@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 17 — 2026-06-17 — [Wave 3 / Componente C14] Cancelamento de Prova Digital
+
+**Objetivo:** Entregar a **ação administrativa de cancelar** uma prova — disponível ao 3Studio em qualquer estado ativo, com motivo obrigatório, **invocando o motor do C11** (→ `cancelada`), terminal e irreversível (RN-005), preservando o histórico.
+
+**Feito:**
+- **Grounding (régua PARE E PERGUNTE):** workflow de 6 leitores paralelos sobre o motor do C11 (`rules.py`/`machine.py`/`enums.py`), serviço/endpoint de transição, RLS de `movimentacoes`/`assinaturas`, RBAC e o slot do botão no C08 — corroborado contra os ADRs (ADR-061/062/064/065/066/067). Três achados decisivos: (1) o C12 tornou a **assinatura obrigatória em TODAS as ações** (logo um cancelamento sem traço seria barrado — §6.6 manda o contrário); (2) cancelar tinha **uma só camada de enforcement** (o motor — o `/transicoes` é gate universal `ESCANEAR`; `Recurso.CANCELAR_PROVA` existia mas não estava ligado); (3) o hook **`useAuthorization` não existe** (drift do prompt). Apresentei os 5 Pontos de Decisão e **aguardei** as respostas.
+- **Backend — assinatura opcional p/ administrativas (ADR-074):** `exige_assinatura(acao)` + `ACOES_ADMINISTRATIVAS = {CANCELAR, REINICIAR_CICLO}` em `machine.py` (derivado das transições `ADMIN` — teste de consistência); `executar` aceita `assinatura_imagem: bytes | None` → cancelar grava `assinatura_ref` NULL (coluna já nullable — ADR-066, **sem migration**). Guarda: operacional com `None` → 422.
+- **Backend — endpoint dedicado (ADR-073):** `POST /provas/{id}/cancelar` (`CancelarIn{motivo, idempotency_key}`) + `get_cancelamento_service` gateado por `Recurso.CANCELAR_PROVA` (borda) chamando o MESMO motor → **2 camadas reais** (borda + motor). Fonte de status única (ADR-062). `/transicoes` intacto.
+- **Frontend (ADR-075):** `page.tsx` resolve `podeCancelar = can(perfil, "cancelar_prova")` no servidor e passa ao view; botão de perigo só em estados ativos; `CancelarProvaModal` (reusa `<MotionModal>`) com motivo obrigatório + aviso de irreversibilidade; **remontagem por `key`** (idempotência no `useState` initializer, sem `setState` em efeito); sucesso reflete `Cancelada` + recarrega a timeline (`recarregar` na `<ProofTimeline>`).
+- **Verificações executáveis** contra o cluster `.tmp-pg` local (PG 17, porta 5432 nesta sessão; `alembic_version=0017`).
+
+**Decisões (ADRs):**
+- ADR-073: cancelar via o motor do C11, por endpoint dedicado `POST /provas/{id}/cancelar` com gate de borda `CANCELAR_PROVA` (2 camadas) — DP-1/DP-4.
+- ADR-074: cancelamento **sem assinatura desenhada**; assinatura opcional para `ACOES_ADMINISTRATIVAS` — DP-2 (resolução RN-003 × §6.6).
+- ADR-075: UX destrutiva (gating server-side por `podeCancelar`, modal remontado por `key`, sem `useAuthorization` inexistente) — DP-3/DP-5.
+
+**Testes / cobertura:**
+- **api: 714 verdes (offline + @db), cobertura 94,2% — `machine.py` 100%, `transicoes.py` 99%**. Novos/estendidos: `test_state_machine.py` (consistência `ACOES_ADMINISTRATIVAS`/`exige_assinatura`), `test_transicao_service.py` (cancelar sem assinatura → `assinatura_ref` NULL; operacional sem assinatura → 422), **`test_cancelamento_endpoints.py`** (16 casos @db: caminho feliz sem assinatura, motivo obrigatório front/back, terminal → 422, não-admin → 403 na borda, irreversibilidade, idempotência, admin vê tudo, inexistente → 404).
+- **web: 161 verdes.** `prova-detalhe-view.test.tsx` (gating por perfil + estado, modal exige motivo, reflete Cancelada + recarrega timeline, erro de regra → toast); E2E `e2e/cancelamento.spec.ts` (gated `E2E_LIVE`/`E2E_CANCELAR`). `lint`/`build`/`prettier` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Sem migration nova** — nada a aplicar no Supabase real (head segue `0017`); a coluna `movimentacoes.assinatura_ref` já era nullable.
+- [ ] Operação (herdada): cadastrar `KEEPALIVE_DATABASE_URL` (W0-A-001); ativar role de runtime/`R2_*` quando for a produção.
+
+**Próximo passo:**
+- **W3-C15 — Reinício de Ciclo (Reprovação):** UI/gatilho de Reiniciar (admin) que invoca o motor do C11 (`reprovada_vendedor → criada`) **e incrementa `prova.ciclo_atual`**; herda o molde do C14 (endpoint dedicado + gate `REINICIAR_CICLO`; `REINICIAR_CICLO ∈ ACOES_ADMINISTRATIVAS` já sem assinatura). Carimbo do ciclo conforme ADR-071.
+
+**Definition of Done:** ✅ atendida — code review (revisão própria), testes ≥ DoD (máquina 100% ≥ 95%; serviço/domínio altos ≥ 80%), acesso não-3Studio bloqueado em 2 camadas, sem motivo bloqueado, irreversibilidade demonstrada, sem erro de console/log crítico, docs do módulo, modal com `prefers-reduced-motion`, sem segredos versionados, sem N+1, idempotência verificada.
+
+---
+
 ## Sessão 16 — 2026-06-16 — [Wave 3 / Componente C13] Timeline Visual com 4 Rotas e Laminação
 
 **Objetivo:** Preencher a seção "Histórico de movimentações" do detalhe (C08), em empty state, com a **timeline visual** `<ProofTimeline>` — renderização adaptativa por rota, etapa atual destacada (animada), laminação/contexto de motorista diferenciados, reprovação com motivo, múltiplos ciclos com separador — lendo `movimentacoes` (C11) com respeito à RLS.
