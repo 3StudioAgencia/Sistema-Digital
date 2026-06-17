@@ -149,7 +149,7 @@ export function DashboardView({
       <span className={styles.cardTopo}>
         <span className={styles.cardTitulo}>{rotulo}</span>
         <span className={styles.cardIcone} aria-hidden>
-          <Icone strokeWidth={2} />
+          <Icone strokeWidth={1.5} />
         </span>
       </span>
       <AnimatedCounter value={valor} className={styles.cardNumero} />
@@ -185,7 +185,7 @@ export function DashboardView({
           <span className={styles.cardTopo}>
             <span className={styles.cardTitulo}>Atrasadas</span>
             <span className={styles.cardIcone} aria-hidden>
-              <Clock strokeWidth={2} />
+              <Clock strokeWidth={1.5} />
             </span>
           </span>
           <ul className={styles.atrasadasLista} aria-label="Atrasadas por vendedor">
@@ -229,7 +229,7 @@ export function DashboardView({
         >
           <span className={styles.atalhoRotulo}>Escanear QR Code</span>
           <span className={styles.atalhoIcone} aria-hidden>
-            <QrCode strokeWidth={2} />
+            <QrCode strokeWidth={1.5} />
           </span>
         </button>
         {podeCriarProva ? (
@@ -240,7 +240,7 @@ export function DashboardView({
           >
             <span className={styles.atalhoRotulo}>Nova Prova</span>
             <span className={styles.atalhoIcone} aria-hidden>
-              <Plus strokeWidth={2.5} />
+              <Plus strokeWidth={2} />
             </span>
           </button>
         ) : null}
