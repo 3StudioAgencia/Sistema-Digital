@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 19 — 2026-06-17 — [Wave 3 / Auditoria] Auditoria adversarial da Wave 3 (C10–C15) — **read-only**
+
+**Objetivo:** Auditoria independente e adversarial da Wave 3 inteira (Movimentação: C10 Escaneamento, C11 Máquina de Estados, C12 Assinatura, C13 Timeline, C14 Cancelamento, C15 Reinício) — verificar empiricamente a integridade do estado das provas e emitir veredito Go/No-Go. **Sessão read-only: nenhum código de produção foi alterado.**
+
+**Veredito:** ✅ **GO** — **0 Críticos, 0 Altos**, 3 Médios, 5 Baixos (todos dívida não-bloqueante). Relatório completo em `docs/audits/AUDITORIA-WAVE-3.md`.
+
+**Feito (executar, não confiar):**
+- Linha de base verde: `pytest --cov` **736 passed / 94.02%** com o **motor a 100%** (`machine.py`/`rules.py`/`enums.py` 100%, `transicoes.py` 99%); `ruff` + `mypy strict` limpos (84 arquivos); web `pnpm lint` (0 err) + `build` + `test` (165 passed).
+- Fan-out de 5 auditores estáticos read-only (motor vs §6, status-writes, RLS, frontend, docs/migrations).
+- Testes de auditoria descartáveis em `apps/api/audit/` (temporários): `run_audit.py` (concorrência C4, terminais A3, cancelar-de-terminal G1/RN-005 → **5/5 PASS**) e `introspect_rls.py` (roles/FORCE-RLS/triggers/grants).
+- Cross-check célula a célula da §6 (4 rotas) e §7 (extraídas do `RequisitosProvasDigitais_v1_0.docx`).
+
+**Achados (sem correção — para a remediação):**
+- 🟡 M-01 (F2): nenhuma tabela usa `FORCE ROW LEVEL SECURITY` e `.env.example` aponta o runtime ao owner. **Rebaixado de Crítico→Médio** pela verificação empírica: o caminho de request força a RLS via `SET LOCAL ROLE authenticated` por transação (fail-closed, `database.py:195-199` + `main.py:68`) — isolamento provado mesmo conectado como `postgres` superuser. Endurecimento operacional (usar `rastreio_runtime`), não vazamento demonstrado.
+- 🟡 M-02 (F): drift do resolvedor `private.nomes_de_vendedores` (escopo Motorista estreito vs RLS ampliada do C11) — restritivo, cosmético (nome em branco), não-leaking.
+- 🟡 M-03 (I2): espelhos RLS de `movimentacoes`/`assinaturas`/`rate_limit` sem teste de equivalência (só `provas_*`/`system_settings` têm).
+- ⚪ L-01..L-05: scope de leitura do Motorista route-blind (ADR-065); literal `1600ms` no pulso do timeline; transição CSS de `background/color` nos botões admin; 2 warnings ESLint; 403-vs-404 do perfil-errado-em-escopo (RN-014, não-explorável).
+
+**Decisões (ADRs):** Nenhuma (sessão de auditoria — sem mudança de arquitetura; `DECISIONS.md`/`CHANGELOG.md` não alterados por não haver correção).
+
+**Pendências / em aberto:**
+- [ ] Remediação leve da Wave 3 (M-01/M-02/M-03) — não-bloqueante; idealmente endurecer o role de runtime (M-01) antes do 1º deploy de produção.
+- [ ] Os scripts `apps/api/audit/` são descartáveis — remover na remediação se não forem promovidos a testes.
+
+**Próximo passo:**
+- **GO** → seguir o roadmap: **W4-C16 · Dashboard Realtime**. (A remediação dos Médios pode correr em paralelo, quando conveniente.)
+
+**Definition of Done:** N/A (sessão de auditoria read-only; nenhum componente de código fechado).
+
+---
+
 ## Sessão 18 — 2026-06-17 — [Wave 3 / Componente C15] Reinício de Ciclo (Reprovação) — **fecha a Wave 3**
 
 **Objetivo:** Entregar a **ação administrativa de reiniciar o ciclo** de uma prova reprovada — disponível ao 3Studio **só em "Reprovada pelo Vendedor"**, **invocando o motor do C11** (→ `criada`), **incrementando `ciclo_atual` na mesma transação atômica**, preservando rota e histórico, **sem assinatura e sem motivo** (§6.6 — só confirmação).
