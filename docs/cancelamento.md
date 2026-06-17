@@ -15,10 +15,12 @@
 
 ## 1. O que o C14 entrega
 
-- **Botão "Cancelar prova"** no detalhe (C08) — visível **só ao 3Studio** (flag
-  `administrador` — Matriz §7/ADR-023) e **só em estados ATIVOS** (≠ `cancelada`,
-  ≠ `recebida_clicheria`). A irreversibilidade se manifesta na própria UI: assim
-  que a prova vira `Cancelada` (estado terminal), o botão some.
+- **Botão "Cancelar prova"** no detalhe (C08) — na **mesma linha das ações de
+  etiqueta** (container `.acoes` repartido em **3 botões**: Visualizar · Baixar ·
+  Cancelar), visível **só ao 3Studio** (flag `administrador` — Matriz §7/ADR-023) e
+  **só em estados ATIVOS** (≠ `cancelada`, ≠ `recebida_clicheria`). A
+  irreversibilidade se manifesta na própria UI: assim que a prova vira `Cancelada`
+  (estado terminal), o botão some (e a linha volta a 2 botões).
 - **Modal de confirmação destrutiva** (reusa o `<MotionModal>` do C04): **motivo
   obrigatório**, **aviso explícito de irreversibilidade** (RN-005), confirmar /
   voltar; animação de entrada/saída com `prefers-reduced-motion` (RF-024).
@@ -123,7 +125,8 @@ intacto. Para "refazer", cria-se uma **nova** prova (fluxo do C06, fora daqui).
 - **`page.tsx`** (servidor) resolve `podeCancelar = can({setor, administrador},
   "cancelar_prova")` e o passa ao view (sem request extra).
 - **`prova-detalhe-view.tsx`**: botão de perigo (`.btnPerigo`, contorno
-  `--app-danger`) só quando `podeCancelar && estaAtiva(prova.status)`; ao sucesso,
+  `--app-danger`) na **mesma linha (flex, larguras iguais)** das ações de etiqueta,
+  só quando `podeCancelar && estaAtiva(prova.status)`; ao sucesso,
   reflete `Cancelada` a partir da **resposta** (sem refetch — §3.3) e **recarrega a
   timeline** (a nova movimentação aparece — `recarregar` da `<ProofTimeline>`).
 - **`cancelar-prova-modal.tsx`**: aviso de irreversibilidade + `textarea` de motivo
