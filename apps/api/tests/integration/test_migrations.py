@@ -53,8 +53,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0018", (
-        "head deve registrar a revisão 0018 (provas: GRANT UPDATE(ciclo_atual) — W3-C15)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0019", (
+        "head deve registrar a revisão 0019 (nomes_de_vendedores: escopo do Motorista "
+        "alinhado a ESTADOS_ESCOPO_MOTORISTA — remediação M-02)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -130,6 +131,17 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 0
     ), "0011 deve mover nomes_de_vendedores para fora do schema public (exposto)"
+    # W3 remediação M-02: a 0019 realinha o ramo Motorista do resolvedor aos 6
+    # estados operacionais — o corpo da função passa a conter as ORIGENS das
+    # transições (ausentes na versão estreita de 3 "Em Trânsito").
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc WHERE proname = 'nomes_de_vendedores' "
+            "AND prosrc LIKE '%encaminhada_para_laminacao%'",
+        )
+        == 1
+    ), "0019 deve alinhar nomes_de_vendedores ao escopo ampliado do Motorista (M-02)"
     # W2-C08: coluna ciclo_atual (DP-1), NOT NULL com default 1.
     assert (
         _scalar(

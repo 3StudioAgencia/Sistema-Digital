@@ -47,9 +47,14 @@ def test_enums_da_migration_0007_espelham_o_dominio() -> None:
 def test_policy_motorista_usa_o_escopo_operacional_derivado_da_maquina() -> None:
     """W3-C11/C13: o Motorista vê o escopo OPERACIONAL (origens das suas transições +
     Em Trânsito), DERIVADO da §6 (``ESTADOS_ESCOPO_MOTORISTA``), em TODAS as fontes
-    que o replicam em SQL. Pega drift entre a máquina e a RLS — incl. a projeção
-    ``private.nomes_de_usuarios`` do C13 (4ª fonte: o predicado de defesa em
-    profundidade re-aplica o mesmo escopo do Motorista)."""
+    que o replicam em SQL. Pega drift entre a máquina e a RLS — incl. as projeções
+    ``private.nomes_de_usuarios`` (C13/DP-2b) e ``private.nomes_de_vendedores``
+    (C07/DP-7): ambos os predicados de defesa em profundidade re-aplicam o MESMO
+    escopo do Motorista.
+
+    Regressão do achado M-02 (auditoria W3): ``nomes_de_vendedores`` havia ficado de
+    fora deste harness e divergiu (3 "Em Trânsito" vs os 6 estados operacionais)
+    quando o C11 ampliou a RLS. Travá-lo aqui faz o drift falhar o CI."""
     esperados = {e.value for e in ESTADOS_ESCOPO_MOTORISTA}
     assert len(esperados) == 6  # 3 origens + 3 Em Trânsito
     estados_validos = {e.value for e in EstadoProva}
@@ -57,10 +62,16 @@ def test_policy_motorista_usa_o_escopo_operacional_derivado_da_maquina() -> None
         ((_RLS / "provas_select_motorista.sql").read_text(encoding="utf-8"), "select_motorista"),
         ((_RLS / "provas_update_motorista.sql").read_text(encoding="utf-8"), "update_motorista"),
         ((_VERSIONS / "0015_movimentacoes.py").read_text(encoding="utf-8"), "_MOTORISTA_SCOPE"),
-        # W3-C13: a projeção de nomes re-aplica o escopo do Motorista (DP-2b) — entra
-        # no harness para travar o drift com a §6, como as 3 fontes acima.
+        # W3-C13: a projeção de nomes de ATOR re-aplica o escopo do Motorista (DP-2b)
+        # — entra no harness para travar o drift com a §6, como as 3 fontes acima.
         (
             (_RLS / "nomes_de_usuarios.sql").read_text(encoding="utf-8"),
+            "'motorista' AND p.status IN",
+        ),
+        # M-02: a projeção de nomes de VENDEDOR (C07/DP-7) re-aplica o MESMO escopo;
+        # realinhada pela 0019 e agora travada aqui (era a fonte que divergiu).
+        (
+            (_RLS / "nomes_de_vendedores.sql").read_text(encoding="utf-8"),
             "'motorista' AND p.status IN",
         ),
     )

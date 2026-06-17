@@ -18,9 +18,13 @@
 -- + corpo schema-qualificado (blindagem W1-A-004). DEFESA EM PROFUNDIDADE: o
 -- corpo RE-APLICA o escopo do chamador (so resolve nomes de vendedores em provas
 -- VISIVEIS a ele — espelha as policies `provas_select_*` via os helpers `app_*`).
--- (Drift: este predicado acompanha a RLS de `provas` — mantenha-os em sincronia.)
+-- O ramo `motorista` espelha `provas_select_motorista` AMPLIADA pela 0015
+-- (ESTADOS_ESCOPO_MOTORISTA: origens das transicoes + Em Transito — 6 estados),
+-- realinhado pela 0019 (remediacao M-02; antes ficara nos 3 "Em Transito" e
+-- divergira do irmao `nomes_de_usuarios`). (Drift: este predicado acompanha a RLS
+-- de `provas` — mantenha-os em sincronia; o harness offline trava os dois.)
 --
--- Idempotente. Espelho 1:1 das migrations 0010+0011 (reaplicar apos DROP).
+-- Idempotente. Espelho 1:1 das migrations 0010+0011+0019 (reaplicar apos DROP).
 
 CREATE SCHEMA IF NOT EXISTS private;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
@@ -44,6 +48,9 @@ AS $$
               OR (public.app_setor() = 'vendedor'
                   AND p.vendedor_id = public.app_current_user_id())
               OR (public.app_setor() = 'motorista' AND p.status IN (
+                  'encaminhada_para_laminacao',
+                  'laminacao_concluida',
+                  'de_volta_studio',
                   'com_motorista_ida_laminacao',
                   'com_motorista_volta_laminacao',
                   'com_motorista_entrega_final'))
