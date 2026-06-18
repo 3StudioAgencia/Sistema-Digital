@@ -64,11 +64,6 @@ const PRESETS: { rotulo: string; de: () => string; ate: () => string }[] = [
   { rotulo: "90d", de: () => isoMenosDias(89), ate: () => hojeIso() },
 ];
 
-function brData(iso: string): string {
-  const [, m, d] = iso.split("-");
-  return `${d}/${m}`;
-}
-
 export function RelatoriosView() {
   const router = useRouter();
   const pathname = usePathname();
@@ -178,27 +173,11 @@ export function RelatoriosView() {
   // render — senão o destaque se perde ao virar o dia (as funções dependem de "hoje").
   const presetSelecionado = searchParams.get("preset") ?? "";
   const presetAtivo = (p: (typeof PRESETS)[number]) => presetSelecionado === p.rotulo;
-  const diasPeriodo =
-    filtros.de && filtros.ate
-      ? Math.round(
-          (new Date(filtros.ate).getTime() - new Date(filtros.de).getTime()) / 86_400_000,
-        ) + 1
-      : null;
 
   return (
     <section className={styles.pagina} aria-label="Relatórios">
       <div className={styles.cabecalho}>
-        <div>
-          <h1 className={styles.titulo}>Relatórios</h1>
-          {filtros.de && filtros.ate ? (
-            <span className={styles.chipPeriodo}>
-              <b>
-                {brData(filtros.de)} – {brData(filtros.ate)}
-              </b>
-              {diasPeriodo ? ` · ${diasPeriodo} dias` : null}
-            </span>
-          ) : null}
-        </div>
+        <h1 className={styles.titulo}>Relatórios</h1>
         <div className={styles.exportWrap} ref={exportWrapRef}>
           <button
             type="button"
@@ -234,10 +213,19 @@ export function RelatoriosView() {
             type="button"
             role="tab"
             aria-selected={aba === a.id}
-            className={`${styles.tab} ${aba === a.id ? styles.tabAtiva : ""}`}
+            className={styles.tab}
+            data-ativo={aba === a.id || undefined}
             onClick={() => aplicar({ aba: a.id === "geral" ? undefined : a.id })}
           >
-            {a.rotulo}
+            {aba === a.id && (
+              <motion.span
+                layoutId="rel-tab-pill"
+                className={styles.segPill}
+                transition={transicaoPill}
+                aria-hidden
+              />
+            )}
+            <span className={styles.segRotulo}>{a.rotulo}</span>
           </button>
         ))}
       </div>

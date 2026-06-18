@@ -16,7 +16,7 @@
 /* -------------------------------------------------- cabeçalho */
 .cabecalho {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
@@ -27,23 +27,6 @@
   font-weight: 500;
   color: var(--app-ink);
   letter-spacing: -0.02em;
-}
-
-.chipPeriodo {
-  margin-top: calc(10 * var(--u));
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: calc(15 * var(--u));
-  color: var(--app-text-gray);
-  background: #fff;
-  border-radius: var(--app-radius-pill);
-  padding: calc(7 * var(--u)) calc(16 * var(--u));
-  width: fit-content;
-}
-.chipPeriodo b {
-  color: var(--app-ink);
-  font-weight: 600;
 }
 
 /* Exportar CSV (preto, com caret + menu de abas) */
@@ -112,6 +95,7 @@
   padding: calc(7 * var(--u)) calc(8 * var(--u));
 }
 .tab {
+  position: relative; /* ancora a pílula deslizante (.segPill inset:0) */
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -121,16 +105,11 @@
   border-radius: var(--app-radius-pill);
   padding: calc(12 * var(--u)) calc(34 * var(--u));
   white-space: nowrap;
-  transition:
-    background-color var(--motion-micro) var(--motion-ease-standard),
-    color var(--motion-micro) var(--motion-ease-standard);
 }
-.tab:hover {
+.tab:not([data-ativo]):hover {
   color: var(--app-ink);
 }
-.tabAtiva,
-.tabAtiva:hover {
-  background: var(--app-ink);
+.tab[data-ativo] {
   color: var(--auth-text);
 }
 
@@ -189,6 +168,11 @@
   border-radius: var(--app-radius-pill);
   padding: 0 calc(6 * var(--u));
 }
+/* Os presets compartilham a folga da 1ª linha com as datas (para a data não ficar
+   grande demais — pedido do dono): cresce junto e os botões preenchem por igual. */
+.presets {
+  flex: 1 1 auto;
+}
 .preset,
 .opcaoRota {
   position: relative; /* ancora a pílula deslizante (.segPill inset:0) */
@@ -201,6 +185,9 @@
   border-radius: var(--app-radius-pill);
   padding: calc(9 * var(--u)) calc(20 * var(--u));
   white-space: nowrap;
+}
+.preset {
+  flex: 1 1 0; /* divide a largura do segmentado de período por igual */
 }
 .preset:not([data-ativo]):hover,
 .opcaoRota:not([data-ativo]):hover {
