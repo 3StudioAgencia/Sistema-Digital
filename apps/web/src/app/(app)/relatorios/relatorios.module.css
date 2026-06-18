@@ -309,43 +309,41 @@
 }
 
 /* -------------------------------------------------- Geral — bento fiel ao design */
+/* Grade de 12 colunas (auto-flow): permite linhas com divisões diferentes —
+   Rota (span 2) mais estreita que Vendedor com mais artes (span 3), mesmo ambos
+   à direita; Tempo/Taxa (span 3) maiores que a Rota (span 2) na 1ª linha. */
 .gridGeral {
   display: grid;
   gap: calc(18 * var(--u));
-  grid-template-columns: 1.5fr 1fr 1fr 1fr;
-  grid-template-areas:
-    "total tempo taxa rota"
-    "ativas vend vend mais"
-    "metricas metricas metricas metricas"
-    "atrasadas atrasadas atrasadas atrasadas";
+  grid-template-columns: repeat(12, 1fr);
   align-content: start;
 }
 .aTotal {
-  grid-area: total;
+  grid-column: span 4;
 }
 .aTempo {
-  grid-area: tempo;
+  grid-column: span 3;
 }
 .aTaxa {
-  grid-area: taxa;
+  grid-column: span 3;
 }
 .aRota {
-  grid-area: rota;
+  grid-column: span 2;
 }
 .aAtivas {
-  grid-area: ativas;
+  grid-column: span 4;
 }
 .aVend {
-  grid-area: vend;
+  grid-column: span 5;
 }
 .aMais {
-  grid-area: mais;
+  grid-column: span 3;
 }
 .aMetricas {
-  grid-area: metricas;
+  grid-column: 1 / -1;
 }
 .aAtrasadas {
-  grid-area: atrasadas;
+  grid-column: 1 / -1;
 }
 /* altura mínima única dos cards das 2 primeiras linhas (linha harmônica) */
 .aTotal,
@@ -453,10 +451,21 @@
   color: var(--app-ink);
   white-space: nowrap;
 }
-.rankLinha {
+/* Progress bar do tempo de cada vendedor (proporcional ao maior tempo). */
+.rankBar {
   flex: 1;
-  height: 0;
-  border-bottom: 1px solid var(--app-divider);
+  height: calc(5 * var(--u));
+  min-height: 3px;
+  background: #ededed;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.rankBarFill {
+  display: block;
+  height: 100%;
+  background: var(--app-ink);
+  border-radius: 999px;
+  transform-origin: left center;
 }
 .rankValor {
   flex: none;
@@ -488,30 +497,25 @@
 
 @media (max-width: 1100px) {
   .gridGeral {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "total total"
-      "tempo taxa"
-      "rota ativas"
-      "vend vend"
-      "mais mais"
-      "metricas metricas"
-      "atrasadas atrasadas";
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .aTotal {
+    grid-column: 1 / -1;
+  }
+  .aTempo,
+  .aTaxa,
+  .aRota {
+    grid-column: span 2;
+  }
+  .aAtivas,
+  .aVend,
+  .aMais {
+    grid-column: 1 / -1;
   }
 }
 @media (max-width: 767px) {
   .gridGeral {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "total"
-      "tempo"
-      "taxa"
-      "rota"
-      "ativas"
-      "vend"
-      "mais"
-      "metricas"
-      "atrasadas";
   }
   .aTotal,
   .aTempo,
@@ -520,6 +524,7 @@
   .aAtivas,
   .aVend,
   .aMais {
+    grid-column: 1 / -1;
     min-height: 0;
   }
 }
@@ -690,6 +695,88 @@
   background: #f0f0f0;
   border-radius: 999px;
   padding: 2px 12px;
+}
+
+/* Cabeçalho das tabelas: título + subtítulo (uppercase) + contagem à direita */
+.tabelaCabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(16 * var(--u));
+  margin-bottom: calc(14 * var(--u));
+}
+.tabelaTitulo {
+  display: block;
+  font-size: calc(19 * var(--u));
+  font-weight: 500;
+  color: var(--app-ink);
+}
+.tabelaSub {
+  display: block;
+  margin-top: calc(2 * var(--u));
+  font-size: calc(11 * var(--u));
+  color: var(--app-text-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tabelaCount {
+  flex: none;
+  font-size: calc(11 * var(--u));
+  color: var(--app-text-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* # com marcador (ponto amarelo) no 1º colocado da tabela de métricas */
+.rankCelula {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+.marcador {
+  flex: none;
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  border-radius: 50%;
+  background: var(--app-accent);
+}
+
+/* Coluna VOLUME: barra proporcional + valor */
+.volCell {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+}
+.volBar {
+  flex: 1;
+  min-width: calc(48 * var(--u));
+  height: calc(6 * var(--u));
+  background: #ededed;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.volFill {
+  display: block;
+  height: 100%;
+  background: var(--app-ink);
+  border-radius: 999px;
+  transform-origin: left center;
+}
+.volNum {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-ink);
+}
+
+/* Pill de status na tabela de Provas Atrasadas */
+.statusPill {
+  display: inline-block;
+  font-size: calc(13 * var(--u));
+  color: var(--app-text-gray);
+  background: #f0f0f0;
+  border-radius: 999px;
+  padding: calc(5 * var(--u)) calc(14 * var(--u));
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------- gráficos */

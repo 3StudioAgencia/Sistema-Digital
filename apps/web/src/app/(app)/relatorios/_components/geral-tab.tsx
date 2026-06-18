@@ -13,7 +13,7 @@ import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounte
 import { fetchRelatorioGeral, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { ROTA_LABELS } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
-import { fmtDec, fmtHoras, fmtInt, fmtPct, iniciais } from "@/lib/relatorios/format";
+import { fmtDec, fmtHoras, fmtInt, fmtPct, fracao, iniciais } from "@/lib/relatorios/format";
 
 import styles from "../relatorios.module.css";
 import { ProvasAtivasDonut, VolumeBars } from "./charts";
@@ -35,6 +35,10 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
     .filter((m) => m.tempo_medio_horas !== null)
     .sort((a, b) => (b.tempo_medio_horas ?? 0) - (a.tempo_medio_horas ?? 0));
   const top = dados.metricas_por_vendedor[0]; // já vem ordenado por volume desc
+  // Máximos para as progress bars (tempo por vendedor; volume na tabela).
+  const maxTempo = Math.max(1, ...tempoPorVendedor.map((m) => m.tempo_medio_horas ?? 0));
+  const maxVolume = Math.max(1, ...dados.metricas_por_vendedor.map((m) => m.volume));
+  const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`;
 
   return (
     <div className={styles.gridGeral}>
@@ -98,7 +102,12 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
               <li key={m.vendedor_id} className={styles.rankItem}>
                 <span className={styles.rankNum}>{String(i + 1).padStart(2, "0")}</span>
                 <span className={styles.rankNome}>{m.vendedor_nome ?? "—"}</span>
-                <span className={styles.rankLinha} aria-hidden />
+                <span className={styles.rankBar} aria-hidden>
+                  <span
+                    className={styles.rankBarFill}
+                    style={{ transform: `scaleX(${fracao(m.tempo_medio_horas ?? 0, maxTempo)})` }}
+                  />
+                </span>
                 <span className={styles.rankValor}>{fmtHoras(m.tempo_medio_horas)}</span>
               </li>
             ))}
@@ -116,7 +125,15 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
 
       {/* Métricas por Vendedor (ranking detalhado) */}
       <div className={`${styles.card} ${styles.aMetricas}`}>
-        <span className={styles.cardRotulo}>Métricas por vendedor</span>
+        <div className={styles.tabelaCabecalho}>
+          <div>
+            <span className={styles.tabelaTitulo}>Métricas por Vendedor</span>
+            <span className={styles.tabelaSub}>Ranking detalhado</span>
+          </div>
+          <span className={styles.tabelaCount}>
+            {plural(dados.metricas_por_vendedor.length, "vendedor", "vendedores")}
+          </span>
+        </div>
         {dados.metricas_por_vendedor.length === 0 ? (
           <p className={styles.vazio}>Nenhuma prova no período.</p>
         ) : (
@@ -127,18 +144,21 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
                   <th>#</th>
                   <th>Vendedor</th>
                   <th>Local</th>
-                  <th className={styles.num}>Volume</th>
+                  <th>Volume</th>
                   <th className={styles.num}>Aprov.</th>
                   <th className={styles.num}>Reprov.</th>
-                  <th className={styles.num}>Taxa</th>
                   <th className={styles.num}>Tempo</th>
-                  <th className={styles.num}>Atras.</th>
                 </tr>
               </thead>
               <tbody>
                 {dados.metricas_por_vendedor.map((m, i) => (
                   <tr key={m.vendedor_id}>
-                    <td className={styles.ordinal}>{String(i + 1).padStart(2, "0")}</td>
+                    <td>
+                      <span className={styles.rankCelula}>
+                        {i === 0 ? <span className={styles.marcador} aria-hidden /> : null}
+                        <span className={styles.ordinal}>{String(i + 1).padStart(2, "0")}</span>
+                      </span>
+                    </td>
                     <td>
                       <span className={styles.avatarNome}>
                         <span className={styles.avatar} aria-hidden>
@@ -150,14 +170,20 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
                     <td>
                       <span className={styles.localPill}>{rotuloLocal(m.localizacao)}</span>
                     </td>
-                    <td className={styles.num}>{fmtInt(m.volume)}</td>
+                    <td>
+                      <span className={styles.volCell}>
+                        <span className={styles.volBar} aria-hidden>
+                          <span
+                            className={styles.volFill}
+                            style={{ transform: `scaleX(${fracao(m.volume, maxVolume)})` }}
+                          />
+                        </span>
+                        <span className={styles.volNum}>{fmtInt(m.volume)}</span>
+                      </span>
+                    </td>
                     <td className={styles.num}>{fmtInt(m.aprovadas)}</td>
-                    <td className={styles.num}>{fmtInt(m.reprovadas)}</td>
                     <td className={styles.num}>{fmtPct(m.taxa_reprovacao)}</td>
                     <td className={styles.num}>{fmtHoras(m.tempo_medio_horas)}</td>
-                    <td className={`${styles.num} ${m.atrasadas > 0 ? styles.vermelho : ""}`}>
-                      {m.atrasadas}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -168,7 +194,15 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
 
       {/* Provas Atrasadas (aguardando ação) */}
       <div className={`${styles.card} ${styles.aAtrasadas}`}>
-        <span className={styles.cardRotulo}>Provas atrasadas · aguardando ação</span>
+        <div className={styles.tabelaCabecalho}>
+          <div>
+            <span className={styles.tabelaTitulo}>Provas Atrasadas</span>
+            <span className={styles.tabelaSub}>Aguardando ação</span>
+          </div>
+          <span className={styles.tabelaCount}>
+            {plural(dados.provas_atrasadas.length, "prova", "provas")}
+          </span>
+        </div>
         {dados.provas_atrasadas.length === 0 ? (
           <p className={styles.vazio}>Nenhuma prova atrasada no período.</p>
         ) : (
@@ -194,8 +228,17 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
                         {p.requerimento} · {p.cliente}
                       </span>
                     </td>
-                    <td>{p.vendedor_nome ?? "—"}</td>
-                    <td>{rotuloStatus(p.status)}</td>
+                    <td>
+                      <span className={styles.avatarNome}>
+                        <span className={styles.avatar} aria-hidden>
+                          {iniciais(p.vendedor_nome)}
+                        </span>
+                        {p.vendedor_nome ?? "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={styles.statusPill}>{rotuloStatus(p.status)}</span>
+                    </td>
                     <td className={`${styles.num} ${styles.vermelho}`}>
                       {fmtHoras(p.atraso_horas)}
                     </td>

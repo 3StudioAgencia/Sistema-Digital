@@ -54,8 +54,9 @@ export function ProvasAtivasDonut({
 }) {
   const reduced = useReducedMotion();
   const total = aguardando + reprovadas;
-  const COR_AGUARDANDO = "var(--app-ink)";
-  const COR_REPROVADA = "var(--app-accent)";
+  // Aguardando vendedor = AMARELO (maior fatia); Reprovada = PRETO (menor) — design.
+  const COR_AGUARDANDO = "var(--app-accent)";
+  const COR_REPROVADA = "var(--app-ink)";
   const dados =
     total === 0
       ? [{ nome: "vazio", valor: 1, cor: "#ededed" }]
