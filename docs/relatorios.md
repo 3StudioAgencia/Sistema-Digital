@@ -77,7 +77,9 @@ Fonte única das fórmulas: **`apps/api/src/domain/relatorios.py`**. Base tempor
   reordenando esta lista (sem ida extra).
 
 ### Aba 3Studio (§0.2)
-- **Provas criadas** = `count(base)` (+ **média diária** = criadas ÷ dias do período).
+- **Provas criadas** = `count(base)` (+ **média diária** = criadas ÷ dias do período);
+  o card preto "Provas Criadas" exibe a **série `volume`** (provas/dia, `created_at::date`)
+  como gráfico de barras, igual ao Total geral da Geral (ADR-094).
 - **Reinícios** = `acao=reiniciar_ciclo`; **Cancelamentos** = `acao=cancelar`.
 - **Devolvidas** = **reprovações no período** (`acao=reprovar`) — ADR-088.
 - **Reprov. aguardando** = status atual `reprovada_vendedor`.
@@ -86,10 +88,15 @@ Fonte única das fórmulas: **`apps/api/src/domain/relatorios.py`**. Base tempor
   (não há tabela de motivos separada — o log é o `movimentacoes`), top 10 desc.
 
 ### Aba Vendedores (§0.2)
-- **Vendedores Filial/Matriz** = usuários `setor=vendedor` ativos por localização
-  (cadastro — independem do período).
-- **Ativos** = vendedores distintos com prova na população; **Atrasadas** = total.
-- **Ranking por volume** + **Detalhamento** (Aprov% = 100−taxa, Reprov%, Tempo, Atras.).
+- **Provas criadas** = `count(base)` + **série `volume`** (provas/dia) — card preto
+  "Provas Criadas" com gráfico (igual à Geral/3Studio; campos `provas_criadas`/`volume`
+  **adicionados** na sessão de design — ADR-094).
+- **Ranking por volume** (lista ranqueada, barra ∝ volume) + **Detalhamento** full-width
+  (Aprov% = 100−taxa, Reprov%, Tempo, Atrasadas).
+- `vendedores_filial`/`vendedores_matriz` (usuários `setor=vendedor` ativos por
+  localização — cadastro), `ativos` (distintos com prova na base) e `atrasadas_total`
+  **seguem no payload e no CSV**, mas o **card "Vendedores Filial" saiu da UI**
+  (ausente no design — ADR-094).
 
 ### Aba Clicheria (§0.2 — perspectiva "rumo à clicheria", ADR-088)
 - **Em trânsito agora** = `com_motorista_entrega_final`.
@@ -163,6 +170,12 @@ Prefixo real **`/relatorios`** (sem `/api`). Todos 3Studio-only (403 caso contr�
   Distribuição/ranking/motivos = barras CSS (`scaleX`, GPU). Animações respeitam
   `prefers-reduced-motion` (`isAnimationActive`/tokens). Tabelas roláveis no mobile.
 - `<AnimatedCounter>` (count-up) nos números inteiros; métricas sem base → "—".
+- **Layout fiel ao Figma (ADR-094):** cada aba é um **bento (grid 12 col)** — Geral,
+  3Studio e Vendedores reconstruídas em sessão de design (cabeçalho/filtros com pílula
+  deslizante, **campo de data como trigger** do calendário, `Dropdown` variante `branco`
+  + scrollbar fino; `VolumeBars` densas por **binning**; donut com **espessura radial**
+  via dois `<Pie>`). **Pendente:** a aba **Clicheria** ainda usa `widgets.tsx`
+  (`StatCard`/`ListaBarra`) — próxima a reconstruir.
 
 ---
 

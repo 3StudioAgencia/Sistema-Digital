@@ -32,6 +32,35 @@
 
 ---
 
+## Sessão 23 — 2026-06-18 — [Wave 5 / Componente C17] Relatórios — reconstrução visual fiel ao design (sessão de design)
+
+**Objetivo:** Alinhar a UI dos Relatórios ao **Figma**, aba por aba (as fórmulas/métricas já estavam corretas desde a Sessão 22). Trabalho conduzido de forma **iterativa com o dono**: para cada parte, ele enviava a referência do design + um print do estado atual e pedia fidelidade simétrica.
+
+**Feito (ordem do trabalho):**
+- **Cabeçalho/filtros:** gap **constante** + campos que **crescem** para preencher (sem buraco — o dono distribuiu as larguras, não os espaços); tab bar e toggle de rota com **pílula deslizante** (`layoutId`, como no C09); **campo de data como trigger** (ícone à direita, clique no box abre o calendário, estilo personalizado); **chip de período removido**; `Dropdown` ganhou **variante `branco`** (respiro lateral nas opções) + **scrollbar fino** no painel.
+- **Aba Geral → bento (grid 12 col):** Total geral (preto + `VolumeBars`) · Tempo médio · Taxa · Rota (lista ao rodapé) · donut Provas Ativas · ranking tempo-por-vendedor com **progressbar** · Vendedor com mais artes · tabelas Métricas/Atrasadas. Ajustes finos: largura do card Rota, **alinhamento numérico** das tabelas, donut com **anel preto mais fino** (espessura radial por **dois `<Pie>`**), barras mais densas (**binning** + `minPointSize`).
+- **Aba 3Studio → bento:** Provas Criadas (preto + gráfico) · Reinícios · Devolvidas · Canceladas (**vermelho**) · Reprov. aguardando (**vermelho**) · Tempo até 1ª mov · **Top motivos** com barras vermelhas + contagem.
+- **Aba Vendedores → bento:** Provas Criadas (preto + gráfico) · Ranking por volume (largo, rank-list) · Detalhamento full-width (Vendedor · Local · Aprovação verde · Reprovação vermelho · Tempo · Atrasadas). **Removido** o card "Vendedores Filial" (ausente no design).
+- **Backend (aditivo):** as agregações de **3Studio** e **Vendedores** ganharam **`provas_criadas` + a série `volume`** (reuso da query de volume da Geral) para o card "Provas Criadas"; refletido nos `*Out` e nos tipos TS.
+
+**Decisões (ADRs):**
+- **ADR-094** — reconstrução visual fiel ao design (bento por aba) + contrato de `volume` nas abas 3Studio/Vendedores. Aceita; iterada e aprovada pelo dono aba a aba.
+
+**Testes / cobertura:**
+- api: `test_relatorios.py` + `test_relatorios_endpoints.py` **29 verdes @db** (PG local 5432, cluster `.tmp-pg`); `ruff`/`mypy --strict` limpos.
+- web: `pnpm test` (relatórios) verde; `lint`/`build`/`prettier` limpos.
+
+**Pendências / em aberto:**
+- [ ] **Aba Clicheria** ainda no layout antigo (`StatCard`/`ListaBarra`) — reconstruir em bento para fechar a fidelidade visual do C17.
+- [ ] Avaliar se "Provas Criadas" é o melhor rótulo do card preto na aba Vendedores (seguiu a imagem do design; o dono pode redefinir).
+
+**Próximo passo:**
+- Reconstruir a **aba Clicheria** (fecha o C17 visual), depois **W5-C18 — Atalhos rápidos**.
+
+**Definition of Done:** ⚠️ parcial — refino de UI sobre o C17 já entregue (Sessão 22): testes/lint/build/prettier verdes, sem migration nova; a fidelidade visual fecha quando a aba Clicheria for reconstruída.
+
+---
+
 ## Sessão 22 — 2026-06-17 — [Wave 5 / Componente C17] Relatórios Gerenciais (4 abas) — **abre a Wave 5**
 
 **Objetivo:** Entregar a seção de relatórios gerenciais **exclusiva do 3Studio**, **fiel ao design** (abas Geral / 3Studio / Vendedores / Clicheria, filtros compartilhados, gráficos, tabelas, **export CSV**), reusando a função de horas úteis e o padrão de agregação do C16, com a distribuição por rota somando 100% e o CSV preservando os campos exibidos.
