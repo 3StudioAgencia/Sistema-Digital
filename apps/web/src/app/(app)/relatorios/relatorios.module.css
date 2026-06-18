@@ -148,13 +148,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  /* Distribui o espaço entre os controles (sem um buraco único antes do Status):
+     o 1º encosta à esquerda, o último (Status/Vendedor) à direita, gaps iguais.
+     Na 2ª linha o busca tem flex:1 e absorve a folga (fica largo, sem buraco). */
+  justify-content: space-between;
   gap: calc(12 * var(--u));
   width: 100%;
-}
-/* Empurra o controle marcado (Status na 1ª linha) para a borda direita, alinhado
-   com o Vendedor da 2ª linha (que o busca flex:1 já empurra). */
-.aDireita {
-  margin-left: auto;
 }
 
 .campoData {
@@ -191,6 +190,7 @@
 }
 .preset,
 .opcaoRota {
+  position: relative; /* ancora a pílula deslizante (.segPill inset:0) */
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -200,20 +200,26 @@
   border-radius: var(--app-radius-pill);
   padding: calc(9 * var(--u)) calc(20 * var(--u));
   white-space: nowrap;
-  transition:
-    background-color var(--motion-micro) var(--motion-ease-standard),
-    color var(--motion-micro) var(--motion-ease-standard);
 }
-.preset:hover,
-.opcaoRota:hover {
+.preset:not([data-ativo]):hover,
+.opcaoRota:not([data-ativo]):hover {
   color: var(--app-ink);
 }
-.presetAtivo,
-.presetAtivo:hover,
-.opcaoRotaAtiva,
-.opcaoRotaAtiva:hover {
-  background: var(--app-ink);
+.preset[data-ativo],
+.opcaoRota[data-ativo] {
   color: var(--auth-text);
+}
+/* Pílula preta DESLIZANTE entre as opções (Framer Motion layoutId — só transform,
+   GPU; instantânea sob prefers-reduced-motion). Mesmo padrão do segmentado do C09. */
+.segPill {
+  position: absolute;
+  inset: 0;
+  background: var(--app-ink);
+  border-radius: var(--app-radius-pill);
+}
+.segRotulo {
+  position: relative;
+  z-index: 1;
 }
 
 .busca {

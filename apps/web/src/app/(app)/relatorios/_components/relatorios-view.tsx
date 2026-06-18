@@ -7,12 +7,15 @@
  * snapshot do período, recomputado na troca de filtro/aba. Estado (aba + filtros)
  * na URL — refresh-safe e compartilhável (reusa os padrões do C07).
  */
+import { motion } from "framer-motion";
 import { ChevronDown, Download, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Dropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
+import { useReducedMotion } from "@/lib/motion/hooks";
+import { DURATION, EASING } from "@/lib/motion/tokens";
 import {
   exportarRelatorioCsv,
   listarVendedores,
@@ -71,6 +74,12 @@ export function RelatoriosView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const toast = useToast();
+  const reduced = useReducedMotion();
+  // Transição da pílula deslizante dos segmentados (GPU/layoutId) — instantânea
+  // sob prefers-reduced-motion (RNF-010).
+  const transicaoPill = reduced
+    ? { duration: DURATION.instant }
+    : { duration: DURATION.short, ease: EASING.emphasized };
 
   const aba = (searchParams.get("aba") as Aba | null) ?? "geral";
   const queryString = searchParams.toString();
@@ -254,19 +263,28 @@ export function RelatoriosView() {
               onChange={(e) => aplicar({ ate: e.target.value || undefined, preset: undefined })}
             />
           </label>
-          <div className={styles.presets}>
+          <div className={styles.presets} role="group" aria-label="Período rápido">
             {PRESETS.map((p) => (
               <button
                 key={p.rotulo}
                 type="button"
-                className={`${styles.preset} ${presetAtivo(p) ? styles.presetAtivo : ""}`}
+                className={styles.preset}
+                data-ativo={presetAtivo(p) || undefined}
                 onClick={() => aplicar({ de: p.de(), ate: p.ate(), preset: p.rotulo })}
               >
-                {p.rotulo}
+                {presetAtivo(p) && (
+                  <motion.span
+                    layoutId="rel-presets-pill"
+                    className={styles.segPill}
+                    transition={transicaoPill}
+                    aria-hidden
+                  />
+                )}
+                <span className={styles.segRotulo}>{p.rotulo}</span>
               </button>
             ))}
           </div>
-          <div className={`${styles.dropdownCampo} ${styles.aDireita}`}>
+          <div className={styles.dropdownCampo}>
             <Dropdown<string>
               ariaLabel="Filtrar por status"
               variante="branco"
@@ -289,16 +307,28 @@ export function RelatoriosView() {
             />
           </span>
           <div className={styles.toggleRota} role="group" aria-label="Filtrar por rota">
-            {GRUPOS_ROTA.map((g) => (
-              <button
-                key={g.id || "todas"}
-                type="button"
-                className={`${styles.opcaoRota} ${(filtros.grupoRota ?? "") === g.id ? styles.opcaoRotaAtiva : ""}`}
-                onClick={() => aplicar({ rota: g.id || undefined })}
-              >
-                {g.rotulo}
-              </button>
-            ))}
+            {GRUPOS_ROTA.map((g) => {
+              const ativo = (filtros.grupoRota ?? "") === g.id;
+              return (
+                <button
+                  key={g.id || "todas"}
+                  type="button"
+                  className={styles.opcaoRota}
+                  data-ativo={ativo || undefined}
+                  onClick={() => aplicar({ rota: g.id || undefined })}
+                >
+                  {ativo && (
+                    <motion.span
+                      layoutId="rel-rota-pill"
+                      className={styles.segPill}
+                      transition={transicaoPill}
+                      aria-hidden
+                    />
+                  )}
+                  <span className={styles.segRotulo}>{g.rotulo}</span>
+                </button>
+              );
+            })}
           </div>
           <div className={styles.dropdownCampo}>
             <Dropdown<string>
