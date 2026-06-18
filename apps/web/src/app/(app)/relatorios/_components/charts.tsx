@@ -32,7 +32,7 @@ export function VolumeBars({
           margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
           barCategoryGap="22%"
         >
-          <Bar dataKey="total" radius={[3, 3, 0, 0]} isAnimationActive={!reduced}>
+          <Bar dataKey="total" radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={!reduced}>
             {dados.map((_, i) => (
               <Cell key={i} fill={cor} fillOpacity={i === dados.length - 1 ? 1 : 0.5} />
             ))}

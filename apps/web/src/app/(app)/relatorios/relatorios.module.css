@@ -307,6 +307,222 @@
 .span4 {
   grid-column: 1 / -1;
 }
+
+/* -------------------------------------------------- Geral — bento fiel ao design */
+.gridGeral {
+  display: grid;
+  gap: calc(18 * var(--u));
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  grid-template-areas:
+    "total tempo taxa rota"
+    "ativas vend vend mais"
+    "metricas metricas metricas metricas"
+    "atrasadas atrasadas atrasadas atrasadas";
+  align-content: start;
+}
+.aTotal {
+  grid-area: total;
+}
+.aTempo {
+  grid-area: tempo;
+}
+.aTaxa {
+  grid-area: taxa;
+}
+.aRota {
+  grid-area: rota;
+}
+.aAtivas {
+  grid-area: ativas;
+}
+.aVend {
+  grid-area: vend;
+}
+.aMais {
+  grid-area: mais;
+}
+.aMetricas {
+  grid-area: metricas;
+}
+.aAtrasadas {
+  grid-area: atrasadas;
+}
+/* altura mínima única dos cards das 2 primeiras linhas (linha harmônica) */
+.aTotal,
+.aTempo,
+.aTaxa,
+.aRota,
+.aAtivas,
+.aVend,
+.aMais {
+  min-height: calc(210 * var(--u));
+}
+
+/* Total geral (preto): número grande + rótulo na base; barras de volume embaixo */
+.cTotal {
+  justify-content: space-between;
+}
+.totalTopo {
+  display: flex;
+  align-items: baseline;
+  gap: calc(12 * var(--u));
+}
+.totalNumero {
+  font-size: calc(84 * var(--u));
+  line-height: 1;
+  font-weight: 500;
+  color: var(--auth-text);
+  letter-spacing: -0.01em;
+}
+.totalRotulo {
+  font-size: calc(18 * var(--u));
+  color: var(--app-sidebar-muted);
+}
+.totalBars {
+  height: calc(110 * var(--u));
+  margin-top: auto;
+}
+
+/* Cards de métrica (Tempo médio / Taxa): rótulo no topo, número grande embaixo */
+.cMetric {
+  justify-content: space-between;
+}
+.metricValor {
+  font-size: calc(72 * var(--u));
+  line-height: 1;
+  font-weight: 500;
+  color: var(--app-ink);
+  letter-spacing: -0.01em;
+}
+.metricVermelho {
+  color: var(--app-danger);
+}
+.metricUnidade {
+  font-size: calc(18 * var(--u));
+  color: var(--app-text-gray);
+  font-weight: 400;
+  margin-left: calc(8 * var(--u));
+}
+
+/* Rota: lista simples (rótulo à esquerda, valor à direita) — SEM barras */
+.cRota .rotaLista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(13 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.rotaItem {
+  display: flex;
+  justify-content: space-between;
+  font-size: calc(16 * var(--u));
+  color: var(--app-ink);
+}
+.rotaValor {
+  color: var(--app-text-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Provas Ativas: donut + legenda */
+.cAtivas {
+  gap: calc(16 * var(--u));
+}
+
+/* Ranking "tempo médio por vendedor": nº · nome · linha conectora · valor */
+.rankLista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  margin-top: calc(4 * var(--u));
+}
+.rankItem {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  padding: calc(11 * var(--u)) 0;
+}
+.rankNum {
+  flex: none;
+  font-size: calc(13 * var(--u));
+  color: var(--app-text-gray);
+  font-variant-numeric: tabular-nums;
+}
+.rankNome {
+  flex: none;
+  font-size: calc(16 * var(--u));
+  color: var(--app-ink);
+  white-space: nowrap;
+}
+.rankLinha {
+  flex: 1;
+  height: 0;
+  border-bottom: 1px solid var(--app-divider);
+}
+.rankValor {
+  flex: none;
+  font-size: calc(16 * var(--u));
+  color: var(--app-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Vendedor com mais artes (preto): rótulo · nome · número grande · barras embaixo */
+.cMais {
+  gap: calc(4 * var(--u));
+}
+.maisNome {
+  font-size: calc(16 * var(--u));
+  color: var(--auth-text);
+}
+.maisNumero {
+  font-size: calc(64 * var(--u));
+  line-height: 1;
+  font-weight: 500;
+  color: var(--auth-text);
+  letter-spacing: -0.01em;
+  margin: calc(4 * var(--u)) 0;
+}
+.maisBars {
+  height: calc(80 * var(--u));
+  margin-top: auto;
+}
+
+@media (max-width: 1100px) {
+  .gridGeral {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "total total"
+      "tempo taxa"
+      "rota ativas"
+      "vend vend"
+      "mais mais"
+      "metricas metricas"
+      "atrasadas atrasadas";
+  }
+}
+@media (max-width: 767px) {
+  .gridGeral {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "total"
+      "tempo"
+      "taxa"
+      "rota"
+      "ativas"
+      "vend"
+      "mais"
+      "metricas"
+      "atrasadas";
+  }
+  .aTotal,
+  .aTempo,
+  .aTaxa,
+  .aRota,
+  .aAtivas,
+  .aVend,
+  .aMais {
+    min-height: 0;
+  }
+}
 .clicavel {
   cursor: pointer;
   border: 0;
@@ -318,10 +534,9 @@
   transform: translateY(-2px);
 }
 .cardRotulo {
-  font-size: calc(16 * var(--u));
+  font-size: calc(17 * var(--u));
   color: var(--app-text-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 400;
 }
 .cardEscuro .cardRotulo {
   color: var(--app-sidebar-muted);

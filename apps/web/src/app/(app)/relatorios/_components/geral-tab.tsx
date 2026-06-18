@@ -1,20 +1,26 @@
 "use client";
 
 /**
- * Aba Geral (W5-C17 · §0.2) — o piso do RF-016 (total, tempo médio, taxa,
- * distribuição por rota, atrasadas, por vendedor) + os extras do design. Os cards
- * de ranking ("Tempo médio por vendedor", "Vendedor com mais artes") DERIVAM da
- * mesma lista `metricas_por_vendedor` (sem ida extra ao banco — DP-3).
+ * Aba Geral (W5-C17 · §0.2) — fiel ao design (bento):
+ * - Linha 1: Total geral (preto, largo, com barras de volume) · Tempo médio aprov.
+ *   · Taxa reprovação · Rota (lista simples).
+ * - Linha 2: Provas Ativas (donut) · Tempo médio por vendedor (ranking) · Vendedor
+ *   com mais artes (preto, com barras).
+ * - Abaixo: tabelas Métricas por Vendedor e Provas Atrasadas.
+ * Os cards de ranking derivam de `metricas_por_vendedor` (sem ida extra — DP-3).
  */
+import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
+import { fetchRelatorioGeral, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { ROTA_LABELS } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
-import { fetchRelatorioGeral, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { fmtDec, fmtHoras, fmtInt, fmtPct, iniciais } from "@/lib/relatorios/format";
 
 import styles from "../relatorios.module.css";
 import { ProvasAtivasDonut, VolumeBars } from "./charts";
 import { EstadoErro, GridSkeleton, useRelatorio } from "./use-relatorio";
-import { ListaBarra, StatCard } from "./widgets";
+
+const rotuloLocal = (l: string | null) =>
+  l === "filial" ? "Filial" : l === "matriz" ? "Matriz" : "—";
 
 export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave: string }) {
   const { dados, carregando, erro, recarregar } = useRelatorio(
@@ -23,74 +29,93 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
   );
 
   if (erro) return <EstadoErro tipo={erro} onRetry={recarregar} />;
-  if (carregando || dados === null) return <GridSkeleton cards={6} />;
+  if (carregando || dados === null) return <GridSkeleton cards={7} />;
 
   const tempoPorVendedor = dados.metricas_por_vendedor
     .filter((m) => m.tempo_medio_horas !== null)
-    .sort((a, b) => (b.tempo_medio_horas ?? 0) - (a.tempo_medio_horas ?? 0))
-    .map((m) => ({
-      chave: m.vendedor_id,
-      rotulo: m.vendedor_nome ?? "—",
-      valor: m.tempo_medio_horas ?? 0,
-      valorTexto: fmtHoras(m.tempo_medio_horas),
-    }));
-
+    .sort((a, b) => (b.tempo_medio_horas ?? 0) - (a.tempo_medio_horas ?? 0));
   const top = dados.metricas_por_vendedor[0]; // já vem ordenado por volume desc
 
   return (
-    <div className={styles.grid}>
-      <StatCard rotulo="Total geral" valor={dados.total_geral} escuro>
-        <VolumeBars dados={dados.volume} className={styles.chartMini} />
-      </StatCard>
+    <div className={styles.gridGeral}>
+      {/* Total geral (preto, largo, com barras de volume) */}
+      <div className={`${styles.card} ${styles.cardEscuro} ${styles.aTotal} ${styles.cTotal}`}>
+        <div className={styles.totalTopo}>
+          <AnimatedCounter value={dados.total_geral} className={styles.totalNumero} />
+          <span className={styles.totalRotulo}>Total geral</span>
+        </div>
+        <VolumeBars dados={dados.volume} className={styles.totalBars} />
+      </div>
 
-      <StatCard
-        rotulo="Tempo médio aprov."
-        valor={fmtDec(dados.tempo_medio_aprovacao_horas)}
-        unidade="horas"
-      />
-      <StatCard rotulo="Taxa reprovação" valor={fmtPct(dados.taxa_reprovacao)} vermelho />
+      {/* Tempo médio aprov. */}
+      <div className={`${styles.card} ${styles.aTempo} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Tempo médio aprov.</span>
+        <span className={styles.metricValor}>
+          {fmtDec(dados.tempo_medio_aprovacao_horas)}
+          <span className={styles.metricUnidade}>horas</span>
+        </span>
+      </div>
 
-      <div className={`${styles.card} ${styles.span2}`}>
-        <span className={styles.cardRotulo}>Provas ativas</span>
+      {/* Taxa reprovação */}
+      <div className={`${styles.card} ${styles.aTaxa} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Taxa reprovação</span>
+        <span className={`${styles.metricValor} ${styles.metricVermelho}`}>
+          {fmtDec(dados.taxa_reprovacao)}
+          <span className={styles.metricUnidade}>%</span>
+        </span>
+      </div>
+
+      {/* Rota (lista simples, sem barras) */}
+      <div className={`${styles.card} ${styles.aRota} ${styles.cRota}`}>
+        <span className={styles.cardRotulo}>Rota</span>
+        <ul className={styles.rotaLista}>
+          {dados.distribuicao_rota.map((f) => (
+            <li key={f.rota} className={styles.rotaItem}>
+              <span>{ROTA_LABELS[f.rota]}</span>
+              <span className={styles.rotaValor}>{f.total}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Provas Ativas (donut + legenda) */}
+      <div className={`${styles.card} ${styles.aAtivas} ${styles.cAtivas}`}>
+        <span className={styles.cardRotulo}>Provas Ativas</span>
         <ProvasAtivasDonut
           aguardando={dados.ativas_aguardando_vendedor}
           reprovadas={dados.ativas_reprovadas}
         />
       </div>
 
-      <div className={`${styles.card} ${styles.span2}`}>
+      {/* Tempo médio de aprovação por vendedor (ranking com linha conectora) */}
+      <div className={`${styles.card} ${styles.aVend}`}>
         <span className={styles.cardRotulo}>Tempo médio de aprovação por vendedor</span>
         {tempoPorVendedor.length === 0 ? (
           <p className={styles.vazio}>Nenhuma aprovação no período.</p>
         ) : (
-          <ListaBarra itens={tempoPorVendedor} ordinal ariaLabel="Tempo médio por vendedor" />
+          <ol className={styles.rankLista}>
+            {tempoPorVendedor.map((m, i) => (
+              <li key={m.vendedor_id} className={styles.rankItem}>
+                <span className={styles.rankNum}>{String(i + 1).padStart(2, "0")}</span>
+                <span className={styles.rankNome}>{m.vendedor_nome ?? "—"}</span>
+                <span className={styles.rankLinha} aria-hidden />
+                <span className={styles.rankValor}>{fmtHoras(m.tempo_medio_horas)}</span>
+              </li>
+            ))}
+          </ol>
         )}
       </div>
 
-      <div className={`${styles.card} ${styles.span2}`}>
-        <span className={styles.cardRotulo}>Rota</span>
-        <ListaBarra
-          ariaLabel="Distribuição por rota"
-          itens={dados.distribuicao_rota.map((f) => ({
-            chave: f.rota,
-            rotulo: ROTA_LABELS[f.rota],
-            valor: f.total,
-            valorTexto: `${f.total} · ${fmtPct(dados.total_geral ? (100 * f.total) / dados.total_geral : 0)}`,
-          }))}
-        />
+      {/* Vendedor com mais artes (preto, com barras) */}
+      <div className={`${styles.card} ${styles.cardEscuro} ${styles.aMais} ${styles.cMais}`}>
+        <span className={styles.cardRotulo}>Vendedor com mais artes</span>
+        <span className={styles.maisNome}>{top?.vendedor_nome ?? "—"}</span>
+        <AnimatedCounter value={top ? top.volume : 0} className={styles.maisNumero} />
+        <VolumeBars dados={dados.volume} className={styles.maisBars} />
       </div>
 
-      <StatCard
-        rotulo="Vendedor com mais artes"
-        valor={top ? top.volume : 0}
-        sub={top?.vendedor_nome ?? "—"}
-        escuro
-      >
-        <VolumeBars dados={dados.volume} className={styles.chartMini} />
-      </StatCard>
-
       {/* Métricas por Vendedor (ranking detalhado) */}
-      <div className={`${styles.card} ${styles.span4}`}>
+      <div className={`${styles.card} ${styles.aMetricas}`}>
         <span className={styles.cardRotulo}>Métricas por vendedor</span>
         {dados.metricas_por_vendedor.length === 0 ? (
           <p className={styles.vazio}>Nenhuma prova no período.</p>
@@ -123,13 +148,7 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
                       </span>
                     </td>
                     <td>
-                      <span className={styles.localPill}>
-                        {m.localizacao === "filial"
-                          ? "Filial"
-                          : m.localizacao === "matriz"
-                            ? "Matriz"
-                            : "—"}
-                      </span>
+                      <span className={styles.localPill}>{rotuloLocal(m.localizacao)}</span>
                     </td>
                     <td className={styles.num}>{fmtInt(m.volume)}</td>
                     <td className={styles.num}>{fmtInt(m.aprovadas)}</td>
@@ -148,7 +167,7 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
       </div>
 
       {/* Provas Atrasadas (aguardando ação) */}
-      <div className={`${styles.card} ${styles.span4}`}>
+      <div className={`${styles.card} ${styles.aAtrasadas}`}>
         <span className={styles.cardRotulo}>Provas atrasadas · aguardando ação</span>
         {dados.provas_atrasadas.length === 0 ? (
           <p className={styles.vazio}>Nenhuma prova atrasada no período.</p>
