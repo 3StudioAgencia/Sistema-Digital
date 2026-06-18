@@ -64,6 +64,25 @@
   transform-origin: top center;
   max-height: 320px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Scrollbar fino personalizado do painel (mesmo padrão da lista do dashboard). */
+.painel::-webkit-scrollbar {
+  width: 6px;
+}
+.painel::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar);
+  border-radius: 3px;
+}
+.painel::-webkit-scrollbar-track {
+  background: transparent;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .painel {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar) transparent;
+  }
 }
 
 /* Painel abrindo para CIMA (campos na metade de baixo do modal). */
@@ -150,6 +169,8 @@
 .branco .opcao {
   justify-content: flex-start;
   font-size: calc(15 * var(--u, 1px));
+  /* respiro lateral: afasta o texto das bordas do painel (alinha com o trigger). */
+  padding: 0 calc(18 * var(--u, 1px));
 }
 
 .branco .opcao:hover,
