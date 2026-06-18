@@ -1,17 +1,20 @@
 "use client";
 
 /**
- * Aba 3Studio (W5-C17 · §0.2) — diagnóstico da operação do studio no período:
- * provas criadas (+ média diária), reinícios, devolvidas (=reprovações — DP-3),
- * cancelamentos, reprovadas aguardando, tempo até 1ª mov, e top motivos de
- * cancelamento (`movimentacoes.motivo` — DP-3).
+ * Aba 3Studio (W5-C17 · §0.2) — fiel ao design (bento):
+ * - Linha 1: Provas Criadas (preto, largo, com gráfico de volume) · Reinícios de
+ *   ciclo · Devolvidas · Canceladas (vermelho).
+ * - Linha 2: Reprov. aguardando (vermelho) · Tempo até 1ª movimentação (+horas) ·
+ *   Top motivos de cancelamento (largo, com barras vermelhas + contagem).
+ * Devolvidas = reprovações no período; Top motivos = movimentacoes.motivo (DP-3).
  */
+import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioStudio, type FiltrosRelatorio } from "@/lib/api/relatorios";
-import { fmtDec } from "@/lib/relatorios/format";
+import { fmtDec, fracao } from "@/lib/relatorios/format";
 
 import styles from "../relatorios.module.css";
+import { VolumeBars } from "./charts";
 import { EstadoErro, GridSkeleton, useRelatorio } from "./use-relatorio";
-import { ListaBarra, StatCard } from "./widgets";
 
 export function StudioTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave: string }) {
   const { dados, carregando, erro, recarregar } = useRelatorio(
@@ -22,43 +25,71 @@ export function StudioTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave
   if (erro) return <EstadoErro tipo={erro} onRetry={recarregar} />;
   if (carregando || dados === null) return <GridSkeleton cards={6} />;
 
-  return (
-    <div className={styles.grid}>
-      <StatCard
-        rotulo="Provas criadas"
-        valor={dados.provas_criadas}
-        sub={`${fmtDec(dados.media_diaria)} / dia (média)`}
-        escuro
-      />
-      <StatCard rotulo="Reinícios ciclo" valor={dados.reinicios_ciclo} />
-      <StatCard rotulo="Devolvidas" valor={dados.devolvidas} />
+  const maxMotivo = Math.max(1, ...dados.top_motivos_cancelamento.map((m) => m.total));
 
-      <StatCard rotulo="Cancelamentos" valor={dados.cancelamentos} vermelho />
-      <StatCard rotulo="Reprov. aguardando" valor={dados.reprovadas_aguardando} vermelho />
-      <div className={styles.span2}>
-        <StatCard
-          rotulo="Tempo até 1ª mov."
-          valor={fmtDec(dados.tempo_ate_primeira_mov_horas)}
-          unidade="h"
-        />
+  return (
+    <div className={styles.gridStudio}>
+      {/* Provas Criadas (preto, largo, com gráfico de volume) */}
+      <div className={`${styles.card} ${styles.cardEscuro} ${styles.sSpan4} ${styles.cTotal}`}>
+        <div className={styles.totalTopo}>
+          <AnimatedCounter value={dados.provas_criadas} className={styles.totalNumero} />
+          <span className={styles.totalRotulo}>Provas Criadas</span>
+        </div>
+        <VolumeBars dados={dados.volume} className={styles.totalBars} />
       </div>
 
-      <div className={`${styles.card} ${styles.span4}`}>
-        <span className={styles.cardRotulo}>
-          Top motivos de cancelamento · diagnóstico do período
+      <div className={`${styles.card} ${styles.sSpan3} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Reinícios de ciclo</span>
+        <span className={styles.metricValor}>{dados.reinicios_ciclo}</span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan3} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Devolvidas</span>
+        <span className={styles.metricValor}>{dados.devolvidas}</span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan2} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Canceladas</span>
+        <span className={`${styles.metricValor} ${styles.metricVermelho}`}>
+          {dados.cancelamentos}
         </span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan4} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Reprov. aguardando</span>
+        <span className={`${styles.metricValor} ${styles.metricVermelho}`}>
+          {dados.reprovadas_aguardando}
+        </span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan3} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Tempo até 1ª movimentação</span>
+        <span className={styles.metricValor}>
+          {fmtDec(dados.tempo_ate_primeira_mov_horas)}
+          <span className={styles.metricUnidade}>horas</span>
+        </span>
+      </div>
+
+      {/* Top motivos de cancelamento (barras vermelhas + contagem) */}
+      <div className={`${styles.card} ${styles.sSpan5}`}>
+        <span className={styles.cardRotulo}>Top motivos de cancelamento</span>
         {dados.top_motivos_cancelamento.length === 0 ? (
           <p className={styles.vazio}>Nenhum cancelamento no período.</p>
         ) : (
-          <ListaBarra
-            ariaLabel="Top motivos de cancelamento"
-            itens={dados.top_motivos_cancelamento.map((m, i) => ({
-              chave: `${i}-${m.motivo}`,
-              rotulo: m.motivo,
-              valor: m.total,
-              cor: "vermelha" as const,
-            }))}
-          />
+          <ul className={styles.motivosLista} aria-label="Top motivos de cancelamento">
+            {dados.top_motivos_cancelamento.map((m, i) => (
+              <li key={`${i}-${m.motivo}`} className={styles.motivoItem}>
+                <span className={styles.motivoNome}>{m.motivo}</span>
+                <span className={styles.rankBar} aria-hidden>
+                  <span
+                    className={`${styles.rankBarFill} ${styles.rankBarFillVermelha}`}
+                    style={{ transform: `scaleX(${fracao(m.total, maxMotivo)})` }}
+                  />
+                </span>
+                <span className={styles.rankValor}>{m.total}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

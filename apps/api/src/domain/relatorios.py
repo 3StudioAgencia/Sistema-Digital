@@ -197,7 +197,10 @@ class RelatorioGeral:
 
 @dataclass(frozen=True)
 class RelatorioStudio:
-    """Aba 3Studio (§0.2) — diagnostico da operacao do studio no periodo."""
+    """Aba 3Studio (§0.2) — diagnostico da operacao do studio no periodo.
+
+    ``volume`` e a serie diaria de provas criadas (alimenta o grafico de barras do
+    card "Provas Criadas", igual ao Total geral da aba Geral)."""
 
     provas_criadas: int
     media_diaria: float
@@ -207,6 +210,7 @@ class RelatorioStudio:
     reprovadas_aguardando: int
     tempo_ate_primeira_mov_horas: float | None
     top_motivos_cancelamento: tuple[MotivoCancelamento, ...]
+    volume: tuple[PontoVolume, ...] = ()
 
 
 @dataclass(frozen=True)

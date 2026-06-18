@@ -269,6 +269,13 @@ class SqlAlchemyRelatoriosRepository(RelatoriosRepositoryPort):
             LIMIT {_LIMITE_TOP_MOTIVOS}"""  # noqa: S608
         mot_rows = (await self._session.execute(text(motivos_sql), params)).all()
 
+        # Serie diaria de provas criadas (grafico de barras do card "Provas Criadas").
+        volume_sql = (
+            "SELECT provas.created_at::date AS dia, count(*) AS total "  # noqa: S608
+            f"FROM provas WHERE ({where}) GROUP BY 1 ORDER BY 1"
+        )
+        vol_rows = (await self._session.execute(text(volume_sql), params)).all()
+
         return RelatorioStudio(
             provas_criadas=int(e.provas_criadas),
             media_diaria=round(int(e.provas_criadas) / dias_no_periodo(filtros.de, filtros.ate), 2),
@@ -280,6 +287,7 @@ class SqlAlchemyRelatoriosRepository(RelatoriosRepositoryPort):
             top_motivos_cancelamento=tuple(
                 MotivoCancelamento(motivo=r.motivo, total=int(r.total)) for r in mot_rows
             ),
+            volume=tuple(PontoVolume(dia=r.dia, total=int(r.total)) for r in vol_rows),
         )
 
     async def vendedores(self, filtros: FiltrosRelatorio) -> RelatorioVendedores:

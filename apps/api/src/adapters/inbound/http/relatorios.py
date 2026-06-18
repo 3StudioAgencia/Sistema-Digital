@@ -173,6 +173,7 @@ class RelatorioStudioOut(BaseModel):
     reprovadas_aguardando: int
     tempo_ate_primeira_mov_horas: float | None
     top_motivos_cancelamento: list[MotivoCancelamentoOut]
+    volume: list[PontoVolumeOut]
 
     @classmethod
     def de_dominio(cls, r: RelatorioStudio) -> Self:
@@ -188,6 +189,7 @@ class RelatorioStudioOut(BaseModel):
                 MotivoCancelamentoOut(motivo=m.motivo, total=m.total)
                 for m in r.top_motivos_cancelamento
             ],
+            volume=[PontoVolumeOut(dia=p.dia, total=p.total) for p in r.volume],
         )
 
 

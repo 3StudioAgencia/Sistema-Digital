@@ -67,6 +67,7 @@ export type RelatorioStudio = {
   reprovadas_aguardando: number;
   tempo_ate_primeira_mov_horas: number | null;
   top_motivos_cancelamento: MotivoCancelamento[];
+  volume: PontoVolume[];
 };
 
 export type RelatorioVendedores = {
