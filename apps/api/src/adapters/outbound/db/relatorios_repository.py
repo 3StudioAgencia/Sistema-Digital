@@ -299,10 +299,17 @@ class SqlAlchemyRelatoriosRepository(RelatoriosRepositoryPort):
         c = (await self._session.execute(text(cadastro))).one()
 
         agregados = f"""SELECT
+            (SELECT count(*) FROM provas WHERE ({where})) AS provas_criadas,
             (SELECT count(DISTINCT provas.vendedor_id) FROM provas WHERE ({where})) AS ativos,
             (SELECT count(*) FROM provas WHERE ({where})
                 AND ({SQL_PREDICADO_ATRASADA})) AS atrasadas_total"""  # noqa: S608
         a = (await self._session.execute(text(agregados), params)).one()
+
+        volume_sql = (
+            "SELECT provas.created_at::date AS dia, count(*) AS total "  # noqa: S608
+            f"FROM provas WHERE ({where}) GROUP BY 1 ORDER BY 1"
+        )
+        vol_rows = (await self._session.execute(text(volume_sql), params)).all()
 
         por_vendedor = await self._metricas_por_vendedor(where, params)
         return RelatorioVendedores(
@@ -311,6 +318,8 @@ class SqlAlchemyRelatoriosRepository(RelatoriosRepositoryPort):
             vendedores_ativos=int(a.ativos),
             atrasadas_total=int(a.atrasadas_total),
             por_vendedor=por_vendedor,
+            provas_criadas=int(a.provas_criadas),
+            volume=tuple(PontoVolume(dia=r.dia, total=int(r.total)) for r in vol_rows),
         )
 
     async def clicheria(self, filtros: FiltrosRelatorio) -> RelatorioClicheria:

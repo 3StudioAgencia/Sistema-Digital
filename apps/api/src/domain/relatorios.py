@@ -219,13 +219,19 @@ class RelatorioVendedores:
 
     ``vendedores_filial``/``vendedores_matriz`` contam os USUARIOS do setor
     Vendedor por localizacao (cadastro — independem do periodo); ``ativos`` =
-    vendedores com ao menos uma prova na populacao filtrada."""
+    vendedores com ao menos uma prova na populacao filtrada.
+
+    ``provas_criadas``/``volume`` alimentam o card "Provas Criadas" (preto, com
+    grafico de barras — igual ao Total geral da Geral e ao Provas Criadas do
+    3Studio)."""
 
     vendedores_filial: int
     vendedores_matriz: int
     vendedores_ativos: int
     atrasadas_total: int
     por_vendedor: tuple[MetricaVendedor, ...]
+    provas_criadas: int = 0
+    volume: tuple[PontoVolume, ...] = ()
 
 
 @dataclass(frozen=True)

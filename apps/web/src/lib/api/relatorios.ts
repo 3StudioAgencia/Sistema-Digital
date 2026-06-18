@@ -76,6 +76,8 @@ export type RelatorioVendedores = {
   vendedores_ativos: number;
   atrasadas_total: number;
   por_vendedor: MetricaVendedor[];
+  provas_criadas: number;
+  volume: PontoVolume[];
 };
 
 export type RelatorioClicheria = {

@@ -199,6 +199,8 @@ class RelatorioVendedoresOut(BaseModel):
     vendedores_ativos: int
     atrasadas_total: int
     por_vendedor: list[MetricaVendedorOut]
+    provas_criadas: int
+    volume: list[PontoVolumeOut]
 
     @classmethod
     def de_dominio(cls, r: RelatorioVendedores) -> Self:
@@ -208,6 +210,8 @@ class RelatorioVendedoresOut(BaseModel):
             vendedores_ativos=r.vendedores_ativos,
             atrasadas_total=r.atrasadas_total,
             por_vendedor=[MetricaVendedorOut.de_dominio(m) for m in r.por_vendedor],
+            provas_criadas=r.provas_criadas,
+            volume=[PontoVolumeOut(dia=p.dia, total=p.total) for p in r.volume],
         )
 
 
