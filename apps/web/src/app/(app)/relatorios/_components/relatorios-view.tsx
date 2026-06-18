@@ -165,8 +165,10 @@ export function RelatoriosView() {
     ...vendedores.map((v) => ({ value: v.id, label: v.nome })),
   ];
 
-  const presetAtivo = (p: (typeof PRESETS)[number]) =>
-    filtros.de === p.de() && filtros.ate === p.ate();
+  // Preset ativo pela URL (`?preset=`), não por recomputar p.de()/p.ate() a cada
+  // render — senão o destaque se perde ao virar o dia (as funções dependem de "hoje").
+  const presetSelecionado = searchParams.get("preset") ?? "";
+  const presetAtivo = (p: (typeof PRESETS)[number]) => presetSelecionado === p.rotulo;
   const diasPeriodo =
     filtros.de && filtros.ate
       ? Math.round(
@@ -240,7 +242,7 @@ export function RelatoriosView() {
               type="date"
               aria-label="Data inicial"
               value={filtros.de ?? ""}
-              onChange={(e) => aplicar({ de: e.target.value || undefined })}
+              onChange={(e) => aplicar({ de: e.target.value || undefined, preset: undefined })}
             />
           </label>
           <label className={styles.campoData}>
@@ -249,7 +251,7 @@ export function RelatoriosView() {
               type="date"
               aria-label="Data final"
               value={filtros.ate ?? ""}
-              onChange={(e) => aplicar({ ate: e.target.value || undefined })}
+              onChange={(e) => aplicar({ ate: e.target.value || undefined, preset: undefined })}
             />
           </label>
           <div className={styles.presets}>
@@ -258,7 +260,7 @@ export function RelatoriosView() {
                 key={p.rotulo}
                 type="button"
                 className={`${styles.preset} ${presetAtivo(p) ? styles.presetAtivo : ""}`}
-                onClick={() => aplicar({ de: p.de(), ate: p.ate() })}
+                onClick={() => aplicar({ de: p.de(), ate: p.ate(), preset: p.rotulo })}
               >
                 {p.rotulo}
               </button>

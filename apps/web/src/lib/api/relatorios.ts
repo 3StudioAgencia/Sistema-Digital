@@ -88,7 +88,10 @@ export type RelatorioClicheria = {
 /** Toggle de rota do design (2 vias) — agrupa as 4 rotas do domínio (DP-4). */
 export type GrupoRota = "" | "matriz" | "filial";
 
-/** Estado da barra de filtros compartilhada (DP-4). `grupoRota` é o toggle 2-vias. */
+/** Estado da barra de filtros compartilhada (DP-4). `grupoRota` é o toggle 2-vias.
+ * `status` é valor ÚNICO (o dropdown de Status do design é single-select); o backend
+ * aceita multi-valor (superset herdado do C07/deep-links do Dashboard) — assimetria
+ * deliberada e inofensiva, não é a UI que produz a lista. */
 export type FiltrosRelatorio = {
   de?: string;
   ate?: string;
