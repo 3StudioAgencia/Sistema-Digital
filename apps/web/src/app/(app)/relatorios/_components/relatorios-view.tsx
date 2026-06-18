@@ -8,7 +8,7 @@
  * na URL — refresh-safe e compartilhável (reusa os padrões do C07).
  */
 import { motion } from "framer-motion";
-import { ChevronDown, Download, Search } from "lucide-react";
+import { Calendar, ChevronDown, Download, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -174,6 +174,16 @@ export function RelatoriosView() {
   const presetSelecionado = searchParams.get("preset") ?? "";
   const presetAtivo = (p: (typeof PRESETS)[number]) => presetSelecionado === p.rotulo;
 
+  // Clicar em QUALQUER ponto do box de data abre o calendário (o input preenche o
+  // pill; "De"/ícone ficam por cima sem capturar o clique) — showPicker() nativo.
+  const abrirCalendario = (input: HTMLInputElement) => {
+    try {
+      input.showPicker();
+    } catch {
+      // showPicker indisponível (navegador antigo) ou picker já aberto — no-op.
+    }
+  };
+
   return (
     <section className={styles.pagina} aria-label="Relatórios">
       <div className={styles.cabecalho}>
@@ -233,24 +243,28 @@ export function RelatoriosView() {
       {/* Barra de filtros compartilhada (DP-4) */}
       <div className={styles.filtros}>
         <div className={styles.linhaFiltros}>
-          <label className={styles.campoData}>
-            De
+          <div className={styles.campoData}>
+            <span className={styles.campoDataPrefixo}>De</span>
             <input
               type="date"
               aria-label="Data inicial"
               value={filtros.de ?? ""}
               onChange={(e) => aplicar({ de: e.target.value || undefined, preset: undefined })}
+              onClick={(e) => abrirCalendario(e.currentTarget)}
             />
-          </label>
-          <label className={styles.campoData}>
-            Até
+            <Calendar className={styles.campoDataIcone} aria-hidden />
+          </div>
+          <div className={styles.campoData}>
+            <span className={styles.campoDataPrefixo}>Até</span>
             <input
               type="date"
               aria-label="Data final"
               value={filtros.ate ?? ""}
               onChange={(e) => aplicar({ ate: e.target.value || undefined, preset: undefined })}
+              onClick={(e) => abrirCalendario(e.currentTarget)}
             />
-          </label>
+            <Calendar className={styles.campoDataIcone} aria-hidden />
+          </div>
           <div className={styles.presets} role="group" aria-label="Período rápido">
             {PRESETS.map((p) => (
               <button
