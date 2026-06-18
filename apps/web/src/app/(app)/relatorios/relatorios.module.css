@@ -148,15 +148,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* Distribui o espaço entre os controles (sem um buraco único antes do Status):
-     o 1º encosta à esquerda, o último (Status/Vendedor) à direita, gaps iguais.
-     Na 2ª linha o busca tem flex:1 e absorve a folga (fica largo, sem buraco). */
-  justify-content: space-between;
+  /* Gap CONSTANTE entre os controles; o tamanho (largura) é que preenche a linha:
+     os campos (datas/busca) CRESCEM para ocupar a folga, os segmentados ficam no
+     tamanho do conteúdo e os dropdowns têm largura fixa (Status/Vendedor alinhados
+     à direita). Sem buraco, sem variar o espaçamento. */
   gap: calc(12 * var(--u));
   width: 100%;
 }
 
 .campoData {
+  flex: 1 1 auto; /* cresce para preencher a linha (gap constante) */
   display: inline-flex;
   align-items: center;
   gap: calc(8 * var(--u));
