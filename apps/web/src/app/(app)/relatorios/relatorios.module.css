@@ -660,8 +660,13 @@
   color: var(--app-ink);
 }
 .num {
-  text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* Alinha à direita o CABEÇALHO e o VALOR das colunas numéricas (specificity maior
+   que `.tabela th`, que forçava o header à esquerda → números desalinhados). */
+.tabela th.num,
+.tabela td.num {
+  text-align: right;
 }
 .vermelho {
   color: var(--app-danger);

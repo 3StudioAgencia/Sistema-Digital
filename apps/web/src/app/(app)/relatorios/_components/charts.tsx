@@ -11,30 +11,55 @@ import { useReducedMotion } from "@/lib/motion/hooks";
 
 import styles from "../relatorios.module.css";
 
-/** Barras de volume (card "Total geral" e "Vendedor com mais artes"). Bare — sem
- * eixos, fiel ao design; a última barra em destaque. */
+/** Distribui os pontos de volume (por dia) em N faixas fixas — assim o gráfico
+ * tem sempre uma quantidade densa de barras (look do design), mesmo com poucos
+ * dados; faixas sem volume aparecem como uma barrinha mínima (minPointSize). */
+function emFaixas(pontos: { dia: string; total: number }[], n: number): number[] {
+  if (pontos.length === 0) return [];
+  const tempos = pontos.map((p) => new Date(p.dia).getTime());
+  const min = Math.min(...tempos);
+  const max = Math.max(...tempos);
+  const faixas = Array.from({ length: n }, () => 0);
+  pontos.forEach((p, i) => {
+    const frac = max === min ? 0.5 : (tempos[i] - min) / (max - min);
+    faixas[Math.min(n - 1, Math.max(0, Math.floor(frac * (n - 1))))] += p.total;
+  });
+  return faixas;
+}
+
+/** Barras de volume (cards "Total geral" e "Vendedor com mais artes"). Bare — sem
+ * eixos, fiel ao design; densas (binning + barra mínima); a última em destaque. */
 export function VolumeBars({
   dados,
   className,
   cor = "var(--app-accent)",
+  faixas = 18,
 }: {
   dados: { dia: string; total: number }[];
   className?: string;
   cor?: string;
+  faixas?: number;
 }) {
   const reduced = useReducedMotion();
-  if (dados.length === 0) return null;
+  const series = emFaixas(dados, faixas).map((total, i) => ({ i, total }));
+  if (series.length === 0) return null;
   return (
     <div className={className ?? styles.chart}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
-          data={dados}
+          data={series}
           margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
-          barCategoryGap="22%"
+          barCategoryGap="16%"
         >
-          <Bar dataKey="total" radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={!reduced}>
-            {dados.map((_, i) => (
-              <Cell key={i} fill={cor} fillOpacity={i === dados.length - 1 ? 1 : 0.5} />
+          <Bar
+            dataKey="total"
+            radius={[2, 2, 0, 0]}
+            maxBarSize={14}
+            minPointSize={4}
+            isAnimationActive={!reduced}
+          >
+            {series.map((_, i) => (
+              <Cell key={i} fill={cor} fillOpacity={i === series.length - 1 ? 1 : 0.55} />
             ))}
           </Bar>
         </BarChart>
@@ -43,8 +68,9 @@ export function VolumeBars({
   );
 }
 
-/** Donut "Provas Ativas" (Geral) — 2 segmentos (Aguardando vendedor / Reprovada,
- * DP-3), com o total no centro. */
+/** Donut "Provas Ativas" (Geral) — 2 segmentos (DP-3): Aguardando vendedor =
+ * AMARELO (anel grosso, maior); Reprovada = PRETO (anel mais FINO, menor). Renderiza
+ * dois `Pie` com raios diferentes para o preto ser radialmente mais estreito. */
 export function ProvasAtivasDonut({
   aguardando,
   reprovadas,
@@ -54,35 +80,59 @@ export function ProvasAtivasDonut({
 }) {
   const reduced = useReducedMotion();
   const total = aguardando + reprovadas;
-  // Aguardando vendedor = AMARELO (maior fatia); Reprovada = PRETO (menor) — design.
   const COR_AGUARDANDO = "var(--app-accent)";
   const COR_REPROVADA = "var(--app-ink)";
-  const dados =
-    total === 0
-      ? [{ nome: "vazio", valor: 1, cor: "#ededed" }]
-      : [
-          { nome: "Aguardando vendedor", valor: aguardando, cor: COR_AGUARDANDO },
-          { nome: "Reprovada", valor: reprovadas, cor: COR_REPROVADA },
-        ];
+  const inicio = 90;
+  const fim = -270;
+  // Ângulo onde o amarelo termina e o preto começa (sentido horário a partir do topo).
+  const divisao = total === 0 ? inicio : inicio - (aguardando / total) * 360;
   return (
     <div className={styles.donutWrap}>
       <div className={styles.donut}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie
-              data={dados}
-              dataKey="valor"
-              innerRadius="68%"
-              outerRadius="100%"
-              startAngle={90}
-              endAngle={-270}
-              stroke="none"
-              isAnimationActive={!reduced}
-            >
-              {dados.map((d, i) => (
-                <Cell key={i} fill={d.cor} />
-              ))}
-            </Pie>
+            {total === 0 ? (
+              <Pie
+                data={[{ valor: 1 }]}
+                dataKey="valor"
+                innerRadius="66%"
+                outerRadius="100%"
+                startAngle={inicio}
+                endAngle={fim}
+                stroke="none"
+                isAnimationActive={false}
+              >
+                <Cell fill="#ededed" />
+              </Pie>
+            ) : null}
+            {total > 0 ? (
+              <Pie
+                data={[{ valor: 1 }]}
+                dataKey="valor"
+                innerRadius="66%"
+                outerRadius="100%"
+                startAngle={inicio}
+                endAngle={divisao}
+                stroke="none"
+                isAnimationActive={!reduced}
+              >
+                <Cell fill={COR_AGUARDANDO} />
+              </Pie>
+            ) : null}
+            {total > 0 ? (
+              <Pie
+                data={[{ valor: 1 }]}
+                dataKey="valor"
+                innerRadius="73%"
+                outerRadius="92%"
+                startAngle={divisao}
+                endAngle={fim}
+                stroke="none"
+                isAnimationActive={!reduced}
+              >
+                <Cell fill={COR_REPROVADA} />
+              </Pie>
+            ) : null}
           </PieChart>
         </ResponsiveContainer>
         <span className={styles.donutCentro} aria-hidden>
