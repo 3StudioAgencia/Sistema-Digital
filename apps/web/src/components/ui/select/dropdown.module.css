@@ -125,3 +125,34 @@
 .escuro .opcao:focus-visible {
   background: var(--app-modal-field-hover);
 }
+
+/* ---------------------------------------------------------------- variante
+   BRANCA (filtros do Relatórios — W5-C17): pílula BRANCA, texto à esquerda,
+   fonte alinhada às demais pílulas da barra; painel branco. */
+.branco .trigger {
+  justify-content: flex-start;
+  background: #fff;
+  color: var(--app-text-gray);
+  font-size: calc(15 * var(--u, 1px));
+  padding: 0 calc(46 * var(--u, 1px)) 0 calc(22 * var(--u, 1px));
+}
+
+.branco .chevron {
+  right: calc(20 * var(--u, 1px));
+  width: calc(18 * var(--u, 1px));
+  height: calc(18 * var(--u, 1px));
+}
+
+.branco .painel {
+  background: #fff;
+}
+
+.branco .opcao {
+  justify-content: flex-start;
+  font-size: calc(15 * var(--u, 1px));
+}
+
+.branco .opcao:hover,
+.branco .opcao:focus-visible {
+  background: #f0f0f0;
+}

@@ -100,24 +100,27 @@
 }
 
 /* -------------------------------------------------- tab bar */
+/* Container branco ocupa a largura toda; as abas têm tamanho de CONTEÚDO (não
+   esticam — fiel ao design: itens agrupados à esquerda, resto do pill branco). */
 .tabBar {
   margin-top: calc(26 * var(--u));
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: calc(6 * var(--u));
   background: #fff;
   border-radius: var(--app-radius-pill);
-  padding: calc(8 * var(--u));
+  padding: calc(7 * var(--u)) calc(8 * var(--u));
 }
 .tab {
-  flex: 1;
   border: 0;
   cursor: pointer;
   font: inherit;
-  font-size: calc(18 * var(--u));
+  font-size: calc(17 * var(--u));
   color: var(--app-text-gray);
   background: none;
   border-radius: var(--app-radius-pill);
-  padding: calc(13 * var(--u)) calc(20 * var(--u));
+  padding: calc(12 * var(--u)) calc(34 * var(--u));
+  white-space: nowrap;
   transition:
     background-color var(--motion-micro) var(--motion-ease-standard),
     color var(--motion-micro) var(--motion-ease-standard);
@@ -132,8 +135,11 @@
 }
 
 /* -------------------------------------------------- filtros */
+/* Altura única (--rel-h) em TODOS os controles → linha harmônica. Cada linha
+   ocupa a largura toda; o último controle (Status/Vendedor) encosta à direita. */
 .filtros {
-  margin-top: calc(16 * var(--u));
+  --rel-h: calc(50 * var(--u));
+  margin-top: calc(14 * var(--u));
   display: flex;
   flex-direction: column;
   gap: calc(12 * var(--u));
@@ -143,14 +149,22 @@
   flex-wrap: wrap;
   align-items: center;
   gap: calc(12 * var(--u));
+  width: 100%;
 }
+/* Empurra o controle marcado (Status na 1ª linha) para a borda direita, alinhado
+   com o Vendedor da 2ª linha (que o busca flex:1 já empurra). */
+.aDireita {
+  margin-left: auto;
+}
+
 .campoData {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8 * var(--u));
+  height: var(--rel-h);
   background: #fff;
   border-radius: var(--app-radius-pill);
-  padding: calc(10 * var(--u)) calc(18 * var(--u));
+  padding: 0 calc(22 * var(--u));
   font-size: calc(15 * var(--u));
   color: var(--app-text-gray);
 }
@@ -158,56 +172,24 @@
   border: 0;
   background: none;
   font: inherit;
-  color: var(--app-ink);
-  outline: none;
-}
-.presets {
-  display: inline-flex;
-  gap: 4px;
-  background: #fff;
-  border-radius: var(--app-radius-pill);
-  padding: calc(6 * var(--u));
-}
-.preset {
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  font-size: calc(15 * var(--u));
-  color: var(--app-text-gray);
-  background: none;
-  border-radius: var(--app-radius-pill);
-  padding: calc(8 * var(--u)) calc(18 * var(--u));
-}
-.presetAtivo,
-.preset:hover {
-  background: var(--app-ink);
-  color: var(--auth-text);
-}
-.dropdownCampo {
-  min-width: calc(190 * var(--u));
-}
-.busca {
-  flex: 1;
-  min-width: calc(240 * var(--u));
-}
-.busca input {
-  width: 100%;
-  border: 0;
-  background: #fff;
-  border-radius: var(--app-radius-pill);
-  padding: calc(13 * var(--u)) calc(22 * var(--u));
-  font: inherit;
   font-size: calc(15 * var(--u));
   color: var(--app-ink);
   outline: none;
 }
+
+/* Segmented controls (presets de período / toggle de rota): pill branca, item
+   ATIVO em preto; hover apenas escurece o texto (não vira preto). */
+.presets,
 .toggleRota {
   display: inline-flex;
-  gap: 4px;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  height: var(--rel-h);
   background: #fff;
   border-radius: var(--app-radius-pill);
-  padding: calc(6 * var(--u));
+  padding: 0 calc(6 * var(--u));
 }
+.preset,
 .opcaoRota {
   border: 0;
   cursor: pointer;
@@ -216,12 +198,58 @@
   color: var(--app-text-gray);
   background: none;
   border-radius: var(--app-radius-pill);
-  padding: calc(8 * var(--u)) calc(20 * var(--u));
+  padding: calc(9 * var(--u)) calc(20 * var(--u));
+  white-space: nowrap;
+  transition:
+    background-color var(--motion-micro) var(--motion-ease-standard),
+    color var(--motion-micro) var(--motion-ease-standard);
 }
-.opcaoRotaAtiva,
+.preset:hover,
 .opcaoRota:hover {
+  color: var(--app-ink);
+}
+.presetAtivo,
+.presetAtivo:hover,
+.opcaoRotaAtiva,
+.opcaoRotaAtiva:hover {
   background: var(--app-ink);
   color: var(--auth-text);
+}
+
+.busca {
+  flex: 1;
+  min-width: calc(240 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  height: var(--rel-h);
+  background: #fff;
+  border-radius: var(--app-radius-pill);
+  padding: 0 calc(24 * var(--u));
+  color: var(--app-text-gray);
+}
+.busca input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--app-ink);
+  outline: none;
+}
+.busca svg {
+  flex: none;
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
+}
+
+/* Dropdowns (Status/Vendedor) — altura única + largura fixa; o visual de pílula
+   BRANCA alinhada à esquerda vem da variante "branco" do componente Dropdown. */
+.dropdownCampo {
+  height: var(--rel-h);
+  width: calc(230 * var(--u));
+  flex: none;
 }
 
 /* -------------------------------------------------- conteúdo / grid */

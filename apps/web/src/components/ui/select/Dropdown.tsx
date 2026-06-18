@@ -37,8 +37,9 @@ type DropdownProps<T extends string> = {
   disabled?: boolean;
   /** Texto do gatilho quando nenhum valor casa (campo ainda vazio). */
   placeholder?: string;
-  /** "claro" = filtros sobre o shell; "escuro" = campos do modal. */
-  variante?: "claro" | "escuro";
+  /** "claro" = filtros cinza (C07); "escuro" = campos do modal; "branco" = pílula
+      branca alinhada à esquerda (filtros do Relatórios sobre o shell — W5-C17). */
+  variante?: "claro" | "escuro" | "branco";
   /** Direção do painel. "cima" evita o recorte pelo overflow do modal quando
       o campo está na metade de baixo dele. */
   abrirPara?: "baixo" | "cima";
@@ -143,8 +144,8 @@ export function Dropdown<T extends string>({
   return (
     <div
       className={`${styles.wrap} ${variante === "escuro" ? styles.escuro : ""} ${
-        abrirPara === "cima" ? styles.paraCima : ""
-      }`}
+        variante === "branco" ? styles.branco : ""
+      } ${abrirPara === "cima" ? styles.paraCima : ""}`}
       ref={wrapRef}
     >
       <button

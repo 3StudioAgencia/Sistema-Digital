@@ -7,7 +7,7 @@
  * snapshot do período, recomputado na troca de filtro/aba. Estado (aba + filtros)
  * na URL — refresh-safe e compartilhável (reusa os padrões do C07).
  */
-import { Calendar, ChevronDown, Download } from "lucide-react";
+import { ChevronDown, Download, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -237,7 +237,7 @@ export function RelatoriosView() {
       <div className={styles.filtros}>
         <div className={styles.linhaFiltros}>
           <label className={styles.campoData}>
-            <Calendar size={16} aria-hidden /> De
+            De
             <input
               type="date"
               aria-label="Data inicial"
@@ -246,7 +246,7 @@ export function RelatoriosView() {
             />
           </label>
           <label className={styles.campoData}>
-            <Calendar size={16} aria-hidden /> Até
+            Até
             <input
               type="date"
               aria-label="Data final"
@@ -266,9 +266,10 @@ export function RelatoriosView() {
               </button>
             ))}
           </div>
-          <div className={styles.dropdownCampo}>
+          <div className={`${styles.dropdownCampo} ${styles.aDireita}`}>
             <Dropdown<string>
               ariaLabel="Filtrar por status"
+              variante="branco"
               value={filtros.status ?? ""}
               onChange={(v) => aplicar({ status: v || undefined })}
               opcoes={statusOpcoes}
@@ -278,6 +279,7 @@ export function RelatoriosView() {
 
         <div className={styles.linhaFiltros}>
           <span className={styles.busca}>
+            <Search aria-hidden />
             <input
               type="search"
               value={busca}
@@ -301,6 +303,7 @@ export function RelatoriosView() {
           <div className={styles.dropdownCampo}>
             <Dropdown<string>
               ariaLabel="Filtrar por vendedor"
+              variante="branco"
               value={filtros.vendedorId ?? ""}
               onChange={(v) => aplicar({ vendedor: v || undefined })}
               opcoes={vendedorOpcoes}
