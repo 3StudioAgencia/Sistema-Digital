@@ -68,6 +68,7 @@ def _decodificar_assinatura(valor: str) -> bytes:
     except (ValueError, binascii.Error) as exc:
         raise AssinaturaInvalidaError("Assinatura inválida: imagem não reconhecida.") from exc
 
+
 router = APIRouter(prefix="/provas", tags=["provas"])
 
 

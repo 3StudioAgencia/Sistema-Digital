@@ -56,7 +56,14 @@ async def _seed_usuario(engine: AsyncEngine, *, setor: str, nome: str, admin: bo
                 "INSERT INTO usuarios (id, nome, email, setor, localizacao, administrador) "
                 "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
             ),
-            {"id": uid, "nome": nome, "email": f"{uid}@x.z", "setor": setor, "loc": loc, "adm": admin},
+            {
+                "id": uid,
+                "nome": nome,
+                "email": f"{uid}@x.z",
+                "setor": setor,
+                "loc": loc,
+                "adm": admin,
+            },
         )
     return uid
 
@@ -73,8 +80,13 @@ async def _seed_prova(
                 "VALUES (:id, :codigo, 'Etiqueta', '155295', 'Cafe', :v, 'matriz', :status, "
                 "'provas/x/arte.png', 'image/png', COALESCE(:created_at, now()))"
             ),
-            {"id": uid, "codigo": gerar_codigo(dt.datetime.now(tz=dt.UTC)), "v": vendedor_id,
-             "status": status, "created_at": created_at},
+            {
+                "id": uid,
+                "codigo": gerar_codigo(dt.datetime.now(tz=dt.UTC)),
+                "v": vendedor_id,
+                "status": status,
+                "created_at": created_at,
+            },
         )
     return uid
 
@@ -90,11 +102,19 @@ async def ctx(
     ids = {
         "admin": admin,
         # multi-status: duas posses distintas do vendedor
-        "retirada_velha": await _seed_prova(engine, vendedor_id=v, status="retirada_vendedor", created_at=velho),
-        "encaminhada_nova": await _seed_prova(engine, vendedor_id=v, status="encaminhada_para_vendedor"),
+        "retirada_velha": await _seed_prova(
+            engine, vendedor_id=v, status="retirada_vendedor", created_at=velho
+        ),
+        "encaminhada_nova": await _seed_prova(
+            engine, vendedor_id=v, status="encaminhada_para_vendedor"
+        ),
         # atrasada: ativa e velha; terminal velha NÃO atrasa; ativa nova NÃO atrasa
-        "aprovada_velha": await _seed_prova(engine, vendedor_id=v, status="aprovada_vendedor", created_at=velho),
-        "terminal_velha": await _seed_prova(engine, vendedor_id=v, status="recebida_clicheria", created_at=velho),
+        "aprovada_velha": await _seed_prova(
+            engine, vendedor_id=v, status="aprovada_vendedor", created_at=velho
+        ),
+        "terminal_velha": await _seed_prova(
+            engine, vendedor_id=v, status="recebida_clicheria", created_at=velho
+        ),
         "criada_nova": await _seed_prova(engine, vendedor_id=v, status="criada"),
     }
     client = make_client(

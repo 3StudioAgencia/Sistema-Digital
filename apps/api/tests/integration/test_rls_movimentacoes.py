@@ -285,11 +285,15 @@ async def test_acao_enum_espelha_o_dominio(cenario: dict[str, Any]) -> None:
     engine: AsyncEngine = cenario["engine"]
     async with engine.connect() as conn:
         rows = (
-            await conn.execute(
-                text(
-                    "SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid "
-                    "WHERE t.typname = 'acao_enum' ORDER BY e.enumsortorder"
+            (
+                await conn.execute(
+                    text(
+                        "SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid "
+                        "WHERE t.typname = 'acao_enum' ORDER BY e.enumsortorder"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert list(rows) == [a.value for a in Acao]

@@ -68,7 +68,14 @@ async def _seed_usuario(engine: AsyncEngine, *, setor: str, nome: str, admin: bo
                 "INSERT INTO usuarios (id, nome, email, setor, localizacao, administrador) "
                 "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
             ),
-            {"id": uid, "nome": nome, "email": f"{uid}@x.z", "setor": setor, "loc": loc, "adm": admin},
+            {
+                "id": uid,
+                "nome": nome,
+                "email": f"{uid}@x.z",
+                "setor": setor,
+                "loc": loc,
+                "adm": admin,
+            },
         )
     return uid
 
@@ -104,7 +111,9 @@ async def _seed_prova(
     return uid
 
 
-async def _seed_movimentacao(engine: AsyncEngine, *, prova_id: str, ator_id: str, quando: dt.datetime) -> None:
+async def _seed_movimentacao(
+    engine: AsyncEngine, *, prova_id: str, ator_id: str, quando: dt.datetime
+) -> None:
     async with engine.begin() as conn:
         await conn.execute(
             text(
@@ -142,15 +151,35 @@ async def _limite(engine: AsyncEngine, agora: dt.datetime, horas: int) -> dt.dat
     ("agora", "horas", "esperado"),
     [
         # Seg 10:00 - 2h úteis = Seg 08:00 (dentro da janela).
-        (dt.datetime(2026, 6, 15, 10, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3)),
+        (
+            dt.datetime(2026, 6, 15, 10, 0, tzinfo=TZ3),
+            2,
+            dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3),
+        ),
         # Seg 08:00 - 2h: 1h hoje (07-08) + 1h sexta (17-18) = Sex 17:00 (cruza fim de semana).
-        (dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+        (
+            dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3),
+            2,
+            dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3),
+        ),
         # Seg 20:00 (após expediente) - 3h = Seg 15:00 (colapsa ao fim da janela 18:00).
-        (dt.datetime(2026, 6, 15, 20, 0, tzinfo=TZ3), 3, dt.datetime(2026, 6, 15, 15, 0, tzinfo=TZ3)),
+        (
+            dt.datetime(2026, 6, 15, 20, 0, tzinfo=TZ3),
+            3,
+            dt.datetime(2026, 6, 15, 15, 0, tzinfo=TZ3),
+        ),
         # Sáb 10:00 - 1h: fim de semana não conta = Sex 17:00.
-        (dt.datetime(2026, 6, 13, 10, 0, tzinfo=TZ3), 1, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+        (
+            dt.datetime(2026, 6, 13, 10, 0, tzinfo=TZ3),
+            1,
+            dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3),
+        ),
         # Seg 12:00 - 48h úteis (4d cheios + 5h) = Ter anterior 08:00 (pula o fim de semana).
-        (dt.datetime(2026, 6, 15, 12, 0, tzinfo=TZ3), 48, dt.datetime(2026, 6, 9, 8, 0, tzinfo=TZ3)),
+        (
+            dt.datetime(2026, 6, 15, 12, 0, tzinfo=TZ3),
+            48,
+            dt.datetime(2026, 6, 9, 8, 0, tzinfo=TZ3),
+        ),
     ],
 )
 async def test_instante_limite_atraso_horas_uteis(
@@ -177,13 +206,17 @@ async def ctx(
 
     # Criadas HOJE (created_at = now()): 1 da Regiane + 1 do Packon (em trânsito).
     await _seed_prova(engine, vendedor_id=regiane, status="criada")
-    p_hoje_transito = await _seed_prova(
+    await _seed_prova(
         engine, vendedor_id=packon, status="com_motorista_ida_laminacao", rota="lam_matriz"
     )
     # Com Vendedor (posse): retirada (Regiane) + encaminhada (Packon) — VELHAS = atrasadas.
     await _seed_prova(engine, vendedor_id=regiane, status="retirada_vendedor", created_at=velho)
     await _seed_prova(
-        engine, vendedor_id=packon, status="encaminhada_para_vendedor", rota="filial", created_at=velho
+        engine,
+        vendedor_id=packon,
+        status="encaminhada_para_vendedor",
+        rota="filial",
+        created_at=velho,
     )
     # Aprovada (Packon) — VELHA = atrasada.
     await _seed_prova(
@@ -213,7 +246,13 @@ async def ctx(
         jwt_verifier=JwtVerifier(hs256_secret=HS256_SECRET),
         session_factory=create_request_session_factory(engine),
     )
-    ids = {"admin": admin, "studio": studio, "motorista": motorista, "regiane": regiane, "packon": packon}
+    ids = {
+        "admin": admin,
+        "studio": studio,
+        "motorista": motorista,
+        "regiane": regiane,
+        "packon": packon,
+    }
     async with client as c:
         yield c, engine, ids
 
@@ -234,7 +273,9 @@ async def test_admin_ve_todos_os_contadores(ctx: tuple[Any, ...]) -> None:
     assert body["na_clicheria"] == 1
 
 
-async def test_atrasadas_breakdown_ordenado_e_exclui_terminais_e_movidas(ctx: tuple[Any, ...]) -> None:
+async def test_atrasadas_breakdown_ordenado_e_exclui_terminais_e_movidas(
+    ctx: tuple[Any, ...],
+) -> None:
     """Atrasadas: só ATIVAS, paradas além do limiar, base na ÚLTIMA movimentação.
     Packon 2 (encaminhada+aprovada), Regiane 1 (retirada velha). A terminal e a
     movida-recente NÃO contam. Lista ordenada por contagem desc."""

@@ -91,8 +91,7 @@ def _clausula_base(filtros: FiltrosRelatorio) -> tuple[str, dict[str, object]]:
     params: dict[str, object] = {}
     if filtros.busca:
         conds.append(
-            "(provas.nome ILIKE :busca ESCAPE '\\' "
-            "OR provas.requerimento ILIKE :busca ESCAPE '\\')"
+            "(provas.nome ILIKE :busca ESCAPE '\\' OR provas.requerimento ILIKE :busca ESCAPE '\\')"
         )
         params["busca"] = f"%{_escapar_like(filtros.busca)}%"
     if filtros.status:

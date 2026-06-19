@@ -332,9 +332,7 @@ async def test_cancelar_e_admin_com_motivo(ctx: tuple[Any, ...]) -> None:
     client, engine, ids = ctx
     prova = await _seed_prova(engine, vendedor_id=ids["vendedor1"], status="criada", rota="matriz")
     # Não-admin (studio) → 403.
-    nao = await _transicionar(
-        client, prova, "cancelar", _auth(ids["studio"], "studio"), motivo="x"
-    )
+    nao = await _transicionar(client, prova, "cancelar", _auth(ids["studio"], "studio"), motivo="x")
     assert nao.status_code == 403
     # Admin sem motivo → 422.
     sem = await _transicionar(client, prova, "cancelar", _auth(ids["admin"], "studio", admin=True))

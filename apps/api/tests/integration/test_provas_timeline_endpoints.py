@@ -150,32 +150,75 @@ async def ctx(
     a1 = await _seed_assinatura(engine, prova_id=p_reg, ator_id=regiane)
     a2 = await _seed_assinatura(engine, prova_id=p_reg, ator_id=regiane)
     a3 = await _seed_assinatura(engine, prova_id=p_reg, ator_id=studio)
-    await _seed_mov(engine, prova_id=p_reg, ator_id=regiane, origem="criada",
-                    destino="retirada_vendedor", acao="identificar_e_assinar",
-                    assinatura_ref=a1, minuto=1)
-    await _seed_mov(engine, prova_id=p_reg, ator_id=regiane, origem="retirada_vendedor",
-                    destino="aprovada_vendedor", acao="aprovar", assinatura_ref=a2, minuto=2)
-    await _seed_mov(engine, prova_id=p_reg, ator_id=studio, origem="aprovada_vendedor",
-                    destino="de_volta_studio", acao="identificar_e_assinar",
-                    assinatura_ref=a3, minuto=3)
+    await _seed_mov(
+        engine,
+        prova_id=p_reg,
+        ator_id=regiane,
+        origem="criada",
+        destino="retirada_vendedor",
+        acao="identificar_e_assinar",
+        assinatura_ref=a1,
+        minuto=1,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_reg,
+        ator_id=regiane,
+        origem="retirada_vendedor",
+        destino="aprovada_vendedor",
+        acao="aprovar",
+        assinatura_ref=a2,
+        minuto=2,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_reg,
+        ator_id=studio,
+        origem="aprovada_vendedor",
+        destino="de_volta_studio",
+        acao="identificar_e_assinar",
+        assinatura_ref=a3,
+        minuto=3,
+    )
 
     # Prova reprovada (motivo em destaque) + uma movimentação SEM assinatura (selo off).
     p_reprov = await _seed_prova(
         engine, vendedor_id=regiane, status="reprovada_vendedor", rota="filial"
     )
     a4 = await _seed_assinatura(engine, prova_id=p_reprov, ator_id=regiane)
-    await _seed_mov(engine, prova_id=p_reprov, ator_id=regiane, origem="criada",
-                    destino="encaminhada_para_vendedor", acao="identificar_e_assinar",
-                    assinatura_ref=a4, minuto=1)
-    await _seed_mov(engine, prova_id=p_reprov, ator_id=regiane, origem="encaminhada_para_vendedor",
-                    destino="reprovada_vendedor", acao="reprovar", assinatura_ref=None,
-                    motivo="Cor saiu fora do padrão.", minuto=2)
+    await _seed_mov(
+        engine,
+        prova_id=p_reprov,
+        ator_id=regiane,
+        origem="criada",
+        destino="encaminhada_para_vendedor",
+        acao="identificar_e_assinar",
+        assinatura_ref=a4,
+        minuto=1,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_reprov,
+        ator_id=regiane,
+        origem="encaminhada_para_vendedor",
+        destino="reprovada_vendedor",
+        acao="reprovar",
+        assinatura_ref=None,
+        motivo="Cor saiu fora do padrão.",
+        minuto=2,
+    )
 
     # Prova do Packon — fora do escopo da Regiane (anti-enumeração).
     p_pack = await _seed_prova(engine, vendedor_id=packon, status="criada", rota="matriz")
 
-    ids = {"studio": studio, "regiane": regiane, "packon": packon,
-           "p_reg": p_reg, "p_reprov": p_reprov, "p_pack": p_pack}
+    ids = {
+        "studio": studio,
+        "regiane": regiane,
+        "packon": packon,
+        "p_reg": p_reg,
+        "p_reprov": p_reprov,
+        "p_pack": p_pack,
+    }
     client = make_client(
         settings,
         storage,

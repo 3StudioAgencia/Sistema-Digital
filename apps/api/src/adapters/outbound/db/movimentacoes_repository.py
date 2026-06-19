@@ -68,9 +68,7 @@ class SqlAlchemyMovimentacoesRepository(MovimentacoesRepositoryPort):
         return mov
 
     async def buscar_por_idempotencia(self, idempotency_key: str) -> Movimentacao | None:
-        stmt = select(MovimentacaoRow).where(
-            MovimentacaoRow.idempotency_key == idempotency_key
-        )
+        stmt = select(MovimentacaoRow).where(MovimentacaoRow.idempotency_key == idempotency_key)
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _para_dominio(row) if row is not None else None
 

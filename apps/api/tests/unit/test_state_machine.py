@@ -72,9 +72,7 @@ _ORACULO: dict[tuple[Rota, E], set[Transicao]] = {
         _av(Az.MOTORISTA, E.COM_MOTORISTA_IDA_LAMINACAO)
     },
     (Rota.LAM_MATRIZ, E.COM_MOTORISTA_IDA_LAMINACAO): {_av(Az.CLICHERIA, E.LAMINACAO_CONCLUIDA)},
-    (Rota.LAM_MATRIZ, E.LAMINACAO_CONCLUIDA): {
-        _av(Az.MOTORISTA, E.COM_MOTORISTA_VOLTA_LAMINACAO)
-    },
+    (Rota.LAM_MATRIZ, E.LAMINACAO_CONCLUIDA): {_av(Az.MOTORISTA, E.COM_MOTORISTA_VOLTA_LAMINACAO)},
     (Rota.LAM_MATRIZ, E.COM_MOTORISTA_VOLTA_LAMINACAO): {
         _av(Az.STUDIO, E.DE_VOLTA_STUDIO_POS_LAMINACAO)
     },
@@ -237,9 +235,7 @@ def test_travessia_completa_da_rota(rota: Rota) -> None:
     estado = E.CRIADA
     for origem, acao, setor, destino in _TRAVESSIAS[rota]:
         assert estado == origem  # encadeamento contíguo
-        t = avaliar_transicao(
-            rota, estado, acao, setor=setor, administrador=False, motivo=None
-        )
+        t = avaliar_transicao(rota, estado, acao, setor=setor, administrador=False, motivo=None)
         assert t.estado_destino == destino
         estado = t.estado_destino
     assert estado in ESTADOS_TERMINAIS  # toda rota termina em Recebida pela Clicheria
@@ -251,32 +247,52 @@ def test_travessia_completa_da_rota(rota: Rota) -> None:
 # ---------------------------------------------------------------------------
 def test_aprovada_vendedor_vai_a_studio_na_matriz_e_clicheria_na_filial() -> None:
     t_matriz = avaliar_transicao(
-        Rota.MATRIZ, E.APROVADA_VENDEDOR, ID,
-        setor=Setor.STUDIO, administrador=False, motivo=None,
+        Rota.MATRIZ,
+        E.APROVADA_VENDEDOR,
+        ID,
+        setor=Setor.STUDIO,
+        administrador=False,
+        motivo=None,
     )
     assert t_matriz.estado_destino == E.DE_VOLTA_STUDIO
     t_filial = avaliar_transicao(
-        Rota.FILIAL, E.APROVADA_VENDEDOR, ID,
-        setor=Setor.CLICHERIA, administrador=False, motivo=None,
+        Rota.FILIAL,
+        E.APROVADA_VENDEDOR,
+        ID,
+        setor=Setor.CLICHERIA,
+        administrador=False,
+        motivo=None,
     )
     assert t_filial.estado_destino == E.RECEBIDA_CLICHERIA
     # E o ator é exclusivo da rota: Clicheria não aprova→studio na Matriz, etc.
     with pytest.raises(TransicaoNaoAutorizadaError):
         avaliar_transicao(
-            Rota.MATRIZ, E.APROVADA_VENDEDOR, ID,
-            setor=Setor.CLICHERIA, administrador=False, motivo=None,
+            Rota.MATRIZ,
+            E.APROVADA_VENDEDOR,
+            ID,
+            setor=Setor.CLICHERIA,
+            administrador=False,
+            motivo=None,
         )
 
 
 def test_laminacao_concluida_vai_a_motorista_na_lam_matriz_e_vendedor_na_lam_filial() -> None:
     t_mat = avaliar_transicao(
-        Rota.LAM_MATRIZ, E.LAMINACAO_CONCLUIDA, ID,
-        setor=Setor.MOTORISTA, administrador=False, motivo=None,
+        Rota.LAM_MATRIZ,
+        E.LAMINACAO_CONCLUIDA,
+        ID,
+        setor=Setor.MOTORISTA,
+        administrador=False,
+        motivo=None,
     )
     assert t_mat.estado_destino == E.COM_MOTORISTA_VOLTA_LAMINACAO
     t_fil = avaliar_transicao(
-        Rota.LAM_FILIAL, E.LAMINACAO_CONCLUIDA, ID,
-        setor=Setor.VENDEDOR, administrador=False, motivo=None,
+        Rota.LAM_FILIAL,
+        E.LAMINACAO_CONCLUIDA,
+        ID,
+        setor=Setor.VENDEDOR,
+        administrador=False,
+        motivo=None,
     )
     assert t_fil.estado_destino == E.ENCAMINHADA_PARA_VENDEDOR
 
@@ -295,8 +311,12 @@ def test_estado_inexistente_na_rota_e_422() -> None:
     # "Retirada pelo Vendedor" não existe na rota Filial.
     with pytest.raises(TransicaoInvalidaError):
         avaliar_transicao(
-            Rota.FILIAL, E.RETIRADA_VENDEDOR, APROVAR,
-            setor=Setor.VENDEDOR, administrador=False, motivo=None,
+            Rota.FILIAL,
+            E.RETIRADA_VENDEDOR,
+            APROVAR,
+            setor=Setor.VENDEDOR,
+            administrador=False,
+            motivo=None,
         )
 
 
@@ -324,9 +344,7 @@ def test_perfil_errado_em_toda_transicao_de_setor_da_403(chave: tuple[Rota, E]) 
                 continue
             # Mesmo um ator ADMIN de setor errado não passa um normal-flow.
             with pytest.raises(TransicaoNaoAutorizadaError):
-                avaliar_transicao(
-                    rota, estado, t.acao, setor=setor, administrador=True, motivo="x"
-                )
+                avaliar_transicao(rota, estado, t.acao, setor=setor, administrador=True, motivo="x")
 
 
 # ---------------------------------------------------------------------------
@@ -383,14 +401,22 @@ def test_cancelar_exige_admin_e_motivo(chave: tuple[Rota, E]) -> None:
 @pytest.mark.parametrize("rota", list(Rota))
 def test_reiniciar_ciclo_de_reprovada_exige_admin(rota: Rota) -> None:
     t = avaliar_transicao(
-        rota, E.REPROVADA_VENDEDOR, REINICIAR,
-        setor=Setor.VENDEDOR, administrador=True, motivo=None,
+        rota,
+        E.REPROVADA_VENDEDOR,
+        REINICIAR,
+        setor=Setor.VENDEDOR,
+        administrador=True,
+        motivo=None,
     )
     assert t.estado_destino == E.CRIADA  # volta a "Criada (novo ciclo)" — rota preservada
     with pytest.raises(TransicaoNaoAutorizadaError):
         avaliar_transicao(
-            rota, E.REPROVADA_VENDEDOR, REINICIAR,
-            setor=Setor.STUDIO, administrador=False, motivo=None,
+            rota,
+            E.REPROVADA_VENDEDOR,
+            REINICIAR,
+            setor=Setor.STUDIO,
+            administrador=False,
+            motivo=None,
         )
 
 

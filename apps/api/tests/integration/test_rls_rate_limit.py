@@ -89,8 +89,10 @@ async def test_ator_so_ve_e_incrementa_a_propria_linha(usuarios_engine: AsyncEng
         try:
             await _autenticar(conn, b)
             visiveis = (
-                await conn.execute(text("SELECT user_id FROM rate_limit_contadores"))
-            ).scalars().all()
+                (await conn.execute(text("SELECT user_id FROM rate_limit_contadores")))
+                .scalars()
+                .all()
+            )
             assert {str(x) for x in visiveis} == set()  # nada de A
             cb = (await conn.execute(text(_UPSERT), {"chave": "identificar"})).scalar_one()
             assert cb == 1  # contador de B é independente do de A

@@ -47,9 +47,7 @@ class Transicao:
 
 # Estados TERMINAIS — sem transição de saída (§6.1). Qualquer ação a partir
 # deles (incl. Cancelar) não está na tabela → 422.
-ESTADOS_TERMINAIS: Final[frozenset[EstadoProva]] = frozenset(
-    {_E.RECEBIDA_CLICHERIA, _E.CANCELADA}
-)
+ESTADOS_TERMINAIS: Final[frozenset[EstadoProva]] = frozenset({_E.RECEBIDA_CLICHERIA, _E.CANCELADA})
 
 
 def _avanco(perfil: Autorizacao, destino: EstadoProva) -> Transicao:

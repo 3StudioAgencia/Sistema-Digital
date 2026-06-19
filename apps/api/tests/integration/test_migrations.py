@@ -193,9 +193,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'movimentacoes'") == 1
     ), "0015 deve criar a tabela movimentacoes"
-    assert (
-        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 1
-    ), "0015 deve criar o tipo acao_enum (sincronizado com domain/state_machine)"
+    assert _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 1, (
+        "0015 deve criar o tipo acao_enum (sincronizado com domain/state_machine)"
+    )
     assert (
         _scalar(
             database_url,
@@ -299,9 +299,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
     assert (
         _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'movimentacoes'") == 0
     ), "downgrade da 0015 deve remover a tabela movimentacoes"
-    assert (
-        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 0
-    ), "downgrade da 0015 deve remover o tipo acao_enum"
+    assert _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'acao_enum'") == 0, (
+        "downgrade da 0015 deve remover o tipo acao_enum"
+    )
     assert (
         _scalar(
             database_url,

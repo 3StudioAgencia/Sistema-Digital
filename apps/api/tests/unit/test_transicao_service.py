@@ -60,9 +60,7 @@ def _vendedor() -> Usuario:
 
 
 def _admin() -> Usuario:
-    return Usuario(
-        id=ADMIN_ID, nome="A", email="a@x.z", setor=Setor.STUDIO, administrador=True
-    )
+    return Usuario(id=ADMIN_ID, nome="A", email="a@x.z", setor=Setor.STUDIO, administrador=True)
 
 
 class FakeProvasRepo(ProvasRepositoryPort):
@@ -233,7 +231,8 @@ async def test_acao_invalida_e_422_sem_commit_nem_assinatura() -> None:
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(TransicaoInvalidaError):
         await svc.executar(
-            prova_id="a", acao=Acao.APROVAR,
+            prova_id="a",
+            acao=Acao.APROVAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -249,7 +248,8 @@ async def test_perfil_errado_e_403_sem_commit() -> None:
     svc = _servico(repo, movs, uow, ator)
     with pytest.raises(TransicaoNaoAutorizadaError):
         await svc.executar(
-            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -262,7 +262,8 @@ async def test_reprovar_sem_motivo_e_422_sem_commit() -> None:
     svc = _servico(repo, movs, uow, _vendedor())
     with pytest.raises(MotivoObrigatorioError):
         await svc.executar(
-            prova_id="a", acao=Acao.REPROVAR,
+            prova_id="a",
+            acao=Acao.REPROVAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
             motivo="   ",
@@ -278,7 +279,8 @@ async def test_assinatura_invalida_e_422_sem_commit_nem_movimentacao() -> None:
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(AssinaturaInvalidaError):
         await svc.executar(
-            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=b"",  # vazia
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -297,7 +299,8 @@ async def test_atomicidade_falha_ao_gravar_movimentacao_nao_commita() -> None:
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(RuntimeError):
         await svc.executar(
-            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -315,7 +318,8 @@ async def test_atomicidade_falha_ao_gravar_assinatura_nao_commita() -> None:
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(RuntimeError):
         await svc.executar(
-            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -339,7 +343,8 @@ async def test_idempotencia_reenvio_converge_sem_reaplicar_nem_recriar_assinatur
     assin = FakeAssinaturasRepo()
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     out = await svc.executar(
-        prova_id=prova.id, acao=Acao.IDENTIFICAR_E_ASSINAR,
+        prova_id=prova.id,
+        acao=Acao.IDENTIFICAR_E_ASSINAR,
         assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
     )
@@ -365,7 +370,8 @@ async def test_idempotencia_mesma_chave_operacao_diferente_e_409() -> None:
     svc = _servico(repo, movs, uow, _vendedor())
     with pytest.raises(TransicaoIdempotenciaConflitoError):
         await svc.executar(
-            prova_id=prova.id, acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id=prova.id,
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=PNG,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )
@@ -376,7 +382,8 @@ async def test_admin_cancela_com_motivo_e_grava_movimentacao() -> None:
     repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
     svc = _servico(repo, movs, uow, _admin())
     out = await svc.executar(
-        prova_id="a", acao=Acao.CANCELAR,
+        prova_id="a",
+        acao=Acao.CANCELAR,
         assinatura_imagem=PNG,
         idempotency_key="33333333-3333-3333-3333-333333333333",
         motivo="cliente desistiu",
@@ -396,7 +403,8 @@ async def test_cancelar_sem_assinatura_grava_movimentacao_sem_comprovante() -> N
     assin = FakeAssinaturasRepo()
     svc = _servico(repo, movs, uow, _admin(), assin)
     out = await svc.executar(
-        prova_id="a", acao=Acao.CANCELAR,
+        prova_id="a",
+        acao=Acao.CANCELAR,
         assinatura_imagem=None,  # ação administrativa: sem assinatura desenhada
         idempotency_key="33333333-3333-3333-3333-333333333333",
         motivo="cliente desistiu",
@@ -515,7 +523,8 @@ async def test_acao_operacional_sem_assinatura_e_422() -> None:
     svc = _servico(repo, movs, uow, _vendedor(), assin)
     with pytest.raises(AssinaturaInvalidaError):
         await svc.executar(
-            prova_id="a", acao=Acao.IDENTIFICAR_E_ASSINAR,
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
             assinatura_imagem=None,
             idempotency_key="33333333-3333-3333-3333-333333333333",
         )

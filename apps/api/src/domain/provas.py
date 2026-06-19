@@ -173,9 +173,7 @@ class LimiteDeTentativasError(ErroDeDominio):
     codigo = "limite_de_tentativas"
 
     def __init__(self) -> None:
-        super().__init__(
-            "Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente."
-        )
+        super().__init__("Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.")
 
 
 def detectar_tipo_imagem(data: bytes) -> str | None:

@@ -86,8 +86,16 @@ def _periodo(filtros: FiltrosRelatorio) -> str:
 
 def _linhas_vendedores(metricas: Sequence[MetricaVendedor]) -> list[list[str]]:
     linhas = [
-        ["Vendedor", "Local", "Volume", "Aprovadas", "Reprovadas", "Taxa reprov. (%)",
-         "Tempo médio (h)", "Atrasadas"]
+        [
+            "Vendedor",
+            "Local",
+            "Volume",
+            "Aprovadas",
+            "Reprovadas",
+            "Taxa reprov. (%)",
+            "Tempo médio (h)",
+            "Atrasadas",
+        ]
     ]
     for m in metricas:
         linhas.append(

@@ -136,10 +136,20 @@ def _service(prova: Prova | None, movs: FakeMovs | None = None) -> ProvasConsult
 async def test_monta_timeline_com_esqueleto_historico_e_nomes() -> None:
     movs = FakeMovs(
         [
-            _mov(EstadoProva.CRIADA, EstadoProva.RETIRADA_VENDEDOR, Acao.IDENTIFICAR_E_ASSINAR,
-                 VENDEDOR_ID, minuto=1),
-            _mov(EstadoProva.RETIRADA_VENDEDOR, EstadoProva.APROVADA_VENDEDOR, Acao.APROVAR,
-                 VENDEDOR_ID, minuto=2),
+            _mov(
+                EstadoProva.CRIADA,
+                EstadoProva.RETIRADA_VENDEDOR,
+                Acao.IDENTIFICAR_E_ASSINAR,
+                VENDEDOR_ID,
+                minuto=1,
+            ),
+            _mov(
+                EstadoProva.RETIRADA_VENDEDOR,
+                EstadoProva.APROVADA_VENDEDOR,
+                Acao.APROVAR,
+                VENDEDOR_ID,
+                minuto=2,
+            ),
         ],
         {VENDEDOR_ID: "Regiane"},
     )
@@ -176,8 +186,14 @@ async def test_sem_historico_devolve_esqueleto_e_nao_chama_projetor() -> None:
 
 async def test_ator_nome_none_quando_projetor_nao_resolve() -> None:
     movs = FakeMovs(
-        [_mov(EstadoProva.CRIADA, EstadoProva.RETIRADA_VENDEDOR, Acao.IDENTIFICAR_E_ASSINAR,
-              VENDEDOR_ID)],
+        [
+            _mov(
+                EstadoProva.CRIADA,
+                EstadoProva.RETIRADA_VENDEDOR,
+                Acao.IDENTIFICAR_E_ASSINAR,
+                VENDEDOR_ID,
+            )
+        ],
         {},  # projetor vazio
     )
     timeline = await _service(_prova(), movs).obter_movimentacoes(PROVA_ID)
@@ -187,12 +203,27 @@ async def test_ator_nome_none_quando_projetor_nao_resolve() -> None:
 async def test_ids_de_atores_sao_distintos_uma_ida_ao_projetor() -> None:
     movs = FakeMovs(
         [
-            _mov(EstadoProva.CRIADA, EstadoProva.RETIRADA_VENDEDOR, Acao.IDENTIFICAR_E_ASSINAR,
-                 VENDEDOR_ID, minuto=1),
-            _mov(EstadoProva.RETIRADA_VENDEDOR, EstadoProva.APROVADA_VENDEDOR, Acao.APROVAR,
-                 VENDEDOR_ID, minuto=2),
-            _mov(EstadoProva.APROVADA_VENDEDOR, EstadoProva.DE_VOLTA_STUDIO,
-                 Acao.IDENTIFICAR_E_ASSINAR, STUDIO_ID, minuto=3),
+            _mov(
+                EstadoProva.CRIADA,
+                EstadoProva.RETIRADA_VENDEDOR,
+                Acao.IDENTIFICAR_E_ASSINAR,
+                VENDEDOR_ID,
+                minuto=1,
+            ),
+            _mov(
+                EstadoProva.RETIRADA_VENDEDOR,
+                EstadoProva.APROVADA_VENDEDOR,
+                Acao.APROVAR,
+                VENDEDOR_ID,
+                minuto=2,
+            ),
+            _mov(
+                EstadoProva.APROVADA_VENDEDOR,
+                EstadoProva.DE_VOLTA_STUDIO,
+                Acao.IDENTIFICAR_E_ASSINAR,
+                STUDIO_ID,
+                minuto=3,
+            ),
         ],
         {VENDEDOR_ID: "Regiane", STUDIO_ID: "Mario"},
     )
