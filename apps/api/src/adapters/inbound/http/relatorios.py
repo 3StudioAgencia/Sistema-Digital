@@ -221,6 +221,7 @@ class RelatorioClicheriaOut(BaseModel):
     em_transito_agora: int
     origens: int
     distribuicao_origem: list[FatiaRotaOut]
+    volume: list[PontoVolumeOut]
 
     @classmethod
     def de_dominio(cls, r: RelatorioClicheria) -> Self:
@@ -230,6 +231,7 @@ class RelatorioClicheriaOut(BaseModel):
             em_transito_agora=r.em_transito_agora,
             origens=r.origens,
             distribuicao_origem=[FatiaRotaOut.de_dominio(f) for f in r.distribuicao_origem],
+            volume=[PontoVolumeOut(dia=p.dia, total=p.total) for p in r.volume],
         )
 
 

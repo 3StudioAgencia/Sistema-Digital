@@ -239,13 +239,16 @@ class RelatorioClicheria:
     """Aba Clicheria (§0.2 — perspectiva "rumo a clicheria", DP-3).
 
     ``origens`` = nº de rotas distintas (das 4) entre as provas recebidas no
-    periodo; ``distribuicao_origem`` detalha-as por rota."""
+    periodo; ``distribuicao_origem`` detalha-as por rota. ``volume`` alimenta o
+    grafico do card "Tempo Medio Aguardando" (atividade diaria — provas/dia da
+    base, mesma serie das demais abas)."""
 
     tempo_medio_aguardando_horas: float | None
     recebidas_no_periodo: int
     em_transito_agora: int
     origens: int
     distribuicao_origem: tuple[FatiaRota, ...]
+    volume: tuple[PontoVolume, ...] = ()
 
 
 # Conversao de date (dia inclusivo) -> intervalo usado nas constantes da query.

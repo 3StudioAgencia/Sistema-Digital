@@ -381,6 +381,30 @@
   margin-top: auto;
 }
 
+/* Tempo Médio Aguardando (Clicheria): rótulo no topo, número + "horas" à esquerda e
+   barras de atividade à direita, ambos ao rodapé. */
+.cTempo {
+  justify-content: space-between;
+}
+.cTempoCorpo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: calc(16 * var(--u));
+  margin-top: auto;
+}
+.cTempoBars {
+  flex: 1 1 auto;
+  height: calc(110 * var(--u));
+  min-width: 0;
+}
+.totalUnidade {
+  font-size: calc(18 * var(--u));
+  color: var(--app-sidebar-muted);
+  font-weight: 400;
+  margin-left: calc(8 * var(--u));
+}
+
 /* Cards de métrica (Tempo médio / Taxa): rótulo no topo, número grande embaixo */
 .cMetric {
   justify-content: space-between;
@@ -495,15 +519,17 @@
   margin-top: auto;
 }
 
-/* ---------------------------------------- 3Studio / Vendedores — bento (12 col) */
+/* ------------------------------ 3Studio / Vendedores / Clicheria — bento (12 col) */
 .gridStudio,
-.gridVendedores {
+.gridVendedores,
+.gridClicheria {
   display: grid;
   gap: calc(18 * var(--u));
   grid-template-columns: repeat(12, 1fr);
   align-content: start;
 }
-.gridStudio > div {
+.gridStudio > div,
+.gridClicheria > div {
   min-height: calc(210 * var(--u));
 }
 .gridVendedores > .sSpan4,
@@ -521,6 +547,9 @@
 }
 .sSpan5 {
   grid-column: span 5;
+}
+.sSpan6 {
+  grid-column: span 6;
 }
 .sSpan8 {
   grid-column: span 8;
@@ -557,11 +586,13 @@
 
 @media (max-width: 1100px) {
   .gridStudio,
-  .gridVendedores {
+  .gridVendedores,
+  .gridClicheria {
     grid-template-columns: repeat(6, 1fr);
   }
   .sSpan4,
   .sSpan5,
+  .sSpan6,
   .sSpan8 {
     grid-column: 1 / -1;
   }
@@ -572,11 +603,13 @@
 }
 @media (max-width: 767px) {
   .gridStudio,
-  .gridVendedores {
+  .gridVendedores,
+  .gridClicheria {
     grid-template-columns: 1fr;
   }
   .gridStudio > div,
-  .gridVendedores > div {
+  .gridVendedores > div,
+  .gridClicheria > div {
     grid-column: 1 / -1;
     min-height: 0;
   }

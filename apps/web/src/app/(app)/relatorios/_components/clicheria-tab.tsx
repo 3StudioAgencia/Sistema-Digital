@@ -1,18 +1,21 @@
 "use client";
 
 /**
- * Aba Clicheria (W5-C17 · §0.2) — ótica de quem recebe a prova no fim do fluxo
- * (perspectiva "rumo à clicheria" — DP-3): tempo médio aguardando (envio →
- * recebimento), recebidas no período, em trânsito agora, origens (rotas distintas),
- * distribuição por rota de origem (com empty state) e o fluxo de ciclo.
+ * Aba Clicheria (W5-C17 · §0.2) — fiel ao design (bento). Ótica de quem recebe a
+ * prova no fim do fluxo (perspectiva "rumo à clicheria" — DP-3):
+ * - Linha 1: Tempo Médio Aguardando (preto, com gráfico de atividade) · Recebidas
+ *   no período · Em trânsito · Origens.
+ * - Linha 2: Provas recebidas por rota de origem (distribuição pelas 4 rotas) ·
+ *   Fluxo de ciclo (Recebidas / Em trânsito / Total origens).
  */
-import { ROTA_LABELS } from "@/lib/provas/rota-labels";
+import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioClicheria, type FiltrosRelatorio } from "@/lib/api/relatorios";
-import { fmtDec } from "@/lib/relatorios/format";
+import { ROTA_LABELS } from "@/lib/provas/rota-labels";
+import { fracao } from "@/lib/relatorios/format";
 
 import styles from "../relatorios.module.css";
+import { VolumeBars } from "./charts";
 import { EstadoErro, GridSkeleton, useRelatorio } from "./use-relatorio";
-import { ListaBarra, StatCard } from "./widgets";
 
 export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave: string }) {
   const { dados, carregando, erro, recarregar } = useRelatorio(
@@ -24,24 +27,54 @@ export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; ch
   if (carregando || dados === null) return <GridSkeleton cards={4} />;
 
   const totalRecebidas = dados.distribuicao_origem.reduce((s, f) => s + f.total, 0);
+  const rotas = [...dados.distribuicao_origem].sort((a, b) => b.total - a.total);
+  const maxRota = Math.max(1, ...rotas.map((f) => f.total));
+
+  const fluxo = [
+    { rotulo: "Recebidas", valor: dados.recebidas_no_periodo },
+    { rotulo: "Em trânsito", valor: dados.em_transito_agora },
+    { rotulo: "Total origens", valor: dados.origens },
+  ];
+  const maxFluxo = Math.max(1, ...fluxo.map((f) => f.valor));
 
   return (
-    <div className={styles.grid}>
-      <StatCard
-        rotulo="Tempo médio aguardando"
-        valor={fmtDec(dados.tempo_medio_aguardando_horas)}
-        unidade="h"
-        sub="envio → recebimento"
-        escuro
-      />
-      <StatCard rotulo="Recebidas no período" valor={dados.recebidas_no_periodo} />
-      <StatCard rotulo="Em trânsito agora" valor={dados.em_transito_agora} />
-      <StatCard rotulo="Origens" valor={dados.origens} sub="rotas distintas" />
+    <div className={styles.gridClicheria}>
+      {/* Tempo Médio Aguardando (preto, com gráfico de atividade) */}
+      <div className={`${styles.card} ${styles.cardEscuro} ${styles.sSpan4} ${styles.cTempo}`}>
+        <span className={styles.cardRotulo}>Tempo Médio Aguardando</span>
+        <div className={styles.cTempoCorpo}>
+          <span className={styles.totalNumero}>
+            {dados.tempo_medio_aguardando_horas === null ? (
+              "—"
+            ) : (
+              <AnimatedCounter value={Math.round(dados.tempo_medio_aguardando_horas)} />
+            )}
+            {dados.tempo_medio_aguardando_horas !== null && (
+              <span className={styles.totalUnidade}>horas</span>
+            )}
+          </span>
+          <VolumeBars dados={dados.volume} className={styles.cTempoBars} />
+        </div>
+      </div>
 
-      <div className={`${styles.card} ${styles.span2}`}>
-        <span className={styles.cardRotulo}>
-          Provas recebidas por rota de origem · distribuição
-        </span>
+      <div className={`${styles.card} ${styles.sSpan3} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Recebidas no período</span>
+        <span className={styles.metricValor}>{dados.recebidas_no_periodo}</span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan3} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Em trânsito</span>
+        <span className={styles.metricValor}>{dados.em_transito_agora}</span>
+      </div>
+
+      <div className={`${styles.card} ${styles.sSpan2} ${styles.cMetric}`}>
+        <span className={styles.cardRotulo}>Origens</span>
+        <span className={styles.metricValor}>{dados.origens}</span>
+      </div>
+
+      {/* Provas recebidas por rota de origem (distribuição pelas 4 rotas) */}
+      <div className={`${styles.card} ${styles.sSpan6}`}>
+        <span className={styles.cardRotulo}>Provas recebidas por rota de origem</span>
         {totalRecebidas === 0 ? (
           <p className={styles.vazio}>
             Nenhuma prova recebida no período.
@@ -49,36 +82,42 @@ export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; ch
             <span className={styles.vazioSub}>Sem dados para distribuir entre as rotas.</span>
           </p>
         ) : (
-          <ListaBarra
-            ariaLabel="Provas recebidas por rota de origem"
-            itens={dados.distribuicao_origem.map((f) => ({
-              chave: f.rota,
-              rotulo: ROTA_LABELS[f.rota],
-              valor: f.total,
-            }))}
-          />
+          <ol className={styles.rankLista}>
+            {rotas.map((f, i) => (
+              <li key={f.rota} className={styles.rankItem}>
+                <span className={styles.rankNum}>{String(i + 1).padStart(2, "0")}</span>
+                <span className={styles.rankNome}>{ROTA_LABELS[f.rota]}</span>
+                <span className={styles.rankBar} aria-hidden>
+                  <span
+                    className={styles.rankBarFill}
+                    style={{ transform: `scaleX(${fracao(f.total, maxRota)})` }}
+                  />
+                </span>
+                <span className={styles.rankValor}>{f.total}</span>
+              </li>
+            ))}
+          </ol>
         )}
       </div>
 
-      <div className={`${styles.card} ${styles.span2}`}>
-        <span className={styles.cardRotulo}>Fluxo de ciclo · estado atual</span>
-        <ul className={styles.lista} aria-label="Fluxo de ciclo">
-          <li className={styles.linhaLista}>
-            <span className={styles.ordinal}>○</span>
-            <span className={styles.linhaListaRotulo}>Recebidas</span>
-            <span className={styles.linhaListaValor}>{dados.recebidas_no_periodo}</span>
-          </li>
-          <li className={styles.linhaLista}>
-            <span className={styles.ordinal}>○</span>
-            <span className={styles.linhaListaRotulo}>Em trânsito</span>
-            <span className={styles.linhaListaValor}>{dados.em_transito_agora}</span>
-          </li>
-          <li className={styles.linhaLista}>
-            <span className={styles.ordinal}>○</span>
-            <span className={styles.linhaListaRotulo}>Total origens</span>
-            <span className={styles.linhaListaValor}>{dados.origens}</span>
-          </li>
-        </ul>
+      {/* Fluxo de ciclo (recap: Recebidas / Em trânsito / Total origens) */}
+      <div className={`${styles.card} ${styles.sSpan6}`}>
+        <span className={styles.cardRotulo}>Fluxo de ciclo</span>
+        <ol className={styles.rankLista}>
+          {fluxo.map((f, i) => (
+            <li key={f.rotulo} className={styles.rankItem}>
+              <span className={styles.rankNum}>{String(i + 1).padStart(2, "0")}</span>
+              <span className={styles.rankNome}>{f.rotulo}</span>
+              <span className={styles.rankBar} aria-hidden>
+                <span
+                  className={styles.rankBarFill}
+                  style={{ transform: `scaleX(${fracao(f.valor, maxFluxo)})` }}
+                />
+              </span>
+              <span className={styles.rankValor}>{f.valor}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

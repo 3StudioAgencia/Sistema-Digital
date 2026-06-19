@@ -350,12 +350,19 @@ class SqlAlchemyRelatoriosRepository(RelatoriosRepositoryPort):
         )
         o_rows = (await self._session.execute(text(origem_sql), params)).all()
 
+        volume_sql = (
+            "SELECT provas.created_at::date AS dia, count(*) AS total "  # noqa: S608
+            f"FROM provas WHERE ({where}) GROUP BY 1 ORDER BY 1"
+        )
+        vol_rows = (await self._session.execute(text(volume_sql), params)).all()
+
         return RelatorioClicheria(
             tempo_medio_aguardando_horas=_num(e.tempo_aguardando),
             recebidas_no_periodo=int(e.recebidas),
             em_transito_agora=int(e.em_transito),
             origens=int(e.origens),
             distribuicao_origem=_zerar_rotas({str(r.rota): int(r.total) for r in o_rows}),
+            volume=tuple(PontoVolume(dia=r.dia, total=int(r.total)) for r in vol_rows),
         )
 
 

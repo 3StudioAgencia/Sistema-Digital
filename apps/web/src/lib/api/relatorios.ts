@@ -86,6 +86,7 @@ export type RelatorioClicheria = {
   em_transito_agora: number;
   origens: number;
   distribuicao_origem: FatiaRota[];
+  volume: PontoVolume[];
 };
 
 /** Toggle de rota do design (2 vias) — agrupa as 4 rotas do domínio (DP-4). */
