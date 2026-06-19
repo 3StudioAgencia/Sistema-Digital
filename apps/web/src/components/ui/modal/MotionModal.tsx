@@ -5,8 +5,10 @@
  * <MotionModal> do C19, que apenas generaliza/documenta — DP-8/ADR-028).
  *
  * Animação conforme DAT §5.2: entrada scale 0.96→1.0 + fade; saída fade;
- * DURATION.medium. Apenas transform/opacity (GPU — DAT §5.4) e degradação para
- * instantâneo com prefers-reduced-motion (RN-012/RNF-010).
+ * DURATION.short (0,25 s — dentro da faixa 150–300 ms do RF-024; W6-C19/ADR-099)
+ * com AnimatePresence mode="wait" (nota técnica §3). Apenas transform/opacity
+ * (GPU — DAT §5.4) e degradação para instantâneo com prefers-reduced-motion
+ * (RN-012/RNF-010).
  *
  * Acessibilidade: role=dialog + aria-modal, foco inicial no painel, trap de
  * Tab, fecha com ESC e clique no overlay, trava o scroll do body.
@@ -80,12 +82,12 @@ export function MotionModal({
     [onClose],
   );
 
-  const duracao = reduced ? DURATION.instant : DURATION.medium;
+  const duracao = reduced ? DURATION.instant : DURATION.short;
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {open && (
         <motion.div
           className={styles.overlay}

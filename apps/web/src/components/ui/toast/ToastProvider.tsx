@@ -15,9 +15,14 @@ import { useReducedMotion } from "@/lib/motion/hooks";
 
 import styles from "./toast.module.css";
 
-const AUTO_DISMISS_MS = 4000;
-
 type ToastKind = "success" | "error";
+
+/**
+ * Tempo de leitura antes do fade-out automático, por tipo. RF-027: toasts de
+ * ERRO ficam visíveis no mínimo 4 s — o piso é garantido por construção (o
+ * valor de `error` nunca cai abaixo de 4000 ms). W6-C19.
+ */
+const AUTO_DISMISS_MS: Record<ToastKind, number> = { success: 4000, error: 4000 };
 
 type Toast = { id: number; kind: ToastKind; message: string };
 
@@ -47,8 +52,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (kind: ToastKind, message: string) => {
       const id = nextId.current++;
       setToasts((current) => [...current, { id, kind, message }]);
-      // fade-out automático após leitura (DAT §5.2)
-      setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+      // fade-out automático após leitura (DAT §5.2; piso de 4 s p/ erros — RF-027)
+      setTimeout(() => dismiss(id), AUTO_DISMISS_MS[kind]);
     },
     [dismiss],
   );

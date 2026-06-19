@@ -2,27 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setReducedMotion } from "@/test/motion";
+
 import { MotionModal } from "./MotionModal";
 
-/** Ativa prefers-reduced-motion: animações instantâneas → testes determinísticos. */
-function mockReducedMotion(reduce: boolean) {
-  Object.defineProperty(window, "matchMedia", {
-    writable: true,
-    value: (query: string) => ({
-      matches: reduce && query.includes("prefers-reduced-motion"),
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }),
-  });
-}
-
 beforeEach(() => {
-  mockReducedMotion(true);
+  // Ativa prefers-reduced-motion: animações instantâneas → testes determinísticos.
+  setReducedMotion(true);
 });
 
 function Harness({ open, onClose }: { open: boolean; onClose: () => void }) {
