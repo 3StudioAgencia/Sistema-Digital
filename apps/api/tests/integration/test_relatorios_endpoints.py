@@ -39,8 +39,38 @@ TZ3 = dt.timezone(dt.timedelta(hours=-3))  # America/Sao_Paulo (sem DST desde 20
 
 
 def _brt(dia: int, hora: int) -> dt.datetime:
-    """Instante em junho/2026 no fuso comercial (-03). 15 = Seg, 12 = Sex."""
+    """Instante em junho/2026 no fuso comercial (-03). 15 = Seg, 12 = Sex.
+
+    Datas FIXAS — só para os testes da função pura ``private.horas_uteis_entre``
+    (independem de ``now()``). NÃO usar para movimentações de provas ATIVAS na
+    fixture: a regra de "Atrasada" compara o último evento com ``now()``, então
+    eventos em data fixa eventualmente cruzam o limiar e contaminam as contagens
+    de atrasadas (use ``_em(_ancora_comercial(...), hora)``)."""
     return dt.datetime(2026, 6, dia, hora, 0, tzinfo=TZ3)
+
+
+def _ancora_comercial(agora_utc: dt.datetime) -> dt.date:
+    """Dia útil-âncora RECENTE para os eventos da fixture (robusto ao relógio).
+
+    Devolve o dia útil corrente (se já passou das 14h locais) ou o dia útil
+    anterior, recuando sobre fins de semana. Garante que os eventos 09:00-13:00
+    locais desse dia fiquem no PASSADO e a **bem menos de 48h úteis** de ``agora``
+    - assim as provas ATIVAS (aprovada/reprovada) da fixture NUNCA caem como
+    "atrasadas" por avanço do relógio (a regra de atraso usa ``now()``), enquanto
+    o gap em horas úteis permanece exato (09->11 = 2h; 09->13 = 4h, tudo na janela
+    comercial 07-18 de um único dia útil)."""
+    local = agora_utc.astimezone(TZ3)
+    dia = local.date()
+    if local.hour < 14:  # 13:00 ainda não passou hoje -> usa o dia útil anterior
+        dia = dia - dt.timedelta(days=1)
+    while dia.weekday() >= 5:  # 5=sáb, 6=dom -> recua até sexta
+        dia = dia - dt.timedelta(days=1)
+    return dia
+
+
+def _em(dia: dt.date, hora: int) -> dt.datetime:
+    """Instante no fuso comercial (-03) no ``dia``-âncora, à ``hora`` cheia."""
+    return dt.datetime(dia.year, dia.month, dia.day, hora, 0, tzinfo=TZ3)
 
 
 def _token(sub: str, setor: str, administrador: bool = False) -> str:
@@ -184,6 +214,35 @@ async def test_horas_uteis_entre(
 
 
 # ---------------------------------------------------------------------------
+# Regressao do "time-bomb" da fixture (não usa DB): a âncora dos eventos das
+# provas ATIVAS deve ficar SEMPRE no passado recente (dia útil, bem abaixo das
+# 48h úteis do limiar de "Atrasada"), independentemente de quando a suíte roda.
+# Antes da correção, os eventos eram datados em 2026-06-15 (fixo): ~48h úteis
+# depois, as provas ativas (aprovada/reprovada) viravam "atrasadas" e quebravam
+# test_geral_atrasadas_consistente_com_c16 / test_vendedores_contagens /
+# test_geral_metricas_por_vendedor. Este guard falha se as datas fixas voltarem.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "agora",
+    [
+        dt.datetime(2026, 6, 15, 8, 0, tzinfo=dt.UTC),  # segunda de manhã
+        dt.datetime(2026, 6, 19, 23, 0, tzinfo=dt.UTC),  # sexta à noite
+        dt.datetime(2026, 6, 20, 12, 0, tzinfo=dt.UTC),  # sábado
+        dt.datetime(2026, 6, 21, 12, 0, tzinfo=dt.UTC),  # domingo
+        dt.datetime(2026, 6, 22, 9, 0, tzinfo=dt.UTC),  # segunda cedo (após fim de semana)
+    ],
+)
+def test_ancora_comercial_mantem_eventos_recentes_e_no_passado(agora: dt.datetime) -> None:
+    base = _ancora_comercial(agora)
+    assert base.weekday() < 5, "âncora deve cair em dia útil (gap em horas úteis exato)"
+    evento_mais_recente = _em(base, 13)  # 13:00 local = último evento da fixture (recebimento)
+    assert evento_mais_recente < agora, "eventos da fixture devem estar no PASSADO"
+    # Folga ampla vs. o limiar de 48h ÚTEIS (~6 dias corridos com 1 fim de semana):
+    # o último evento fica a no máximo ~3 dias corridos -> jamais cruza o limiar.
+    assert agora - evento_mais_recente < dt.timedelta(days=3, hours=12)
+
+
+# ---------------------------------------------------------------------------
 # Cenario compartilhado
 # ---------------------------------------------------------------------------
 @pytest.fixture
@@ -196,50 +255,111 @@ async def ctx(
     andre = await _seed_usuario(engine, setor="vendedor", nome="Andre Bento", loc="matriz")
 
     agora = dt.datetime.now(tz=dt.UTC)
-    velho = agora - dt.timedelta(days=30)  # alem de 48h uteis
-    seg9, seg11, seg13 = _brt(15, 9), _brt(15, 11), _brt(15, 13)
+    velho = agora - dt.timedelta(days=30)  # alem de 48h uteis -> sempre atrasada
+    # Eventos num dia util RECENTE (robusto ao relogio): as provas ATIVAS
+    # (aprovada/reprovada) ficam a < 48h uteis de agora -> NAO sao "atrasadas"
+    # por avanco do relogio, e o gap em horas uteis segue exato (09->11=2h; 09->13=4h).
+    base = _ancora_comercial(agora)
+    seg9, seg11, seg13 = _em(base, 9), _em(base, 11), _em(base, 13)
 
     # P_aprovada (Mario/filial): chegada 09:00 -> aprovacao 11:00 = 2h uteis.
     p_aprov = await _seed_prova(
         engine, vendedor_id=mario, status="aprovada_vendedor", rota="filial"
     )
-    await _seed_mov(engine, prova_id=p_aprov, ator_id=mario, acao="identificar_e_assinar",
-                    origem="criada", destino="encaminhada_para_vendedor", quando=seg9)
-    await _seed_mov(engine, prova_id=p_aprov, ator_id=mario, acao="aprovar",
-                    origem="encaminhada_para_vendedor", destino="aprovada_vendedor", quando=seg11)
+    await _seed_mov(
+        engine,
+        prova_id=p_aprov,
+        ator_id=mario,
+        acao="identificar_e_assinar",
+        origem="criada",
+        destino="encaminhada_para_vendedor",
+        quando=seg9,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_aprov,
+        ator_id=mario,
+        acao="aprovar",
+        origem="encaminhada_para_vendedor",
+        destino="aprovada_vendedor",
+        quando=seg11,
+    )
 
     # P_reprovada (Mario/matriz): conta como reprovada ATIVA + devolvida (evento).
     p_reprov = await _seed_prova(
         engine, vendedor_id=mario, status="reprovada_vendedor", rota="matriz"
     )
-    await _seed_mov(engine, prova_id=p_reprov, ator_id=mario, acao="identificar_e_assinar",
-                    origem="criada", destino="retirada_vendedor", quando=seg9)
-    await _seed_mov(engine, prova_id=p_reprov, ator_id=mario, acao="reprovar",
-                    origem="retirada_vendedor", destino="reprovada_vendedor", quando=seg11,
-                    motivo="Cor divergente")
+    await _seed_mov(
+        engine,
+        prova_id=p_reprov,
+        ator_id=mario,
+        acao="identificar_e_assinar",
+        origem="criada",
+        destino="retirada_vendedor",
+        quando=seg9,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_reprov,
+        ator_id=mario,
+        acao="reprovar",
+        origem="retirada_vendedor",
+        destino="reprovada_vendedor",
+        quando=seg11,
+        motivo="Cor divergente",
+    )
 
     # P_atrasada (Andre/filial): ativa, parada ha 30 dias -> atrasada (regra C16).
-    await _seed_prova(engine, vendedor_id=andre, status="retirada_vendedor", rota="filial",
-                      created_at=velho)
+    await _seed_prova(
+        engine, vendedor_id=andre, status="retirada_vendedor", rota="filial", created_at=velho
+    )
 
     # P_recebida (Mario/lam_matriz): envio 09:00 -> recebimento 13:00 = 4h uteis.
-    p_receb = await _seed_prova(engine, vendedor_id=mario, status="recebida_clicheria",
-                                rota="lam_matriz", finalizada_em=agora)
-    await _seed_mov(engine, prova_id=p_receb, ator_id=mario, acao="identificar_e_assinar",
-                    origem="de_volta_studio", destino="com_motorista_entrega_final", quando=seg9)
-    await _seed_mov(engine, prova_id=p_receb, ator_id=mario, acao="identificar_e_assinar",
-                    origem="com_motorista_entrega_final", destino="recebida_clicheria",
-                    quando=seg13)
+    p_receb = await _seed_prova(
+        engine,
+        vendedor_id=mario,
+        status="recebida_clicheria",
+        rota="lam_matriz",
+        finalizada_em=agora,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_receb,
+        ator_id=mario,
+        acao="identificar_e_assinar",
+        origem="de_volta_studio",
+        destino="com_motorista_entrega_final",
+        quando=seg9,
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_receb,
+        ator_id=mario,
+        acao="identificar_e_assinar",
+        origem="com_motorista_entrega_final",
+        destino="recebida_clicheria",
+        quando=seg13,
+    )
 
     # P_em_transito (Andre/matriz): rumo a clicheria agora.
-    await _seed_prova(engine, vendedor_id=andre, status="com_motorista_entrega_final",
-                      rota="matriz")
+    await _seed_prova(
+        engine, vendedor_id=andre, status="com_motorista_entrega_final", rota="matriz"
+    )
 
     # P_cancelada (Mario/matriz): cancelamento com motivo (top motivos).
-    p_canc = await _seed_prova(engine, vendedor_id=mario, status="cancelada", rota="matriz",
-                               finalizada_em=agora)
-    await _seed_mov(engine, prova_id=p_canc, ator_id=admin, acao="cancelar",
-                    origem="criada", destino="cancelada", quando=seg11, motivo="Apenas Teste")
+    p_canc = await _seed_prova(
+        engine, vendedor_id=mario, status="cancelada", rota="matriz", finalizada_em=agora
+    )
+    await _seed_mov(
+        engine,
+        prova_id=p_canc,
+        ator_id=admin,
+        acao="cancelar",
+        origem="criada",
+        destino="cancelada",
+        quando=seg11,
+        motivo="Apenas Teste",
+    )
 
     client = make_client(
         settings,
@@ -390,8 +510,13 @@ async def test_filtro_periodo_exclui_provas_antigas(ctx: tuple[Any, ...]) -> Non
 async def test_nao_admin_recebe_403_em_todas_as_abas_e_export(ctx: tuple[Any, ...]) -> None:
     client, _, ids = ctx
     auth = _auth(ids["mario"], "vendedor")
-    for path in ("/relatorios/geral", "/relatorios/studio", "/relatorios/vendedores",
-                 "/relatorios/clicheria", "/relatorios/exportar?aba=geral"):
+    for path in (
+        "/relatorios/geral",
+        "/relatorios/studio",
+        "/relatorios/vendedores",
+        "/relatorios/clicheria",
+        "/relatorios/exportar?aba=geral",
+    ):
         resp = await client.get(path, headers=auth)
         assert resp.status_code == 403, path
         assert resp.json()["error"]["message"] == "Acesso negado."
