@@ -1,0 +1,12 @@
+=== VITEST ===
+$ vitest run
+
+ RUN  v4.1.8 C:/Users/mario.souza/sistemaDigital/apps/web
+
+
+ Test Files  27 passed (27)
+      Tests  178 passed (178)
+   Start at  09:17:22
+   Duration  11.45s (transform 3.29s, setup 13.22s, import 18.72s, tests 22.74s, environment 53.48s)
+
+TEST_EXIT=0

@@ -1,0 +1,180 @@
+=== RUFF ===
+E501 Line too long (103 > 100)
+  --> tests\integration\test_dashboard_endpoints.py:71:101
+   |
+69 |                 "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
+70 |             ),
+71 |             {"id": uid, "nome": nome, "email": f"{uid}@x.z", "setor": setor, "loc": loc, "adm": admin},
+   |                                                                                                     ^^^
+72 |         )
+73 |     return uid
+   |
+
+E501 Line too long (111 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:107:101
+    |
+107 | async def _seed_movimentacao(engine: AsyncEngine, *, prova_id: str, ator_id: str, quando: dt.datetime) -> None:
+    |                                                                                                     ^^^^^^^^^^^
+108 |     async with engine.begin() as conn:
+109 |         await conn.execute(
+    |
+
+E501 Line too long (101 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:145:101
+    |
+143 |     [
+144 |         # Seg 10:00 - 2h úteis = Seg 08:00 (dentro da janela).
+145 |         (dt.datetime(2026, 6, 15, 10, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3)),
+    |                                                                                                     ^
+146 |         # Seg 08:00 - 2h: 1h hoje (07-08) + 1h sexta (17-18) = Sex 17:00 (cruza fim de semana).
+147 |         (dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+    |
+
+E501 Line too long (101 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:147:101
+    |
+145 |         (dt.datetime(2026, 6, 15, 10, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3)),
+146 |         # Seg 08:00 - 2h: 1h hoje (07-08) + 1h sexta (17-18) = Sex 17:00 (cruza fim de semana).
+147 |         (dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+    |                                                                                                     ^
+148 |         # Seg 20:00 (após expediente) - 3h = Seg 15:00 (colapsa ao fim da janela 18:00).
+149 |         (dt.datetime(2026, 6, 15, 20, 0, tzinfo=TZ3), 3, dt.datetime(2026, 6, 15, 15, 0, tzinfo=TZ3)),
+    |
+
+E501 Line too long (102 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:149:101
+    |
+147 |         (dt.datetime(2026, 6, 15, 8, 0, tzinfo=TZ3), 2, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+148 |         # Seg 20:00 (após expediente) - 3h = Seg 15:00 (colapsa ao fim da janela 18:00).
+149 |         (dt.datetime(2026, 6, 15, 20, 0, tzinfo=TZ3), 3, dt.datetime(2026, 6, 15, 15, 0, tzinfo=TZ3)),
+    |                                                                                                     ^^
+150 |         # Sáb 10:00 - 1h: fim de semana não conta = Sex 17:00.
+151 |         (dt.datetime(2026, 6, 13, 10, 0, tzinfo=TZ3), 1, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+    |
+
+E501 Line too long (102 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:151:101
+    |
+149 |         (dt.datetime(2026, 6, 15, 20, 0, tzinfo=TZ3), 3, dt.datetime(2026, 6, 15, 15, 0, tzinfo=TZ3)),
+150 |         # Sáb 10:00 - 1h: fim de semana não conta = Sex 17:00.
+151 |         (dt.datetime(2026, 6, 13, 10, 0, tzinfo=TZ3), 1, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+    |                                                                                                     ^^
+152 |         # Seg 12:00 - 48h úteis (4d cheios + 5h) = Ter anterior 08:00 (pula o fim de semana).
+153 |         (dt.datetime(2026, 6, 15, 12, 0, tzinfo=TZ3), 48, dt.datetime(2026, 6, 9, 8, 0, tzinfo=TZ3)),
+    |
+
+E501 Line too long (101 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:153:101
+    |
+151 |         (dt.datetime(2026, 6, 13, 10, 0, tzinfo=TZ3), 1, dt.datetime(2026, 6, 12, 17, 0, tzinfo=TZ3)),
+152 |         # Seg 12:00 - 48h úteis (4d cheios + 5h) = Ter anterior 08:00 (pula o fim de semana).
+153 |         (dt.datetime(2026, 6, 15, 12, 0, tzinfo=TZ3), 48, dt.datetime(2026, 6, 9, 8, 0, tzinfo=TZ3)),
+    |                                                                                                     ^
+154 |     ],
+155 | )
+    |
+
+F841 Local variable `p_hoje_transito` is assigned to but never used
+   --> tests\integration\test_dashboard_endpoints.py:180:5
+    |
+178 |     # Criadas HOJE (created_at = now()): 1 da Regiane + 1 do Packon (em trânsito).
+179 |     await _seed_prova(engine, vendedor_id=regiane, status="criada")
+180 |     p_hoje_transito = await _seed_prova(
+    |     ^^^^^^^^^^^^^^^
+181 |         engine, vendedor_id=packon, status="com_motorista_ida_laminacao", rota="lam_matriz"
+182 |     )
+    |
+help: Remove assignment to unused variable `p_hoje_transito`
+
+E501 Line too long (103 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:186:101
+    |
+184 |     await _seed_prova(engine, vendedor_id=regiane, status="retirada_vendedor", created_at=velho)
+185 |     await _seed_prova(
+186 |         engine, vendedor_id=packon, status="encaminhada_para_vendedor", rota="filial", created_at=velho
+    |                                                                                                     ^^^
+187 |     )
+188 |     # Aprovada (Packon) — VELHA = atrasada.
+    |
+
+E501 Line too long (106 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:216:101
+    |
+214 |         session_factory=create_request_session_factory(engine),
+215 |     )
+216 |     ids = {"admin": admin, "studio": studio, "motorista": motorista, "regiane": regiane, "packon": packon}
+    |                                                                                                     ^^^^^^
+217 |     async with client as c:
+218 |         yield c, engine, ids
+    |
+
+E501 Line too long (103 > 100)
+   --> tests\integration\test_dashboard_endpoints.py:237:101
+    |
+237 | async def test_atrasadas_breakdown_ordenado_e_exclui_terminais_e_movidas(ctx: tuple[Any, ...]) -> None:
+    |                                                                                                     ^^^
+238 |     """Atrasadas: só ATIVAS, paradas além do limiar, base na ÚLTIMA movimentação.
+239 |     Packon 2 (encaminhada+aprovada), Regiane 1 (retirada velha). A terminal e a
+    |
+
+E501 Line too long (103 > 100)
+  --> tests\integration\test_provas_listagem_atrasada_endpoints.py:59:101
+   |
+57 |                 "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
+58 |             ),
+59 |             {"id": uid, "nome": nome, "email": f"{uid}@x.z", "setor": setor, "loc": loc, "adm": admin},
+   |                                                                                                     ^^^
+60 |         )
+61 |     return uid
+   |
+
+E501 Line too long (113 > 100)
+  --> tests\integration\test_provas_listagem_atrasada_endpoints.py:93:101
+   |
+91 |         "admin": admin,
+92 |         # multi-status: duas posses distintas do vendedor
+93 |         "retirada_velha": await _seed_prova(engine, vendedor_id=v, status="retirada_vendedor", created_at=velho),
+   |                                                                                                     ^^^^^^^^^^^^^
+94 |         "encaminhada_nova": await _seed_prova(engine, vendedor_id=v, status="encaminhada_para_vendedor"),
+95 |         # atrasada: ativa e velha; terminal velha NÃO atrasa; ativa nova NÃO atrasa
+   |
+
+E501 Line too long (105 > 100)
+  --> tests\integration\test_provas_listagem_atrasada_endpoints.py:94:101
+   |
+92 |         # multi-status: duas posses distintas do vendedor
+93 |         "retirada_velha": await _seed_prova(engine, vendedor_id=v, status="retirada_vendedor", created_at=velho),
+94 |         "encaminhada_nova": await _seed_prova(engine, vendedor_id=v, status="encaminhada_para_vendedor"),
+   |                                                                                                     ^^^^^
+95 |         # atrasada: ativa e velha; terminal velha NÃO atrasa; ativa nova NÃO atrasa
+96 |         "aprovada_velha": await _seed_prova(engine, vendedor_id=v, status="aprovada_vendedor", created_at=velho),
+   |
+
+E501 Line too long (113 > 100)
+  --> tests\integration\test_provas_listagem_atrasada_endpoints.py:96:101
+   |
+94 |         "encaminhada_nova": await _seed_prova(engine, vendedor_id=v, status="encaminhada_para_vendedor"),
+95 |         # atrasada: ativa e velha; terminal velha NÃO atrasa; ativa nova NÃO atrasa
+96 |         "aprovada_velha": await _seed_prova(engine, vendedor_id=v, status="aprovada_vendedor", created_at=velho),
+   |                                                                                                     ^^^^^^^^^^^^^
+97 |         "terminal_velha": await _seed_prova(engine, vendedor_id=v, status="recebida_clicheria", created_at=velho),
+98 |         "criada_nova": await _seed_prova(engine, vendedor_id=v, status="criada"),
+   |
+
+E501 Line too long (114 > 100)
+  --> tests\integration\test_provas_listagem_atrasada_endpoints.py:97:101
+   |
+95 |         # atrasada: ativa e velha; terminal velha NÃO atrasa; ativa nova NÃO atrasa
+96 |         "aprovada_velha": await _seed_prova(engine, vendedor_id=v, status="aprovada_vendedor", created_at=velho),
+97 |         "terminal_velha": await _seed_prova(engine, vendedor_id=v, status="recebida_clicheria", created_at=velho),
+   |                                                                                                     ^^^^^^^^^^^^^^
+98 |         "criada_nova": await _seed_prova(engine, vendedor_id=v, status="criada"),
+99 |     }
+   |
+
+Found 16 errors.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+RUFF_EXIT=1
+=== MYPY ===
+Success: no issues found in 98 source files
+MYPY_EXIT=0

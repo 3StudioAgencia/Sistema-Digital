@@ -1,0 +1,20 @@
+=== ruff format --check ===
+Would reformat: src\adapters\inbound\http\provas.py
+Would reformat: src\adapters\outbound\db\movimentacoes_repository.py
+Would reformat: src\adapters\outbound\db\relatorios_repository.py
+Would reformat: src\application\relatorios.py
+Would reformat: src\domain\provas.py
+Would reformat: src\domain\state_machine\rules.py
+Would reformat: tests\integration\test_dashboard_endpoints.py
+Would reformat: tests\integration\test_migrations.py
+Would reformat: tests\integration\test_provas_listagem_atrasada_endpoints.py
+Would reformat: tests\integration\test_provas_timeline_endpoints.py
+Would reformat: tests\integration\test_relatorios_endpoints.py
+Would reformat: tests\integration\test_rls_movimentacoes.py
+Would reformat: tests\integration\test_rls_rate_limit.py
+Would reformat: tests\integration\test_transicoes_endpoints.py
+Would reformat: tests\unit\test_provas_timeline.py
+Would reformat: tests\unit\test_state_machine.py
+Would reformat: tests\unit\test_transicao_service.py
+17 files would be reformatted, 149 files already formatted
+RUFF_FMT_EXIT=1

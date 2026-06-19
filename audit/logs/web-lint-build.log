@@ -1,0 +1,44 @@
+=== LINT ===
+$ eslint
+LINT_EXIT=0
+=== BUILD ===
+$ next build
+▲ Next.js 16.2.9 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.3s
+  Running TypeScript ...
+  Finished TypeScript in 2.9s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/4) ...
+  Generating static pages using 11 workers (1/4) 
+  Generating static pages using 11 workers (2/4) 
+  Generating static pages using 11 workers (3/4) 
+✓ Generating static pages using 11 workers (4/4) in 192ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /bem-vindo
+├ ƒ /configuracoes
+├ ƒ /dashboard
+├ ƒ /escanear
+├ ƒ /informacoes
+├ ○ /inicio
+├ ƒ /login
+├ ƒ /provas
+├ ƒ /provas/[id]
+├ ƒ /provas/[id]/confirmar
+├ ƒ /provas/nova
+├ ƒ /relatorios
+└ ƒ /usuarios
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+BUILD_EXIT=0

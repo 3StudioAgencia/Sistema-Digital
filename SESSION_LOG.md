@@ -32,6 +32,39 @@
 
 ---
 
+## Sessão 24 — 2026-06-19 — [Wave 5 / Fechamento] Auditoria de fechamento da Wave 5 (read-only)
+
+**Objetivo:** Emitir o veredito Go/No-Go da Wave 5 **no nível de sistema** — incorporar (não repetir) o veredito da auditoria dedicada do C17, e cobrir integração, regressão, limpeza do corte do C18 e qualidade transversal. **Sem alterar código de produção.**
+
+**Feito (executar, não confiar):**
+- Rodada a suíte inteira do `api`: `pytest -q` (REQUIRE_DB_TESTS=1, PG `.tmp-pg` 5432) → **807 passed**, exit 0 (sem regressão Waves 0–4). `mypy` → Success (98 files). Round-trip de migrations coberto por `test_migrations.py` (head **0021**, verde).
+- Web: `vitest` **178 passed** (27 files), `pnpm lint`/`build` verdes.
+- **Gate de lint/format reproduzido equivalente à CI** (`uv sync --frozen`, ruff 0.15.16): `ruff check .` = **16 erros** (W4, pré-existente) e `ruff format --check .` = **17 arquivos** (inclui fontes do C17) → o job `api` da CI falha no passo de lint (`ci.yml:71-72`).
+- Confirmado **reuso verbatim do C16** (`atraso_sql.py` compartilhado por dashboard/relatórios/listagem; `horas_uteis_entre` aditiva → "Atrasadas" bate por construção), **acesso a Relatórios coerente** (cells.json/access-matrix.ts/rbac.py travados por equivalência; proxy + 403 backend), e **corte do C18 limpo no código** (sem CTA a relatórios fora da sidebar, sem sobra órfã; atalhos Escanear/Nova Prova do C16 autônomos).
+- Verificação read-only conduzida com fan-out (workflow de 6 agentes) + checagens próprias. Relatório em `docs/audits/AUDITORIA-WAVE-5.md`; evidências em `audit/logs/`.
+
+**Veredito:** **⛔ NO-GO.** Contagem: **1 Crítico · 1 Alto · 3 Médios · 2 Baixos.**
+- 🔴 **Crítico** — `docs/audits/AUDITORIA-C17.md` **ausente** (insumo principal): por §A3 do prompt, relatório do C17 ausente ⇒ Wave 5 NO-GO automático.
+- 🟠 **Alto** — gate `ruff check` + `ruff format` vermelho → CI do `api` falha (D1/§5d).
+- 🟡 **Médios** — corte do C18 não registrado (dívida fantasma; sem ADR); docs stale (Clicheria já reconstruída no commit `9e3fbde`); claims "ruff/format/prettier limpos" falsos.
+- ⚪ **Baixos** — `nova-prova-view.tsx` não commitado deixa prettier local vermelho; barras CSS do C17 sem `transition` (estáticas, seguro).
+
+**Corte do C18:** confirmado **limpo no código** (C1/C2/C3 PASSA), mas **não documentado** (C4 FALHA) — recomendado (não implementado) um ADR formalizando o corte e a marcação do C18 como descartado nos roadmaps.
+
+**Decisões (ADRs):** nenhuma (auditoria read-only). **Recomendação registrada no relatório, não implementada:** ADR de corte do C18.
+
+**Pendências / em aberto (para reverter o NO-GO, em ordem):**
+- [ ] Rodar/fechar a **auditoria dedicada do C17** (`docs/audits/AUDITORIA-C17.md`).
+- [ ] Limpar lint/format (`ruff check --fix` + E501 + `ruff format .`) até a CI verde.
+- [ ] Registrar ADR do corte do C18 + sincronizar os 5 docs (C18 descartado; Clicheria reconstruída; remover claims "limpos").
+- [ ] Re-auditar o fechamento da Wave 5.
+
+**Próximo passo:** se/quando GO → **W6-C19 · Camada Transversal de Animações** (abre a Wave 6); enquanto NO-GO → as remediações acima (começando pela auditoria do C17).
+
+**Definition of Done:** N/A (auditoria) — entregue: relatório `AUDITORIA-WAVE-5.md`, logs de evidência, entrada no SESSION_LOG. Nenhuma mudança de produção, CHANGELOG ou DECISIONS.
+
+---
+
 ## Sessão 23 — 2026-06-18 — [Wave 5 / Componente C17] Relatórios — reconstrução visual fiel ao design (sessão de design)
 
 **Objetivo:** Alinhar a UI dos Relatórios ao **Figma**, aba por aba (as fórmulas/métricas já estavam corretas desde a Sessão 22). Trabalho conduzido de forma **iterativa com o dono**: para cada parte, ele enviava a referência do design + um print do estado atual e pedia fidelidade simétrica.
