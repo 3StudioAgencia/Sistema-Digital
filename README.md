@@ -145,7 +145,7 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **2 · Núcleo** | 06 Cadastro+Rota+Etiqueta ✅ · 07 Listagem ✅ · 08 Detalhe ✅ · 09 Configurações ✅ | **Concluída** ✅ |
 | **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline ✅ · 14 Cancelamento ✅ · 15 Reinício ✅ | **Concluída** ✅ |
 | **4 · Dashboard** | 16 Dashboard Realtime ✅ | **Concluída** ✅ |
-| **5 · Relatórios/UX** | 17 Relatórios ✅ · 18 Atalhos | 🔄 em andamento |
+| **5 · Relatórios/UX** | 17 Relatórios ✅ · ~~18 Atalhos~~ ✗ descartado (ADR-095) | 🔄 re-auditoria pendente |
 | **6 · Animações/Auditoria** | 19 Animações · 20 Log de Auditoria | ⬜ |
 
 > Cada wave só inicia após concluir as dependências da anterior. **Uma sessão = um componente completo.**

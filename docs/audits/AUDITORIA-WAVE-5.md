@@ -6,6 +6,17 @@
 
 ---
 
+> ## ✅ REMEDIAÇÃO APLICADA — 2026-06-19 (Sessão 25)
+> Os dois bloqueadores e os achados endereçáveis foram **fechados** (status por achado abaixo). Resumo:
+> - **F-01 (Crítico) — RESOLVIDO:** produzida a auditoria dedicada `docs/audits/AUDITORIA-C17.md` (recomputação métrica-por-métrica) — **veredito GO**. Ela ainda **descobriu e corrigiu** um *time-bomb* de relógio na fixture do C17 (M-1): provas ATIVAS com eventos em data fixa `2026-06-15` virariam "atrasadas" a partir de ≈ sexta 19/06 15:00, quebrando 3 testes (o "807 passed" do B2 abaixo era um snapshot **antes** desse limiar). Corrigido na causa raiz + guard determinístico.
+> - **F-02 (Alto) — RESOLVIDO:** `ruff check .` e `ruff format --check .` **verdes** (F841 corrigido preservando o seed; `ruff format` em todo o repo). Suíte api completa re-rodada — sem regressão.
+> - **F-03/F-04/F-05 (Médios) — RESOLVIDOS:** ADR-095 (corte do C18) + docs sincronizados (C18 **descartado**, Clicheria reconstruída, claims de qualidade reconciliados); guard de regressão do corte em `dashboard-view.test.tsx`.
+> - **F-06 (Baixo) — RESOLVIDO** (`prettier --write`). **F-07 (Baixo) — mantido por design** (ver status abaixo).
+> - **Guardrail dos dois lados:** novo `test_integracao_atrasadas_c16_c17.py` prova "Atrasadas" igual em dashboard e relatório.
+> - **Próximo:** **re-auditar a Wave 5** (a palavra final do GO é da re-auditoria).
+
+---
+
 ## 1. Sumário executivo
 
 # ⛔ VEREDITO DA WAVE 5: **NO-GO**
@@ -38,6 +49,7 @@
   - `Grep "C17|AUDITORIA-C17|Relat[óo]rios"` em `docs/audits/` → *No files found*.
 - **Impacto:** O fechamento de wave **se apoia** no veredito interno do C17. Sem ele, a Área A não pode ser marcada PASSA e a wave **não pode** ser dada como GO (§A3: "Não prossiga fingindo que o núcleo está são"). Crítico por definição do prompt.
 - **Recomendação:** Executar a auditoria dedicada do C17 (recomputação métrica-por-métrica das fórmulas DP-3 / ADR-088, distribuição soma 100%, CSV, 403 não-admin) e produzir `docs/audits/AUDITORIA-C17.md` com veredito GO/NO-GO. Só então re-rodar este fechamento de wave.
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** `docs/audits/AUDITORIA-C17.md` criada — **GO**. Recomputação independente (workflow adversarial 12 áreas + crítico + auditor humano); descobriu/corrigiu o achado M-1 (*time-bomb* de relógio na fixture). Sem Crítico/Alto de métrica.
 
 ### 🟠 F-02 (Alto) — Gate de lint/format do repositório VERMELHO; a CI do job `api` falha (Área D1)
 
@@ -55,6 +67,7 @@
   - **`ruff format` (17):** inclui **fontes de produção do C17** (`src/adapters/outbound/db/relatorios_repository.py`, `src/application/relatorios.py`, `tests/integration/test_relatorios_endpoints.py`) **e** arquivos antigos (`src/domain/provas.py`, `src/domain/state_machine/rules.py`, `src/adapters/outbound/db/movimentacoes_repository.py`, vários testes W3/W4). O alcance amplo sobre arquivos estáveis sugere um **bump de versão do ruff** sem um `ruff format .` subsequente em todo o repo; o C17 também contribuiu com arquivos não formatados.
 - **Impacto:** Viola a DoD §9 ("Sem erros... verde no CI") e o critério de GO §5(d). É **conteúdo cosmético** (comprimento de linha, formatação, 1 variável não usada) e **trivialmente corrigível**, mas mantém o gate vermelho — bloqueia um GO limpo.
 - **Recomendação:** `uv run ruff check --fix .` (resolve o F841) + quebrar as linhas E501 (ou anotar `# noqa` justificado nos testes), e `uv run ruff format .` em todo o repo; re-rodar os dois gates até verdes. *(Correção fora do escopo desta auditoria — read-only.)*
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** `F841 p_hoje_transito` corrigido **preservando o seed** (só removido o binding); `ruff format .` aplicado (17 arquivos). `ruff check .` ✅ + `ruff format --check .` ✅ + `mypy` ✅. Suíte api completa re-rodada: **813 passed** — sem regressão.
 
 ### 🟡 F-03 (Médio) — Corte do C18 **não registrado**; docs o tratam como pendente (dívida fantasma) (Área C4)
 
@@ -67,6 +80,7 @@
   - `Grep "cortad|descartad|fora de escopo|decisão de produto"` ligado ao C18 nos 5 docs → **zero**. Não há ADR do corte.
 - **Impacto:** Dívida fantasma — a próxima sessão lerá os docs e tentará **implementar o C18** que produto decidiu **não** fazer. (Não bloqueia o GO por §4, mas precisa ser sanado.)
 - **Recomendação (não implementada — read-only):** Registrar um **ADR** em `DECISIONS.md` formalizando o corte do C18 por decisão de produto; marcar o C18 como **descartado / fora de escopo** (não "pendente") em CHANGELOG, SESSION_LOG, README (roadmap) e CLAUDE.md §7; redirecionar o "Próximo passo" para **W6-C19**.
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** **ADR-095** registra o corte do C18; `CLAUDE.md §7/§9`, `README.md`, `DECISIONS.md`, `CHANGELOG.md`, `SESSION_LOG.md` marcam o C18 **descartado** e o próximo passo = re-auditar / W6-C19. **Guard de regressão** em `dashboard-view.test.tsx` (`corte do C18: nenhum atalho/CTA leva a Relatórios`) — falha se o atalho reaparecer.
 
 ### 🟡 F-04 (Médio) — Documentação **stale**: aba Clicheria marcada pendente embora já reconstruída (Área D3)
 
@@ -76,23 +90,27 @@
   - `CHANGELOG.md:14` "**Pendente:** a aba Clicheria segue no layout antigo".
 - **Impacto:** Docs de contexto divergem do código real (a aba já está em bento). Não bloqueia, mas confunde a continuidade.
 - **Recomendação:** Atualizar SESSION_LOG/DECISIONS/CHANGELOG para refletir que a Clicheria foi reconstruída (commit `9e3fbde`) e o C17 visual está completo.
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** `SESSION_LOG.md` (Sessão 23), `DECISIONS.md` (ADR-094 + checklist) e `CHANGELOG.md` atualizados: Clicheria reconstruída (`9e3fbde`), C17 visual completo.
 
 ### 🟡 F-05 (Médio) — Claims de qualidade **falsos** nos docs ("ruff/format/prettier limpos") (Área D3)
 
 - **Evidência:** `SESSION_LOG.md:50-51` (Sessão 23) e `CHANGELOG.md:14` afirmam "`ruff`/`mypy --strict`/`lint`/`build`/`prettier` ... limpos/verdes". A execução real (F-02) mostra `ruff check .` (16) e `ruff format --check .` (17) **vermelhos**, e `prettier --check` vermelho no arquivo não commitado `nova-prova-view.tsx`. (Apenas `mypy` — *Success, 98 files* — e o `pnpm` web — lint/build/vitest 178 — estão de fato verdes.)
 - **Impacto:** Os docs declaram um estado verde que não existe; ilude a próxima sessão e a DoD.
 - **Recomendação:** Não declarar "limpos" enquanto os gates estiverem vermelhos; ou corrigir (F-02), ou rebaixar a afirmação citando a dívida real.
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** Os gates foram **corrigidos** (F-02) e as afirmações reconciliadas: `SESSION_LOG.md` (Sessão 23) e `CHANGELOG.md` agora anotam a dívida real de `ruff format`/`prettier` daquela sessão (fechada na remediação), sem declarar "limpos" o que não estava.
 
 ### ⚪ F-06 (Baixo) — Arquivo não commitado `nova-prova-view.tsx` deixa o `prettier --check` local vermelho
 
 - **Evidência:** `git status` mostra `M apps/web/.../nova-prova-view.tsx`; `git diff` = **um único espaço em branco no fim de uma linha** (`<div className={styles.campo}> `). `pnpm format:check` falha **só** nesse arquivo. É um artefato da **árvore de trabalho** (mudança local pré-existente, não desta auditoria); o código **commitado** (que a CI verifica) não é afetado.
 - **Impacto:** Nulo para a CI/código commitado; ruído local.
 - **Recomendação:** `pnpm prettier --write` no arquivo (ou descartar a mudança). Fora do escopo desta auditoria (read-only; não toco código de produção).
+- **STATUS: ✅ RESOLVIDO (Sessão 25).** `prettier --write` aplicado; o diff (só o espaço em branco) sumiu — `pnpm format:check` web ✅.
 
 ### ⚪ F-07 (Baixo, informativo) — Barras CSS do C17 não declaram `transition` (snap ao valor)
 
 - **Evidência:** `relatorios.module.css` define `transform-origin` em `.rankBarFill`/`.barraFill`/`.volFill` mas nenhuma `transition`; o `scaleX(...)` inline aplica instantaneamente. **Não** é defeito de `prefers-reduced-motion` (não há animação a suprimir) — apenas as "barras animadas" do design são, na prática, estáticas.
 - **Recomendação:** Opcional — se o design pedir crescimento animado, adicionar `transition: transform var(--motion-micro) ...` (já zera sob reduced via `globals.css`).
+- **STATUS: ⏸️ MANTIDO POR DESIGN (Sessão 25).** Barras renderizando no valor instantaneamente **não é defeito** (correto e seguro — só `transform`); adicionar crescimento animado é **decisão de design** que o dono não pediu. Deixado como está (sem escopo novo); reabrir no W6-C19 (camada de animações) se desejado. Não bloqueia.
 
 ---
 

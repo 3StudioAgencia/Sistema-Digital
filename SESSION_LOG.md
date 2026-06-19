@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 25 — 2026-06-19 — [Wave 5 / Remediação] Fechamento dos achados do `AUDITORIA-WAVE-5.md`
+
+**Objetivo:** Reverter o **NO-GO** da Wave 5 fechando os achados do relatório de fechamento (`docs/audits/AUDITORIA-WAVE-5.md`) — causa raiz, sem regressão, com o corte do C18 limpo. Sessão dirigida pelo relatório.
+
+**Feito (executar, não confiar):**
+- Subi o cluster Postgres de teste (`.tmp-pg` na 5432, estava parado) → testes @db rodam.
+- **F-02 (Alto) — RESOLVIDO:** `ruff check .` (corrigi `F841 p_hoje_transito` preservando o seed) + `ruff format .` (17 arquivos) → ambos os gates **verdes** + `mypy` ✅. Suíte api **807 passed** logo após a reformatação (sem regressão).
+- **F-01 (Crítico) — RESOLVIDO:** produzi **`docs/audits/AUDITORIA-C17.md`** via workflow adversarial (12 áreas com auditor+cross-check independentes + crítico de completude) **+ recomputação do auditor humano** + suíte @db. **Veredito GO.** A auditoria **descobriu o M-1** (time-bomb): a fixture `ctx` datava eventos de provas ATIVAS em `2026-06-15` fixo enquanto "Atrasada" usa `now()` → a partir de ≈ sex 19/06 **15:00** elas virariam atrasadas e quebrariam 3 testes (confirmei por query: 43,36h úteis às 10:21, limiar 48h). **Corrigi a causa raiz** (âncora `_ancora_comercial`/`_em` → dia útil recente, gaps 2h/4h preservados) + **guard determinístico**.
+- **F-03/F-04/F-05 (Médios) — RESOLVIDOS:** **ADR-095** (corte do C18); docs sincronizados (C18 **descartado**; Clicheria reconstruída `9e3fbde`; claims de qualidade reconciliados). **F-06 (Baixo) — RESOLVIDO** (`prettier --write`). **F-07 (Baixo) — mantido por design** (barras estáticas não são defeito; animar é decisão do dono → eventual W6-C19).
+- **Guardrails:** novo `test_integracao_atrasadas_c16_c17.py` prova "Atrasadas" igual em dashboard **e** relatório (dois lados); `dashboard-view.test.tsx` ganhou guard do corte do C18.
+- Atualizei o `AUDITORIA-WAVE-5.md` (banner de remediação + STATUS por achado).
+
+**Decisões (ADRs):**
+- **ADR-095** — corte do C18 (Atalhos Rápidos) por decisão de produto. Aceita.
+- (M-1 e demais correções são de teste/higiene — sem novo ADR; o predicado/fórmulas do C17 não mudaram.)
+
+**Testes / cobertura:**
+- api: suíte completa **813 passed** (`REQUIRE_DB_TESTS=1`, PG `.tmp-pg` 5432); `ruff check`/`ruff format --check`/`mypy --strict` **verdes**.
+- web: `vitest` **179 passed** (27 files, +1 guard do corte do C18); `lint`/`build`/`format:check` **verdes**.
+
+**Pendências / em aberto:**
+- [ ] B-1/B-3 do `AUDITORIA-C17.md` (cobertura de `tempo_ate_primeira_mov`/`media_diaria`) — Baixos, opcionais.
+- [ ] Aplicar (já aplicada) — sem migration nova nesta sessão; head segue `0021`.
+
+**Próximo passo:**
+- **Re-auditar a Wave 5** (a palavra final do GO é da re-auditoria). Comando sugerido: rodar a auditoria de fechamento da Wave 5 novamente sobre `develop`. Se **GO** → **W6-C19 · Camada Transversal de Animações** (abre a Wave 6). **C18 descartado** (ADR-095) — não construir.
+
+**Definition of Done:** ✅ suíte verde (api 813 / web 179), gates verdes, integração intacta (dois lados), corte do C18 limpo (código + docs), sem regressão, sem migration nova (head `0021`), sem segredos versionados. Falta a re-auditoria confirmar o GO.
+
+---
+
 ## Sessão 24 — 2026-06-19 — [Wave 5 / Fechamento] Auditoria de fechamento da Wave 5 (read-only)
 
 **Objetivo:** Emitir o veredito Go/No-Go da Wave 5 **no nível de sistema** — incorporar (não repetir) o veredito da auditoria dedicada do C17, e cobrir integração, regressão, limpeza do corte do C18 e qualidade transversal. **Sem alterar código de produção.**
@@ -80,15 +111,15 @@
 - **ADR-094** — reconstrução visual fiel ao design (bento por aba) + contrato de `volume` nas abas 3Studio/Vendedores. Aceita; iterada e aprovada pelo dono aba a aba.
 
 **Testes / cobertura:**
-- api: `test_relatorios.py` + `test_relatorios_endpoints.py` **29 verdes @db** (PG local 5432, cluster `.tmp-pg`); `ruff`/`mypy --strict` limpos.
-- web: `pnpm test` (relatórios) verde; `lint`/`build`/`prettier` limpos.
+- api: `test_relatorios.py` + `test_relatorios_endpoints.py` **29 verdes @db** (PG local 5432, cluster `.tmp-pg`); `mypy --strict` limpo. *(Correção da Sessão 25: `ruff format` NÃO estava limpo — ficou dívida no repo, fechada na remediação da Wave 5.)*
+- web: `pnpm test` (relatórios) verde; `lint`/`build` limpos. *(Correção da Sessão 25: `prettier` deixou um arquivo local com whitespace — corrigido na remediação.)*
 
 **Pendências / em aberto:**
-- [ ] **Aba Clicheria** ainda no layout antigo (`StatCard`/`ListaBarra`) — reconstruir em bento para fechar a fidelidade visual do C17.
+- [x] **Aba Clicheria** — reconstruída em bento no commit `9e3fbde` (fecha a fidelidade visual do C17).
 - [ ] Avaliar se "Provas Criadas" é o melhor rótulo do card preto na aba Vendedores (seguiu a imagem do design; o dono pode redefinir).
 
 **Próximo passo:**
-- Reconstruir a **aba Clicheria** (fecha o C17 visual), depois **W5-C18 — Atalhos rápidos**.
+- *(Atualizado na Sessão 25)* **W5-C18 foi CORTADO por decisão de produto (ADR-095)** — a Wave 5 entrega só o C17. Próximo: re-auditar a Wave 5; se GO → **W6-C19**.
 
 **Definition of Done:** ⚠️ parcial — refino de UI sobre o C17 já entregue (Sessão 22): testes/lint/build/prettier verdes, sem migration nova; a fidelidade visual fecha quando a aba Clicheria for reconstruída.
 
