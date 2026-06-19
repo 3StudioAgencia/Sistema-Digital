@@ -32,6 +32,69 @@
 
 ---
 
+## Sessão 27 — 2026-06-19 — [Wave 6 / Componente C19] Camada Transversal de Animações
+
+**Objetivo:** W6-C19 — estabelecer a camada transversal de animações (RF-023…027) e adicionar o vocabulário de "reveal de entrada" (elementos surgindo em cascata), **sem regredir** as animações existentes (C04/C13/C14/C15/C16).
+
+**Feito:**
+- **Investigação primeiro (prompt §0.1 "pare e pergunte"):** inventário paralelo (workflow, 8 agentes) revelou que a camada **já estava ~85% pronta e centralizada** (tokens, `useReducedMotion`, `<MotionModal>`, toasts, `<AnimatedCounter>`, e **page transitions já inline no AppShell**). Apresentei a realidade + os Pontos de Decisão; o dono respondeu: **formalizar + fechar gaps E adicionar reveal rico em TODAS as telas, sob medida** (DP-1); **extrair `<PageTransition>`** (DP-2); **modais/drawer → 250 ms** (DP-3).
+- **Fundação:** tokens (`STAGGER`/`REVEAL_OFFSET` + comentários reconciliados); **`lib/motion/variants.ts`** (`fadeRise`/`staggerContainer`); primitivas **`<PageTransition>`/`<Reveal>`/`<Stagger>`/`<StaggerItem>`**; `<MotionModal>` → `DURATION.short` + `mode="wait"`; drawer do AppShell → `short`; toasts RF-027 explícito; util de teste central `@/test/motion`. Testes da camada (`variants.test.ts`, `motion.test.tsx`).
+- **Reveal por tela (todas):** dashboard (eu, padrão de referência) + 7 telas via **workflow** (1 agente/arquivo, playbook estrito) + **2 telas com WIP do dono** (confirmar, nova-prova) **eu mesmo**, por cima do WIP. Técnica A (fábricas nos nós) em grids/tabelas; B (primitivas) em pilhas verticais; **cap 12** nas tabelas; `<AnimatedCounter>`/`<ProofTimeline>` **não** re-animados.
+- **Descoberta importante:** o working tree tinha **WIP pré-existente do dono** não capturado no snapshot inicial — `nova-prova-view.tsx` ganhara `:` nos rótulos (quebrando 6 testes que consultavam sem `:`). Provei (stash) que **não era regressão minha** e, por decisão do dono, **aliniei o teste** aos rótulos com `:`.
+- **Docs:** `docs/animations.md` (tokens, hook, fábricas, primitivas, 2 técnicas, page transitions, aplicação por tela, checklist §6, testes).
+
+**Decisões (ADRs):**
+- ADR-097: grau de consolidação (DP-1) — formalizar + gaps + reveal em todas as telas, sob medida.
+- ADR-098: page transitions — `<PageTransition>` extraída/keyed, enter-only (DP-2).
+- ADR-099: tokens + hook central + toasts RF-027 + modal/drawer 250 ms + `mode="wait"` (DP-3).
+
+**Testes / cobertura:**
+- **web: 190 verdes (29 arquivos)**; `tsc --noEmit` **0 erros**; `eslint` **0 problemas**; `next build` **OK**.
+- **Revisão adversarial** (workflow, 11 revisores): **10/11 limpos**; 1 achado (`nova-prova` "texto alterado") = **misatribuição** do WIP do dono (mantido por decisão). `<MotionModal> mode="wait"` flagado *minor* — mantido por conformidade com a nota técnica §3.
+
+**Pendências / em aberto:**
+- [ ] **Revisão visual do dono** (a intensidade "sob medida" foi prometida para revisão) — rodar `pnpm dev` e conferir a cascata por tela + reduced-motion.
+- [ ] **WIP do dono ainda não commitado** em `confirmar/` (redesign ADR-096) e `nova-prova` (rótulos `:`) — decidir o commit desse WIP (fora do escopo do C19).
+
+**Próximo passo:**
+- **W6-C20 — Interface de Log de Auditoria** (fecha a Wave 6). O log imutável já existe (`movimentacoes`, ADR-061); o C20 entrega a UI.
+
+**Definition of Done:** ✅ atendida — testes (incl. não-regressão da suíte + reduced-motion central + durações nas faixas), GPU-only (sem props de layout animadas), sem erro de console/log, `docs/animations.md`, sem segredos versionados. (Frontend-only: sem migration/RLS.)
+
+---
+
+## Sessão 26 — 2026-06-19 — [Fora do backlog / UX] Redesign da tela de assinatura (frontend-only)
+
+**Objetivo:** Trocar o **layout** da tela de assinatura do C12 (`/provas/[id]/confirmar`) para o novo design (Figma), **sem alterar comportamento** e **sem tocar em nada além do frontend dessa tela** (escopo travado pelo prompt `prompts/UX-REDESIGN-tela-assinatura.md`).
+
+**Feito:**
+- **Localização + leitura do C12** (componente + CSS + teste + E2E) e do contrato funcional a preservar.
+- **Pontos de Decisão apresentados ao dono e respondidos ANTES de codificar** (DP-1 Reprovar = perigo no rodapé; DP-2 metadados já presentes, sem fetch; DP-3 tudo local; DP-4 Cancelar = voltar; DP-5 canvas transparente fiel ao design).
+- **Re-skin** em 4 arquivos de `confirmar/`:
+  - `_components/assinatura-pad.tsx` — `react-signature-canvas` agora **transparente** (`backgroundColor: rgba(0,0,0,0)`) com **guias** ("X" + linha de base + legenda "Assine no espaço acima da linha") renderizadas ATRÁS (decorativas, `aria-hidden`, `pointer-events:none`).
+  - `_components/confirmar-view.tsx` — marcação re-estruturada: **card branco único** (nome + **badge de requerimento** + divisor + metadados Cliente/Vendedor/Rota/Ciclo/Criada em/Status), rótulo "Assinatura Digital" + link discreto **Limpar** (preserva o "limpar"), **rodapé** (ícone info + disclaimer + **Cancelar** + **Confirmar assinatura** com check); **Reprovar** vira perigo no rodapé. Ícones info/check = **SVG inline locais**.
+  - `confirmar.module.css` — reescrito para o design claro (mobile-first + desktop por `--u`): card branco, divisor, grid/linha de metadados, caixa cinza-clara + guias, rodapé, botão primário escuro, Reprovar perigo, Cancelar contorno; só `transform`/`opacity` + `prefers-reduced-motion`.
+  - `_components/confirmar-view.test.tsx` — único ajuste: rótulo **"Confirmar" → "Confirmar assinatura"** (mesma função). O E2E `confirmar.spec.ts` **não** mudou (Playwright casa substring) e ficou fora do diff.
+- **Auto-auditoria de não-regressão** registrada em `docs/audits/AUTOAUDITORIA-ASSINATURA.md` (escopo provado por `git diff`, suíte verde, fidelidade item a item).
+
+**Decisões (ADRs):**
+- **ADR-096** — Redesign da tela de assinatura (frontend-only, fora do backlog): escopo travado aos 4 arquivos de `confirmar/`, comportamento do C12 preservado, DP-1..DP-5 conforme acima (ver `DECISIONS.md`).
+
+**Testes / cobertura:**
+- Vitest tela de assinatura **8/8** · suíte web inteira **27 arquivos / 179 testes verdes**.
+- `pnpm lint` **exit 0** · `pnpm format:check` **verde** · `pnpm build` **exit 0** (TS limpo, rota `/provas/[id]/confirmar` compila).
+- Backend **não tocado** (zero arquivos de api no diff) → sem regressão.
+
+**Pendências / em aberto:**
+- [ ] Verificação visual fina (pixels) no app rodando — fidelidade conferida aqui no nível de marcação/CSS contra a imagem do design.
+
+**Próximo passo:**
+- Inalterado pelo re-skin: re-auditar o fechamento da **Wave 5**; se **GO** → **W6-C19 — Camada Transversal de Animações**.
+
+**Definition of Done:** ✅ atendida no aplicável a um re-skin de frontend: comportamento preservado (suíte da tela verde), **auto-auditoria verde**, **git diff escopado** (só `confirmar/`), suíte/lint/build verdes, animações com `prefers-reduced-motion`, sem segredos versionados, docs atualizados. (Migrations/RLS/backend: N/A — nada tocado.)
+
+---
+
 ## Sessão 25 — 2026-06-19 — [Wave 5 / Remediação] Fechamento dos achados do `AUDITORIA-WAVE-5.md`
 
 **Objetivo:** Reverter o **NO-GO** da Wave 5 fechando os achados do relatório de fechamento (`docs/audits/AUDITORIA-WAVE-5.md`) — causa raiz, sem regressão, com o corte do C18 limpo. Sessão dirigida pelo relatório.
