@@ -164,6 +164,26 @@ describe("DashboardView (W4-C16)", () => {
     expect(screen.getByText("Escanear QR Code")).toBeInTheDocument(); // Escanear é universal
   });
 
+  // Corte do C18 (Atalhos Rápidos) — decisão de produto: NÃO existe atalho de
+  // Relatórios. Relatórios é acessível só pela sidebar (3Studio). Este guard
+  // falharia se um atalho/CTA de relatórios reaparecesse no dashboard.
+  it("corte do C18: nenhum atalho/CTA do dashboard leva a Relatórios", async () => {
+    const user = userEvent.setup();
+    render(<DashboardView inicial={DADOS} podeCriarProva />);
+    // Nenhum texto "Relatório(s)" no painel (o único acesso é o item de menu).
+    expect(screen.queryByText(/relat[óo]rio/i)).toBeNull();
+    // Clicar TODOS os botões nunca navega para /relatorios.
+    for (const botao of screen.getAllByRole("button")) {
+      await user.click(botao);
+    }
+    for (const chamada of nav.push.mock.calls) {
+      expect(String(chamada[0])).not.toMatch(/\/relatorios/);
+    }
+    // Os únicos atalhos continuam sendo Escanear (universal) e Nova Prova (3Studio).
+    expect(screen.getByText("Escanear QR Code")).toBeInTheDocument();
+    expect(screen.getByText("Nova Prova")).toBeInTheDocument();
+  });
+
   it("sem SSR (inicial null): busca no cliente e renderiza", async () => {
     mocks.fetchDashboard.mockResolvedValue(DADOS);
     render(<DashboardView inicial={null} podeCriarProva />);
