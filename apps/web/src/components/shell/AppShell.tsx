@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import type { Usuario } from "@/lib/api/usuarios";
 import { DURATION, EASING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
+import { PageTransition } from "@/components/ui/motion";
 
 import { Sidebar } from "./Sidebar";
 import styles from "./app-shell.module.css";
@@ -54,7 +55,8 @@ export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerAberto]);
 
-  const duracao = reduced ? DURATION.instant : DURATION.medium;
+  // Drawer (mobile) na faixa de drawers do RF-024 (150–300 ms) — W6-C19.
+  const duracao = reduced ? DURATION.instant : DURATION.short;
 
   return (
     <div className={styles.layout}>
@@ -117,20 +119,13 @@ export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
         </header>
 
         <main className={styles.conteudo}>
-          {/* Transição sutil ao trocar de menu: fade + leve translateY do
-              conteúdo que ENTRA (GPU-only; instantânea sob reduced motion). */}
-          <motion.div
-            key={pathname}
-            className={styles.conteudoInterno}
-            initial={{ opacity: 0, y: reduced ? 0 : 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: reduced ? DURATION.instant : DURATION.short,
-              ease: EASING.emphasized,
-            }}
-          >
+          {/* Transição de página (RF-023): fade + leve translateY do conteúdo
+              que ENTRA. Re-montada a cada navegação pelo key={pathname}. A
+              primitiva <PageTransition> (W6-C19) encapsula o comportamento que
+              antes vivia inline aqui — GPU-only, instantânea sob reduced-motion. */}
+          <PageTransition key={pathname} className={styles.conteudoInterno}>
             {children}
-          </motion.div>
+          </PageTransition>
         </main>
       </div>
     </div>
