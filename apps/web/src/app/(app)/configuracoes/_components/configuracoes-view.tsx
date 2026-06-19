@@ -14,7 +14,7 @@
  * Animações sobre os tokens (GPU — transform/opacity), instantâneas sob
  * prefers-reduced-motion.
  */
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Dropdown } from "@/components/ui/select/Dropdown";
@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/configuracoes";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 
 import styles from "../configuracoes.module.css";
 
@@ -105,6 +106,12 @@ export function ConfiguracoesView() {
   const delayConfig = acharConfig(configs, CHAVE_DELAY);
   const etiquetaConfig = acharConfig(configs, CHAVE_ETIQUETA);
 
+  // Reveal de entrada (W6-C19): a coluna de cards orquestra a cascata; cada card
+  // é um item. Dispara só na montagem (initial→animate), sem re-disparar a cada
+  // refetch de configs. As fábricas zeram tudo sob prefers-reduced-motion.
+  const containerVar = staggerContainer(reduced);
+  const itemVar = fadeRise(reduced);
+
   return (
     <section className={styles.pagina} aria-label="Configurações do sistema">
       <h1 className={styles.titulo}>Configurações do sistema</h1>
@@ -133,10 +140,20 @@ export function ConfiguracoesView() {
           </button>
         </p>
       ) : (
-        <div className={styles.lista}>
-          <CardDelay config={delayConfig} aoSalvar={aoSalvar} reduced={reduced} ordem={0} />
-          <CardEtiqueta config={etiquetaConfig} aoSalvar={aoSalvar} reduced={reduced} ordem={1} />
-        </div>
+        <motion.div
+          className={styles.lista}
+          variants={containerVar}
+          initial="hidden"
+          animate="show"
+        >
+          <CardDelay config={delayConfig} aoSalvar={aoSalvar} reduced={reduced} itemVar={itemVar} />
+          <CardEtiqueta
+            config={etiquetaConfig}
+            aoSalvar={aoSalvar}
+            reduced={reduced}
+            itemVar={itemVar}
+          />
+        </motion.div>
       )}
     </section>
   );
@@ -152,24 +169,14 @@ type CardProps = {
   onSalvar: () => void;
   salvando: boolean;
   reduced: boolean;
-  ordem: number;
+  itemVar: Variants;
 };
 
-function Card({ titulo, descricao, children, onSalvar, salvando, reduced, ordem }: CardProps) {
+function Card({ titulo, descricao, children, onSalvar, salvando, reduced, itemVar }: CardProps) {
   const tituloId = useId();
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
   return (
-    <motion.section
-      className={styles.card}
-      aria-labelledby={tituloId}
-      initial={{ opacity: 0, y: reduced ? 0 : 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: reduced ? DURATION.instant : DURATION.medium,
-        ease: EASING.emphasized,
-        delay: reduced ? 0 : ordem * 0.06,
-      }}
-    >
+    <motion.section className={styles.card} aria-labelledby={tituloId} variants={itemVar}>
       <div className={styles.cardMain}>
         <h2 id={tituloId} className={styles.cardTitulo}>
           {titulo}
@@ -209,12 +216,12 @@ function CardDelay({
   config,
   aoSalvar,
   reduced,
-  ordem,
+  itemVar,
 }: {
   config: Configuracao | undefined;
   aoSalvar: (chave: string, valor: unknown) => Promise<boolean>;
   reduced: boolean;
-  ordem: number;
+  itemVar: Variants;
 }) {
   const idBase = useId();
   const [valor, setValor] = useState(() => String(lerDelay(config)));
@@ -239,7 +246,7 @@ function CardDelay({
       onSalvar={salvar}
       salvando={salvando}
       reduced={reduced}
-      ordem={ordem}
+      itemVar={itemVar}
     >
       <div className={styles.campo}>
         <label className={styles.rotulo} htmlFor={`${idBase}-delay`}>
@@ -294,12 +301,12 @@ function CardEtiqueta({
   config,
   aoSalvar,
   reduced,
-  ordem,
+  itemVar,
 }: {
   config: Configuracao | undefined;
   aoSalvar: (chave: string, valor: unknown) => Promise<boolean>;
   reduced: boolean;
-  ordem: number;
+  itemVar: Variants;
 }) {
   const idBase = useId();
   const inicial = lerEtiqueta(config);
@@ -366,7 +373,7 @@ function CardEtiqueta({
       onSalvar={salvar}
       salvando={salvando}
       reduced={reduced}
-      ordem={ordem}
+      itemVar={itemVar}
     >
       <div className={styles.campo}>
         <span className={styles.rotulo} id={`${idBase}-modo`}>

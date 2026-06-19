@@ -16,6 +16,7 @@ import { Dropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING } from "@/lib/motion/tokens";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import {
   exportarRelatorioCsv,
   listarVendedores,
@@ -75,6 +76,11 @@ export function RelatoriosView() {
   const transicaoPill = reduced
     ? { duration: DURATION.instant }
     : { duration: DURATION.short, ease: EASING.emphasized };
+  // Reveal de entrada (W6-C19): a página orquestra a cascata (cabeçalho → tab bar →
+  // filtros → conteúdo) na montagem; o container do conteúdo re-cascateia na troca
+  // de aba (key={aba}). Zerado sob prefers-reduced-motion pelas fábricas.
+  const containerVar = staggerContainer(reduced);
+  const itemVar = fadeRise(reduced);
 
   const aba = (searchParams.get("aba") as Aba | null) ?? "geral";
   const queryString = searchParams.toString();
@@ -185,8 +191,14 @@ export function RelatoriosView() {
   };
 
   return (
-    <section className={styles.pagina} aria-label="Relatórios">
-      <div className={styles.cabecalho}>
+    <motion.section
+      className={styles.pagina}
+      aria-label="Relatórios"
+      variants={containerVar}
+      initial="hidden"
+      animate="show"
+    >
+      <motion.div className={styles.cabecalho} variants={itemVar}>
         <h1 className={styles.titulo}>Relatórios</h1>
         <div className={styles.exportWrap} ref={exportWrapRef}>
           <button
@@ -213,10 +225,15 @@ export function RelatoriosView() {
             </div>
           ) : null}
         </div>
-      </div>
+      </motion.div>
 
       {/* Tab bar */}
-      <div className={styles.tabBar} role="tablist" aria-label="Relatórios">
+      <motion.div
+        className={styles.tabBar}
+        role="tablist"
+        aria-label="Relatórios"
+        variants={itemVar}
+      >
         {ABAS.map((a) => (
           <button
             key={a.id}
@@ -238,10 +255,10 @@ export function RelatoriosView() {
             <span className={styles.segRotulo}>{a.rotulo}</span>
           </button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Barra de filtros compartilhada (DP-4) */}
-      <div className={styles.filtros}>
+      <motion.div className={styles.filtros} variants={itemVar}>
         <div className={styles.linhaFiltros}>
           <div className={styles.campoData}>
             <span className={styles.campoDataPrefixo}>De</span>
@@ -342,10 +359,20 @@ export function RelatoriosView() {
             />
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Conteúdo da aba ativa (lazy — só a montada busca) */}
-      <div className={styles.conteudo} role="tabpanel">
+      {/* Conteúdo da aba ativa (lazy — só a montada busca). key={aba} re-cascateia o
+          reveal na troca de aba SEM tocar o lazy-load (o conteúdo já é condicional por
+          `aba`); initial/animate próprios disparam só na (re)montagem — sem re-animar
+          em updates de dados nem os <AnimatedCounter> internos. */}
+      <motion.div
+        key={aba}
+        className={styles.conteudo}
+        role="tabpanel"
+        variants={itemVar}
+        initial="hidden"
+        animate="show"
+      >
         {aba === "geral" ? (
           <GeralTab filtros={filtros} chave={chaveFiltros} />
         ) : aba === "studio" ? (
@@ -355,7 +382,7 @@ export function RelatoriosView() {
         ) : (
           <ClicheriaTab filtros={filtros} chave={chaveFiltros} />
         )}
-      </div>
-    </section>
+      </motion.div>
+    </motion.section>
   );
 }

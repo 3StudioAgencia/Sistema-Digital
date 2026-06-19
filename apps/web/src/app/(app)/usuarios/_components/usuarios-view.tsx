@@ -23,8 +23,9 @@ import {
   type Setor,
   type Usuario,
 } from "@/lib/api/usuarios";
-import { DURATION, EASING } from "@/lib/motion/tokens";
+import { STAGGER } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { Dropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 
@@ -41,6 +42,8 @@ type Falha = { chave: string; tipo: "erro" | "acesso_negado" };
 export function UsuariosView() {
   const toast = useToast();
   const reduced = useReducedMotion();
+  const containerVar = staggerContainer(reduced);
+  const itemVar = fadeRise(reduced);
 
   const [busca, setBusca] = useState("");
   const [buscaAplicada, setBuscaAplicada] = useState("");
@@ -239,13 +242,9 @@ export function UsuariosView() {
       role="row"
       key={usuario.id}
       className={`${styles.linha} ${styles.grade}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{
-        duration: reduced ? DURATION.instant : DURATION.short,
-        delay: reduced ? 0 : Math.min(indice % PAGE_SIZE, 12) * 0.025,
-        ease: EASING.emphasized,
-      }}
+      // Cascata só nos primeiros STAGGER.maxItens (12) itens (orquestrada pelo
+      // container abaixo); o restante da página renderiza imediato (≥50fps).
+      variants={indice < STAGGER.maxItens ? itemVar : undefined}
     >
       <span role="cell" className={styles.celula}>
         {usuario.nome}
@@ -286,7 +285,12 @@ export function UsuariosView() {
 
   return (
     <section className={styles.pagina} aria-label="Gerenciador de usuários">
-      <header className={styles.cabecalhoPagina}>
+      <motion.header
+        className={styles.cabecalhoPagina}
+        variants={itemVar}
+        initial="hidden"
+        animate="show"
+      >
         <h1 className={styles.titulo}>Gerenciador de usuários</h1>
         <button
           type="button"
@@ -295,9 +299,15 @@ export function UsuariosView() {
         >
           Novo usuário
         </button>
-      </header>
+      </motion.header>
 
-      <div className={styles.filtros}>
+      <motion.div
+        className={styles.filtros}
+        variants={itemVar}
+        initial="hidden"
+        animate="show"
+        transition={{ delay: reduced ? 0 : STAGGER.gap }}
+      >
         <div className={styles.campoBusca}>
           <Search size={22} strokeWidth={2} className={styles.iconeBusca} aria-hidden />
           <input
@@ -335,7 +345,7 @@ export function UsuariosView() {
             ]}
           />
         </div>
-      </div>
+      </motion.div>
 
       {falhaAtual === "acesso_negado" ? (
         <p className={styles.estadoVazio} role="alert">
@@ -384,7 +394,14 @@ export function UsuariosView() {
                 </span>
               </div>
             </div>
-            <div role="rowgroup" className={styles.corpoTabela} ref={corpoRef}>
+            <motion.div
+              role="rowgroup"
+              className={styles.corpoTabela}
+              ref={corpoRef}
+              variants={containerVar}
+              initial="hidden"
+              animate="show"
+            >
               {carregando ? (
                 // aria-hidden: skeletons ficam fora da árvore de acessibilidade
                 // (rowgroup só expõe filhos row — revisão W1-C04)
@@ -424,7 +441,7 @@ export function UsuariosView() {
                   </span>
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
 
           {/* Cards (mobile — DP-7) */}

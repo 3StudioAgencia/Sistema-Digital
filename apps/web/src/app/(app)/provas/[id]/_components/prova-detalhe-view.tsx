@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/provas";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { rotuloRota } from "@/lib/provas/rota-labels";
 import { estaAtiva, rotuloStatus } from "@/lib/provas/status-labels";
 
@@ -224,20 +225,32 @@ export function ProvaDetalheView({
     setRecarregarTimeline((n) => n + 1);
   }
 
-  const duracao = reduced ? DURATION.instant : DURATION.medium;
-  // Entrada suave dos cartões (opacity + leve y), com pequeno stagger entre eles;
-  // instantânea sob prefers-reduced-motion. Só transform/opacity (GPU — §3.4).
-  const entrada = (delay: number) => ({
-    initial: { opacity: 0, y: reduced ? 0 : 8 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: duracao, ease: EASING.emphasized, delay: reduced ? 0 : delay },
-  });
+  // Reveal de entrada (W6-C19): as SEÇÕES de topo surgem em cascata na montagem
+  // (Voltar → card de metadados → histórico). `staggerContainer` orquestra a partir
+  // do `.pagina`; cada seção é um item `fadeRise`. As fábricas zeram tudo sob
+  // prefers-reduced-motion (instantâneo) e só tocam transform/opacity (GPU — §3.4).
+  // `initial="hidden" animate="show"` dispara SÓ na montagem — refetch/recarga da
+  // timeline não re-dispara a cascata.
+  const containerVar = staggerContainer(reduced);
+  const itemVar = fadeRise(reduced);
   // Feedback tátil de toque nas ações (mola única da plataforma — C03/SPRING).
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   return (
-    <section className={styles.pagina} aria-label="Detalhe da prova">
-      <motion.button type="button" className={styles.voltar} onClick={voltar} {...toque}>
+    <motion.section
+      className={styles.pagina}
+      aria-label="Detalhe da prova"
+      variants={containerVar}
+      initial="hidden"
+      animate="show"
+    >
+      <motion.button
+        type="button"
+        className={styles.voltar}
+        onClick={voltar}
+        variants={itemVar}
+        {...toque}
+      >
         <span aria-hidden>←</span> Voltar
       </motion.button>
 
@@ -259,7 +272,7 @@ export function ProvaDetalheView({
         </p>
       ) : prova ? (
         <>
-          <motion.article className={styles.cardDetalhe} {...entrada(0)}>
+          <motion.article className={styles.cardDetalhe} variants={itemVar}>
             <div className={styles.arteCol}>
               {arteUrl ? (
                 <motion.img
@@ -353,7 +366,7 @@ export function ProvaDetalheView({
           <motion.section
             className={styles.historico}
             aria-label="Histórico de movimentações"
-            {...entrada(0.07)}
+            variants={itemVar}
           >
             <h2 className={styles.historicoTitulo}>Histórico de movimentações</h2>
             <ProofTimeline provaId={prova.id} recarregar={recarregarTimeline} />
@@ -403,7 +416,7 @@ export function ProvaDetalheView({
           )}
         </>
       ) : null}
-    </section>
+    </motion.section>
   );
 }
 

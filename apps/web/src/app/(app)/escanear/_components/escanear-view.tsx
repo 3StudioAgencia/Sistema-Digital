@@ -19,6 +19,7 @@ import { Camera, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 import { ApiError } from "@/lib/api/client";
 import { identificarProva } from "@/lib/api/escaneamento";
@@ -82,51 +83,62 @@ export function EscanearView() {
   }
 
   return (
-    <section className={styles.pagina} aria-label="Escanear prova">
-      <header className={styles.cabecalho}>
-        <h1 className={styles.titulo}>Escanear prova</h1>
-        <p className={styles.subtitulo}>
-          Leia o QR Code da etiqueta com a câmera ou insira o código manualmente para confirmar a
-          próxima movimentação.
-        </p>
-      </header>
+    <Stagger className={styles.pagina}>
+      {/* Reveal de entrada em cascata LEVE (W6-C19): título/instrução → toggle →
+          área de conteúdo. O wrapper do <StaggerItem> em torno do `conteudo` é
+          EXTERNO e estável: o nó-alvo do html5-qrcode (dentro do CameraScanner)
+          fica intacto — a cascata dispara só na montagem (initial/animate),
+          sem remontar o scanner nem reanimar em troca de modo/dados. */}
+      <section aria-label="Escanear prova" style={{ display: "contents" }}>
+        <StaggerItem>
+          <header className={styles.cabecalho}>
+            <h1 className={styles.titulo}>Escanear prova</h1>
+            <p className={styles.subtitulo}>
+              Leia o QR Code da etiqueta com a câmera ou insira o código manualmente para confirmar
+              a próxima movimentação.
+            </p>
+          </header>
+        </StaggerItem>
 
-      <ModoToggle modo={modo} onChange={setModo} reduced={reduced} />
+        <StaggerItem>
+          <ModoToggle modo={modo} onChange={setModo} reduced={reduced} />
+        </StaggerItem>
 
-      <div className={styles.conteudo}>
-        {modo === "camera" ? (
-          <CameraScanner
-            onDetectar={identificar}
-            ocupado={buscando}
-            rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
-          />
-        ) : (
-          <EntradaManual
-            onBuscar={identificar}
-            ocupado={buscando}
-            reduced={reduced}
-            rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
-          />
-        )}
+        <StaggerItem className={styles.conteudo}>
+          {modo === "camera" ? (
+            <CameraScanner
+              onDetectar={identificar}
+              ocupado={buscando}
+              rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
+            />
+          ) : (
+            <EntradaManual
+              onBuscar={identificar}
+              ocupado={buscando}
+              reduced={reduced}
+              rodape={<Rodape rotulo={rotuloLeitura} onHistorico={verHistorico} />}
+            />
+          )}
 
-        {sucesso && (
-          <motion.div
-            className={styles.sucessoFlash}
-            role="status"
-            initial={{ opacity: 0, scale: reduced ? 1 : 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{
-              duration: reduced ? DURATION.instant : DURATION.short,
-              ease: EASING.emphasized,
-            }}
-          >
-            <span className={styles.sucessoPill}>
-              <span aria-hidden>✓</span> Prova identificada
-            </span>
-          </motion.div>
-        )}
-      </div>
-    </section>
+          {sucesso && (
+            <motion.div
+              className={styles.sucessoFlash}
+              role="status"
+              initial={{ opacity: 0, scale: reduced ? 1 : 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                duration: reduced ? DURATION.instant : DURATION.short,
+                ease: EASING.emphasized,
+              }}
+            >
+              <span className={styles.sucessoPill}>
+                <span aria-hidden>✓</span> Prova identificada
+              </span>
+            </motion.div>
+          )}
+        </StaggerItem>
+      </section>
+    </Stagger>
   );
 }
 

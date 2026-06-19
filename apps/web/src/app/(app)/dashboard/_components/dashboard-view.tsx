@@ -13,6 +13,7 @@
  * polling, sem refetch por card. A queda do Realtime degrada graciosamente
  * (mantém o último valor); a carga inicial vem SSR (sem waterfall).
  */
+import { motion } from "framer-motion";
 import {
   Clock,
   FileCheck2,
@@ -28,6 +29,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { type Dashboard, fetchDashboard } from "@/lib/api/dashboard";
+import { useReducedMotion } from "@/lib/motion/hooks";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import styles from "../dashboard.module.css";
@@ -49,6 +52,7 @@ export function DashboardView({
   podeCriarProva: boolean;
 }) {
   const router = useRouter();
+  const reduced = useReducedMotion();
   const [dados, setDados] = useState<Dashboard | null>(inicial);
   const [erro, setErro] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +137,12 @@ export function DashboardView({
     );
   }
 
+  // Cascata de entrada dos cards do bento (W6-C19): o container orquestra; cada
+  // card é um motion-node que herda o disparo (variante "item"). Aplicado nos
+  // PRÓPRIOS nós do grid (sem wrapper extra) p/ não quebrar o grid-area do bento.
+  const containerVar = staggerContainer(reduced);
+  const itemVar = fadeRise(reduced);
+
   const cardContador = (
     rotulo: string,
     valor: number,
@@ -141,8 +151,9 @@ export function DashboardView({
     onClick: () => void,
     largo = false,
   ) => (
-    <button
+    <motion.button
       type="button"
+      variants={itemVar}
       className={`${styles.card} ${styles.cardContador} ${area} ${largo ? styles.largo : ""}`}
       onClick={onClick}
     >
@@ -153,12 +164,12 @@ export function DashboardView({
         </span>
       </span>
       <AnimatedCounter value={valor} className={styles.cardNumero} />
-    </button>
+    </motion.button>
   );
 
   return (
     <section className={styles.pagina} aria-label="Dashboard">
-      <div className={styles.bento}>
+      <motion.div className={styles.bento} variants={containerVar} initial="hidden" animate="show">
         {cardContador("Criadas hoje", dados.criadas_hoje, styles.criadas, FilePlus2, () =>
           irPara([["criada", hojeSaoPaulo()]]),
         )}
@@ -181,7 +192,10 @@ export function DashboardView({
         )}
 
         {/* Atrasadas: lista por vendedor + total (≠ dos demais cards) */}
-        <div className={`${styles.card} ${styles.atrasadasCard} ${styles.atrasadas}`}>
+        <motion.div
+          variants={itemVar}
+          className={`${styles.card} ${styles.atrasadasCard} ${styles.atrasadas}`}
+        >
           <span className={styles.cardTopo}>
             <span className={styles.cardTitulo}>Atrasadas</span>
             <span className={styles.cardIcone} aria-hidden>
@@ -219,11 +233,12 @@ export function DashboardView({
           >
             <AnimatedCounter value={dados.atrasadas_total} className={styles.atrasadasTotal} />
           </button>
-        </div>
+        </motion.div>
 
         {/* Atalhos (role-aware — DP-3) */}
-        <button
+        <motion.button
           type="button"
+          variants={itemVar}
           className={`${styles.atalho} ${styles.atalhoEscanear} ${styles.escanear}`}
           onClick={() => router.push("/escanear")}
         >
@@ -231,10 +246,11 @@ export function DashboardView({
           <span className={styles.atalhoIcone} aria-hidden>
             <QrCode strokeWidth={1.5} />
           </span>
-        </button>
+        </motion.button>
         {podeCriarProva ? (
-          <button
+          <motion.button
             type="button"
+            variants={itemVar}
             className={`${styles.atalho} ${styles.atalhoNova} ${styles.novaProva}`}
             onClick={() => router.push("/provas/nova")}
           >
@@ -242,9 +258,9 @@ export function DashboardView({
             <span className={styles.atalhoIcone} aria-hidden>
               <Plus strokeWidth={2} />
             </span>
-          </button>
+          </motion.button>
         ) : null}
-      </div>
+      </motion.div>
     </section>
   );
 }

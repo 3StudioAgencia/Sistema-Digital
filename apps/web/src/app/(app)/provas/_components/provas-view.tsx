@@ -29,7 +29,8 @@ import {
   type VendedorRef,
 } from "@/lib/api/provas";
 import { useReducedMotion } from "@/lib/motion/hooks";
-import { DURATION, EASING } from "@/lib/motion/tokens";
+import { REVEAL_OFFSET, STAGGER } from "@/lib/motion/tokens";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { STATUS_PROVA_LABELS, STATUS_PROVA_ORDEM, rotuloStatus } from "@/lib/provas/status-labels";
 
 import styles from "../provas.module.css";
@@ -53,6 +54,10 @@ function formatarData(iso: string | null): string {
 
 export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   const reduced = useReducedMotion();
+  // Cascata de entrada (W6-C19): o corpo da tabela orquestra as linhas; cada
+  // linha surge com leve deslize lateral. Disparo só na montagem (initial→animate).
+  const corpoVar = staggerContainer(reduced);
+  const linhaVar = fadeRise(reduced, { dx: REVEAL_OFFSET.x, dy: 0 });
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -227,45 +232,52 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
     </button>
   );
 
-  const linhas = itens.map((prova, indice) => (
-    <motion.div
-      role="row"
-      key={prova.id}
-      className={`${styles.linha} ${styles.grade}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{
-        duration: reduced ? DURATION.instant : DURATION.short,
-        delay: reduced ? 0 : Math.min(indice % PAGE_SIZE, 12) * 0.025,
-        ease: EASING.emphasized,
-      }}
-    >
-      <span role="cell" className={styles.celula}>
-        {prova.requerimento}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {prova.nome}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {prova.cliente}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {prova.vendedor_nome ?? "—"}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {rotuloStatus(prova.status)}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {ROTA_LABELS[prova.rota]}
-      </span>
-      <span role="cell" className={styles.celula}>
-        {formatarData(prova.created_at)}
-      </span>
-      <span role="cell" className={`${styles.celula} ${styles.celulaAcoes}`}>
-        {verBotao(prova)}
-      </span>
-    </motion.div>
-  ));
+  const linhas = itens.map((prova, indice) => {
+    // Só os primeiros STAGGER.maxItens entram escalonados (variante); os demais
+    // renderizam imediatos (sem variante) para proteger ≥50fps em listas longas.
+    const conteudo = (
+      <>
+        <span role="cell" className={styles.celula}>
+          {prova.requerimento}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {prova.nome}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {prova.cliente}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {prova.vendedor_nome ?? "—"}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {rotuloStatus(prova.status)}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {ROTA_LABELS[prova.rota]}
+        </span>
+        <span role="cell" className={styles.celula}>
+          {formatarData(prova.created_at)}
+        </span>
+        <span role="cell" className={`${styles.celula} ${styles.celulaAcoes}`}>
+          {verBotao(prova)}
+        </span>
+      </>
+    );
+    return indice < STAGGER.maxItens ? (
+      <motion.div
+        role="row"
+        key={prova.id}
+        className={`${styles.linha} ${styles.grade}`}
+        variants={linhaVar}
+      >
+        {conteudo}
+      </motion.div>
+    ) : (
+      <div role="row" key={prova.id} className={`${styles.linha} ${styles.grade}`}>
+        {conteudo}
+      </div>
+    );
+  });
 
   const cartoes = itens.map((prova) => (
     <li key={prova.id} className={styles.cartao}>
@@ -311,7 +323,12 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
         </div>
       ) : null}
 
-      <div className={styles.filtros}>
+      <motion.div
+        className={styles.filtros}
+        variants={fadeRise(reduced)}
+        initial="hidden"
+        animate="show"
+      >
         <label className={styles.campo}>
           <span className={styles.rotuloCampo}>Buscar nome ou requerimento:</span>
           <span className={styles.controle}>
@@ -407,7 +424,7 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
         <button type="button" className={styles.botaoLimpar} onClick={limpar}>
           Limpar
         </button>
-      </div>
+      </motion.div>
 
       {falhaAtual === "acesso_negado" ? (
         <p className={styles.estadoVazio} role="alert">
@@ -457,7 +474,14 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
                 <span role="columnheader" className={styles.celula} aria-label="Ações" />
               </div>
             </div>
-            <div role="rowgroup" className={styles.corpoTabela} ref={corpoRef}>
+            <motion.div
+              role="rowgroup"
+              className={styles.corpoTabela}
+              ref={corpoRef}
+              variants={corpoVar}
+              initial="hidden"
+              animate="show"
+            >
               {carregando ? (
                 <div className={styles.skeletons} aria-hidden>
                   {Array.from({ length: 7 }, (_, i) => (
@@ -495,7 +519,7 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
                   </span>
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
 
           {/* Cards (mobile) */}
