@@ -31,6 +31,7 @@ import {
 } from "@/lib/api/transicoes";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { rotuloRota } from "@/lib/provas/rota-labels";
 import { rotuloStatus } from "@/lib/provas/status-labels";
 
@@ -237,12 +238,10 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
     );
   }
 
-  const duracao = reduced ? DURATION.instant : DURATION.medium;
-  const entrada = {
-    initial: { opacity: 0, y: reduced ? 0 : 10 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: duracao, ease: EASING.emphasized },
-  };
+  // Cascata de entrada (W6-C19): o card orquestra; o bloco de cabeçalho e o
+  // bloco de assinatura surgem em sequência (em vez do card inteiro de uma vez).
+  const cardVar = staggerContainer(reduced, { delayInicial: reduced ? 0 : 0.04 });
+  const itemVar = fadeRise(reduced, { dy: 10 });
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   const bloqueado = estado === "pronto" && acoes.length === 0;
@@ -273,25 +272,47 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
           </button>
         </p>
       ) : prova ? (
-        <motion.article className={styles.cardExterno} {...entrada}>
-          <div className={styles.cabecalho}>
+        <motion.article
+          className={styles.cardExterno}
+          variants={cardVar}
+          initial="hidden"
+          animate="show"
+        >
+          <motion.div className={styles.cabecalho} variants={itemVar}>
             <div className={styles.tituloLinha}>
               <h1 className={styles.nome}>{prova.nome}</h1>
               <span className={styles.requerimento}>Requerimento: {prova.requerimento}</span>
             </div>
 
-            <dl className={styles.metadados}>
-              <Campo rotulo="Cliente:" valor={prova.cliente} />
-              <Campo rotulo="Vendedor:" valor={prova.vendedor_nome ?? "—"} />
-              <Campo rotulo="Rota:" valor={rotuloRota(prova.rota)} />
-              <Campo rotulo="Ciclo Atual:" valor={String(prova.ciclo_atual)} />
-              <Campo rotulo="Criada em:" valor={formatarData(prova.created_at)} />
-              <Campo rotulo="Status:" valor={rotuloStatus(prova.status)} />
-            </dl>
-          </div>
+            <span className={styles.divisor} aria-hidden />
 
-          <section className={styles.cardAssinatura} aria-label="Assinatura e confirmação">
-            <h2 className={styles.assinaturaTitulo}>Assinatura Digital</h2>
+            <dl className={styles.metadados}>
+              <Campo rotulo="Cliente" valor={prova.cliente} />
+              <Campo rotulo="Vendedor" valor={prova.vendedor_nome ?? "—"} />
+              <Campo rotulo="Rota" valor={rotuloRota(prova.rota)} />
+              <Campo rotulo="Ciclo" valor={String(prova.ciclo_atual)} />
+              <Campo rotulo="Criada em" valor={formatarData(prova.created_at)} />
+              <Campo rotulo="Status" valor={rotuloStatus(prova.status)} />
+            </dl>
+          </motion.div>
+
+          <motion.section
+            className={styles.assinaturaBloco}
+            aria-label="Assinatura e confirmação"
+            variants={itemVar}
+          >
+            <div className={styles.assinaturaHead}>
+              <h2 className={styles.assinaturaTitulo}>Assinatura Digital</h2>
+              {!bloqueado && (
+                <button
+                  type="button"
+                  className={styles.linkLimpar}
+                  onClick={() => padRef.current?.clear()}
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
 
             {bloqueado ? (
               // Branch (c): não é a vez deste ator — genérico, sem revelar quem é.
@@ -301,16 +322,6 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
             ) : (
               <>
                 <AssinaturaPad ref={padRef} />
-                <p className={styles.assinaturaDica}>
-                  Desenhe a assinatura no quadro acima para confirmar a movimentação.
-                  <button
-                    type="button"
-                    className={styles.linkLimpar}
-                    onClick={() => padRef.current?.clear()}
-                  >
-                    Limpar
-                  </button>
-                </p>
 
                 {modoReprovar && (
                   <div className={styles.motivoCampo}>
@@ -334,65 +345,96 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
                   </div>
                 )}
 
-                <div className={styles.acoes}>
-                  {modoDecisao ? (
-                    modoReprovar ? (
-                      <>
-                        <motion.button
-                          type="button"
-                          className={styles.botaoSecundario}
-                          onClick={() => {
-                            setModoReprovar(false);
-                            setMotivoErro(false);
-                          }}
-                          disabled={submetendo}
-                          {...toque}
-                        >
-                          Voltar
-                        </motion.button>
-                        <motion.button
-                          type="button"
-                          className={styles.botaoReprovar}
-                          onClick={() => confirmar("reprovar")}
-                          disabled={submetendo}
-                          {...toque}
-                        >
-                          {submetendo ? "Registrando…" : "Confirmar reprovação"}
-                        </motion.button>
-                      </>
+                <div className={styles.rodape}>
+                  {!modoReprovar && (
+                    <p className={styles.disclaimer}>
+                      <InfoIcon />
+                      Ao confirmar, você aprova as cores da prova digital
+                    </p>
+                  )}
+
+                  <div className={styles.acoes}>
+                    {modoDecisao ? (
+                      modoReprovar ? (
+                        <>
+                          <motion.button
+                            type="button"
+                            className={styles.botaoSecundario}
+                            onClick={() => {
+                              setModoReprovar(false);
+                              setMotivoErro(false);
+                            }}
+                            disabled={submetendo}
+                            {...toque}
+                          >
+                            Voltar
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            className={styles.botaoPerigo}
+                            onClick={() => confirmar("reprovar")}
+                            disabled={submetendo}
+                            {...toque}
+                          >
+                            {submetendo ? "Registrando…" : "Confirmar reprovação"}
+                          </motion.button>
+                        </>
+                      ) : (
+                        <>
+                          <motion.button
+                            type="button"
+                            className={styles.botaoSecundario}
+                            onClick={voltar}
+                            disabled={submetendo}
+                            {...toque}
+                          >
+                            Cancelar
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            className={styles.botaoReprovar}
+                            onClick={() => setModoReprovar(true)}
+                            disabled={submetendo || !podeReprovar}
+                            {...toque}
+                          >
+                            Reprovar
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            className={styles.botaoConfirmar}
+                            onClick={() => confirmar("aprovar")}
+                            disabled={submetendo || !podeAprovar}
+                            {...toque}
+                          >
+                            <CheckIcon />
+                            {submetendo ? "Registrando…" : "Aprovar"}
+                          </motion.button>
+                        </>
+                      )
                     ) : (
                       <>
                         <motion.button
                           type="button"
-                          className={styles.botaoReprovar}
-                          onClick={() => setModoReprovar(true)}
-                          disabled={submetendo || !podeReprovar}
+                          className={styles.botaoSecundario}
+                          onClick={voltar}
+                          disabled={submetendo}
                           {...toque}
                         >
-                          Reprovar
+                          Cancelar
                         </motion.button>
                         <motion.button
                           type="button"
                           className={styles.botaoConfirmar}
-                          onClick={() => confirmar("aprovar")}
-                          disabled={submetendo || !podeAprovar}
+                          onClick={() => confirmar("identificar_e_assinar")}
+                          disabled={submetendo}
                           {...toque}
                         >
-                          {submetendo ? "Registrando…" : "Aprovar"}
+                          <CheckIcon />
+                          {submetendo ? "Registrando…" : "Confirmar assinatura"}
                         </motion.button>
                       </>
-                    )
-                  ) : (
-                    <motion.button
-                      type="button"
-                      className={styles.botaoConfirmar}
-                      onClick={() => confirmar("identificar_e_assinar")}
-                      disabled={submetendo}
-                      {...toque}
-                    >
-                      {submetendo ? "Registrando…" : "Confirmar"}
-                    </motion.button>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {erroSubmissao && (
@@ -410,7 +452,7 @@ export function ConfirmarView({ provaId }: { provaId: string }) {
                 )}
               </>
             )}
-          </section>
+          </motion.section>
         </motion.article>
       ) : null}
 
@@ -440,5 +482,31 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
       <dt className={styles.campoRotulo}>{rotulo}</dt>
       <dd className={styles.campoValor}>{valor}</dd>
     </div>
+  );
+}
+
+/** Ícone "i" do disclaimer (decorativo — local à tela). */
+function InfoIcon() {
+  return (
+    <svg className={styles.disclaimerIcone} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="12" cy="7.6" r="1.05" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Check do botão de confirmação (decorativo — local à tela). */
+function CheckIcon() {
+  return (
+    <svg className={styles.botaoIcone} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 12.5l4.3 4.3L19 7.2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

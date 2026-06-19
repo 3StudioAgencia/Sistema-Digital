@@ -1,12 +1,15 @@
-/* Confirmação da movimentação (W3-C10/DP-2) — fiel ao design (Figma), mesma
-   linguagem do detalhe (C08): "Voltar" + card BRANCO (nome + requerimento + linha
-   de metadados) com um card PRETO "Assinatura Digital" aninhado (botão Confirmar +
-   área de assinatura tracejada).
+/* Confirmação da movimentação (W3-C10/C12) — REDESIGN da tela de assinatura
+   (ADR-096): um card BRANCO único — nome + badge de requerimento + divisor + linha
+   de metadados (Cliente · Vendedor · Rota · Ciclo · Criada em · Status) — com o
+   bloco "Assinatura Digital" embutido: caixa de assinatura cinza-clara com guias
+   (X + linha + legenda) ATRÁS do canvas transparente (DP-5) e um rodapé com o
+   disclaimer + Cancelar + Confirmar. É um RE-SKIN: o comportamento do C12
+   (captura/submissão/transição/anti-enum/resiliência/Aprovar-Reprovar) é idêntico.
 
-   MOBILE-FIRST (prioridade): a base é o mobile (metadados em 2 colunas, Confirmar
-   full-width no rodapé do card preto, página rolável); o @media (min-width:768px)
-   recompõe o desktop (metadados em 6 colunas, card preenchendo a altura, Confirmar
-   no canto superior direito). Só transform/opacity nas animações. */
+   MOBILE-FIRST (prioridade): a base é o mobile (metadados em 2 colunas, rodapé
+   empilhado, botões full-width, página rolável); o @media (min-width:768px) recompõe
+   o desktop (metadados em 6 colunas, caixa de assinatura ampla, rodapé numa linha
+   só). Só transform/opacity nas animações. */
 
 .pagina {
   flex: 1;
@@ -42,6 +45,7 @@
 
 .voltar:focus-visible,
 .linkRetry:focus-visible,
+.linkLimpar:focus-visible,
 .botaoConfirmar:focus-visible {
   outline: 2px solid var(--app-ink);
   outline-offset: 2px;
@@ -60,13 +64,13 @@
 .cabecalho {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .tituloLinha {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -78,12 +82,24 @@
   overflow-wrap: anywhere;
 }
 
+/* badge "Requerimento: N" — pílula cinza-clara, como no design */
 .requerimento {
-  font-size: 12px;
-  color: var(--app-text-gray);
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: var(--app-radius-pill);
+  background: #f1f1f1;
+  color: #7a7a7a;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-/* linha de metadados (Cliente · Vendedor · Rota · Ciclo Atual · Criada em · Status) */
+.divisor {
+  width: 100%;
+  height: 1px;
+  background: #ececec;
+}
+
+/* linha de metadados (Cliente · Vendedor · Rota · Ciclo · Criada em · Status) */
 .metadados {
   margin: 0;
   display: grid;
@@ -94,13 +110,13 @@
 .campo {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
 .campoRotulo {
   font-size: 13px;
-  color: var(--app-text-gray);
+  color: #9a9a9a;
 }
 
 .campoValor {
@@ -110,57 +126,30 @@
   overflow-wrap: anywhere;
 }
 
-/* -------------------------------------------------- card preto (assinatura) */
-.cardAssinatura {
-  position: relative;
-  background: var(--app-ink);
-  border-radius: var(--app-card-radius);
-  padding: 22px;
+/* -------------------------------------------------- bloco de assinatura (claro) */
+.assinaturaBloco {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  min-height: 360px;
+  gap: 16px;
+}
+
+.assinaturaHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .assinaturaTitulo {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 400;
-  color: var(--auth-text);
-}
-
-/* "Papel" branco (traço escuro) — legível em qualquer fundo (Timeline C13). */
-.assinaturaPad {
-  position: relative;
-  width: 100%;
-  height: 200px;
-  border-radius: 18px;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-}
-
-.assinaturaCanvasEl {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* essencial no touch: desenhar não rola/zooma a página (mobile-first). */
-  touch-action: none;
-  cursor: crosshair;
-}
-
-.assinaturaDica {
-  font-size: 14px;
-  color: var(--app-sidebar-muted);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
+  color: var(--app-text-gray);
 }
 
 .linkLimpar {
   border: 0;
   background: none;
-  color: var(--auth-text);
+  color: var(--app-text-gray);
   font: inherit;
   font-size: 14px;
   text-decoration: underline;
@@ -169,15 +158,77 @@
   min-height: 44px;
 }
 
+.linkLimpar:hover {
+  opacity: 0.8;
+}
+
+/* caixa cinza-clara: canvas TRANSPARENTE (z-index 1) sobre as guias (z-index 0). */
+.assinaturaPad {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  border-radius: 22px;
+  background: #f3f3f3;
+  overflow: hidden;
+}
+
+.assinaturaGuias {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  color: #cfcfcf;
+}
+
+.assinaturaX {
+  position: absolute;
+  left: 6%;
+  bottom: 26%;
+  width: 26px;
+  height: 26px;
+}
+
+.assinaturaLinha {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 24%;
+  height: 1px;
+  background: currentColor;
+}
+
+.assinaturaLegenda {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9%;
+  text-align: center;
+  font-size: 13px;
+  color: #a9a9a9;
+}
+
+.assinaturaCanvasEl {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* essencial no touch: desenhar não rola/zooma a página (mobile-first). */
+  touch-action: none;
+  cursor: crosshair;
+}
+
 .bloqueio {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  min-height: 160px;
   padding: 24px;
+  border-radius: 22px;
+  background: #f3f3f3;
   font-size: 15px;
-  color: var(--app-sidebar-muted);
+  color: var(--app-text-gray);
 }
 
 /* ----------------------------------------------- motivo (Reprovar) */
@@ -189,7 +240,7 @@
 
 .motivoLabel {
   font-size: 13px;
-  color: var(--app-sidebar-muted);
+  color: var(--app-text-gray);
 }
 
 .motivoTextarea {
@@ -197,32 +248,55 @@
   resize: vertical;
   min-height: 72px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #dcdcdc;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--auth-text);
+  background: #fafafa;
+  color: var(--app-ink);
   font: inherit;
   font-size: 15px;
 }
 
 .motivoTextarea::placeholder {
-  color: var(--app-sidebar-muted);
+  color: #a9a9a9;
 }
 
 .motivoTextarea:focus-visible {
-  outline: 2px solid var(--app-accent);
+  outline: 2px solid var(--app-ink);
   outline-offset: 1px;
 }
 
 .motivoTextarea[data-erro] {
-  border-color: #ff8a8a;
+  border-color: var(--app-danger);
 }
 
-/* ----------------------------------------------- linha de ações */
+/* ----------------------------------------------- rodapé (disclaimer + ações) */
+.rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.disclaimer {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-text-gray);
+  font-size: 14px;
+}
+
+.disclaimerIcone {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .acoes {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  margin-left: auto; /* mantém as ações à direita mesmo sem o disclaimer (reprovar) */
 }
 
 .acoes > button {
@@ -230,13 +304,18 @@
   min-width: 140px;
 }
 
-.botaoReprovar,
-.botaoSecundario {
-  min-height: 44px;
+/* botão primário escuro (Confirmar assinatura / Aprovar) — com check */
+.botaoConfirmar {
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  padding: 0 22px;
+  border: 0;
   border-radius: var(--app-radius-pill);
+  background: #1a1a1a;
+  color: #ffffff;
   font: inherit;
   font-size: 16px;
   font-weight: 500;
@@ -244,31 +323,86 @@
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
-.botaoReprovar {
-  border: 1px solid rgba(255, 138, 138, 0.6);
-  background: transparent;
-  color: #ff8a8a;
+.botaoConfirmar:hover {
+  opacity: 0.88;
 }
 
+.botaoIcone {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Cancelar / Voltar — contorno neutro */
 .botaoSecundario {
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border: 1px solid #d8d8d8;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-card-white);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+/* Reprovar (gatilho) — contorno de perigo */
+.botaoReprovar {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border: 1px solid var(--app-danger);
+  border-radius: var(--app-radius-pill);
   background: transparent;
-  color: var(--auth-text);
+  color: var(--app-danger);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
+}
+
+/* Confirmar reprovação — perigo sólido */
+.botaoPerigo {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-danger);
+  color: #ffffff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
 .botaoReprovar:hover,
-.botaoSecundario:hover {
+.botaoSecundario:hover,
+.botaoPerigo:hover {
   opacity: 0.85;
 }
 
 .botaoReprovar:focus-visible,
-.botaoSecundario:focus-visible {
-  outline: 2px solid var(--app-accent);
+.botaoSecundario:focus-visible,
+.botaoPerigo:focus-visible {
+  outline: 2px solid var(--app-ink);
   outline-offset: 2px;
 }
 
 .botaoReprovar:disabled,
 .botaoSecundario:disabled,
+.botaoPerigo:disabled,
 .botaoConfirmar:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -278,7 +412,7 @@
 .retry {
   margin: 0;
   font-size: 14px;
-  color: #ffd0d0;
+  color: #c0392b;
 }
 
 /* ----------------------------------------------- sucesso (flash leve) */
@@ -303,27 +437,6 @@
   font-size: 16px;
   font-weight: 600;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-}
-
-.botaoConfirmar {
-  width: 100%;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--app-radius-pill);
-  background: var(--app-accent);
-  color: var(--app-ink);
-  font: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity var(--motion-micro) var(--motion-ease-standard);
-}
-
-.botaoConfirmar:hover {
-  opacity: 0.9;
 }
 
 /* -------------------------------------------------- estados auxiliares */
@@ -388,24 +501,28 @@
     flex: 1;
     min-height: 0;
     padding: calc(48 * var(--u));
-    gap: calc(32 * var(--u));
+    gap: calc(28 * var(--u));
   }
 
-  .tituloLinha {
+  .cabecalho {
     gap: calc(22 * var(--u));
   }
 
+  .tituloLinha {
+    gap: calc(20 * var(--u));
+  }
+
   .nome {
-    font-size: calc(56 * var(--u));
+    font-size: calc(52 * var(--u));
   }
 
   .requerimento {
-    font-size: calc(22 * var(--u));
+    font-size: calc(20 * var(--u));
+    padding: calc(8 * var(--u)) calc(20 * var(--u));
   }
 
-  /* 6 campos justificados na largura inteira do card (= largura do card preto
-     abaixo): o 1º colado na esquerda, o último na direita, distância igual entre
-     eles (space-between). O ``gap`` é só o mínimo quando ficam apertados. */
+  /* 6 campos justificados na largura inteira do card: o 1º colado na esquerda, o
+     último na direita, distância igual entre eles (space-between). */
   .metadados {
     display: flex;
     justify-content: space-between;
@@ -420,39 +537,51 @@
     font-size: calc(24 * var(--u));
   }
 
-  /* o card preto preenche o resto do card branco. */
-  .cardAssinatura {
+  /* o bloco de assinatura preenche o resto do card branco. */
+  .assinaturaBloco {
     flex: 1;
     min-height: 0;
-    padding: calc(40 * var(--u));
-    gap: calc(24 * var(--u));
+    gap: calc(20 * var(--u));
   }
 
   .assinaturaTitulo {
-    font-size: calc(40 * var(--u));
+    font-size: calc(26 * var(--u));
   }
 
-  .assinaturaCanvas {
-    border-radius: calc(20 * var(--u));
-  }
-
-  .assinaturaDica {
+  .linkLimpar {
     font-size: calc(18 * var(--u));
   }
 
-  /* Ações alinhadas à direita do card (botões de largura natural). */
+  /* a caixa de assinatura cresce para preencher a altura disponível. */
+  .assinaturaPad {
+    flex: 1;
+    height: auto;
+    min-height: calc(260 * var(--u));
+    border-radius: calc(26 * var(--u));
+  }
+
+  .assinaturaLegenda {
+    font-size: calc(18 * var(--u));
+  }
+
+  .disclaimer {
+    font-size: calc(18 * var(--u));
+  }
+
+  /* rodapé numa linha só: disclaimer à esquerda, ações à direita. */
+  .rodape {
+    flex-wrap: nowrap;
+    gap: calc(20 * var(--u));
+  }
+
   .acoes {
-    justify-content: flex-end;
+    flex-wrap: nowrap;
   }
 
   .acoes > button {
     flex: 0 0 auto;
-    min-width: calc(180 * var(--u));
-    height: calc(50 * var(--u));
+    min-width: calc(170 * var(--u));
+    min-height: calc(52 * var(--u));
     font-size: calc(16 * var(--u));
-  }
-
-  .assinaturaPad {
-    height: calc(220 * var(--u));
   }
 }

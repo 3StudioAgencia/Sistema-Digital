@@ -95,8 +95,8 @@
 }
 
 .rotulo {
-  font-size: calc(20 * var(--u));
-  color: var(--app-ink);
+  font-size: calc(19 * var(--u));
+  color: #4b4b4b;
   margin-bottom: calc(10 * var(--u));
 }
 

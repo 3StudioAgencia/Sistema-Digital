@@ -34,6 +34,7 @@ import {
 import { listarUsuarios } from "@/lib/api/usuarios";
 import { DURATION, EASING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
+import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 import { Dropdown, type OpcaoDropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 
@@ -216,6 +217,12 @@ export function NovaProvaView() {
     ? { duration: DURATION.instant }
     : { duration: DURATION.medium, ease: EASING.emphasized };
 
+  // Cascata dos campos do formulário (W6-C19): a grade orquestra; cada campo
+  // surge em sequência. Técnica A nos nós existentes (preserva o grid). O reveal
+  // em bloco do cartão (acima) é WIP e fica intacto.
+  const gradeVar = staggerContainer(reduced);
+  const campoVar = fadeRise(reduced);
+
   // ------------------------------------------------------------ pós-criação
   if (pendenteEtiqueta) {
     return (
@@ -281,10 +288,10 @@ export function NovaProvaView() {
           animate={{ opacity: 1, y: 0 }}
           transition={entrada}
         >
-          <div className={styles.grade}>
-            <div className={styles.campo}>
+          <motion.div className={styles.grade} variants={gradeVar} initial="hidden" animate="show">
+            <motion.div className={styles.campo} variants={campoVar}>
               <label className={styles.rotulo} htmlFor={`${idBase}-nome`}>
-                Nome
+                Nome:
               </label>
               <input
                 id={`${idBase}-nome`}
@@ -303,11 +310,11 @@ export function NovaProvaView() {
                   {erros.nome}
                 </p>
               )}
-            </div>
+            </motion.div>
 
-            <div className={styles.campo}>
+            <motion.div className={styles.campo} variants={campoVar}>
               <label className={styles.rotulo} htmlFor={`${idBase}-requerimento`}>
-                Requerimento
+                Requerimento:
               </label>
               <input
                 id={`${idBase}-requerimento`}
@@ -327,11 +334,11 @@ export function NovaProvaView() {
                   {erros.requerimento}
                 </p>
               )}
-            </div>
+            </motion.div>
 
-            <div className={styles.campo}>
+            <motion.div className={styles.campo} variants={campoVar}>
               <label className={styles.rotulo} htmlFor={`${idBase}-cliente`}>
-                Cliente
+                Cliente:
               </label>
               <input
                 id={`${idBase}-cliente`}
@@ -350,11 +357,11 @@ export function NovaProvaView() {
                   {erros.cliente}
                 </p>
               )}
-            </div>
+            </motion.div>
 
-            <div className={styles.campo}>
+            <motion.div className={styles.campo} variants={campoVar}>
               <span className={styles.rotulo} id={`${idBase}-vendedor-rotulo`}>
-                Vendedor
+                Vendedor:
               </span>
               {vendedores.estado === "erro" ? (
                 <button
@@ -389,12 +396,12 @@ export function NovaProvaView() {
                   {erros.vendedor}
                 </p>
               )}
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           <div className={styles.campo}>
             <span className={styles.rotulo} id={`${idBase}-rota-rotulo`}>
-              Rota
+              Rota:
             </span>
             <div
               role="radiogroup"

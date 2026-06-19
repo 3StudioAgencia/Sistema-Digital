@@ -84,11 +84,11 @@ function inputDeArquivo(container: HTMLElement): HTMLInputElement {
 
 async function preencherFormularioValido(container: HTMLElement) {
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("Nome"), "Etiq Cafe Caproni Classico");
-  await user.type(screen.getByLabelText("Requerimento"), "155295");
-  await user.type(screen.getByLabelText("Cliente"), "Cafe Caproni");
+  await user.type(screen.getByLabelText("Nome:"), "Etiq Cafe Caproni Classico");
+  await user.type(screen.getByLabelText("Requerimento:"), "155295");
+  await user.type(screen.getByLabelText("Cliente:"), "Cafe Caproni");
   // Dropdown custom de vendedor (nome acessível = rótulo "Vendedor")
-  await user.click(screen.getByRole("button", { name: "Vendedor" }));
+  await user.click(screen.getByRole("button", { name: "Vendedor:" }));
   await user.click(await screen.findByRole("option", { name: "Renan Petrim" }));
   // Segmented control de rota
   await user.click(screen.getByRole("radio", { name: "Matriz" }));
@@ -108,10 +108,10 @@ describe("NovaProvaView (W2-C06)", () => {
 
     expect(screen.getByRole("heading", { name: "Nova prova Digital" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Criar Prova" })).toBeInTheDocument();
-    for (const rotulo of ["Nome", "Requerimento", "Cliente"]) {
+    for (const rotulo of ["Nome:", "Requerimento:", "Cliente:"]) {
       expect(screen.getByLabelText(rotulo)).toBeInTheDocument();
     }
-    expect(screen.getByRole("button", { name: "Vendedor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vendedor:" })).toBeInTheDocument();
     // ordem do design: Matriz · Filial · Lam. Matriz · Lam. Filial
     const opcoes = screen.getAllByRole("radio");
     expect(opcoes.map((o) => o.textContent)).toEqual([
@@ -150,12 +150,12 @@ describe("NovaProvaView (W2-C06)", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.type(screen.getByLabelText("Requerimento"), "ABC");
+    await user.type(screen.getByLabelText("Requerimento:"), "ABC");
     await user.click(screen.getByRole("button", { name: "Criar Prova" }));
     expect(screen.getByText("O requerimento aceita apenas números.")).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("Requerimento"));
-    await user.type(screen.getByLabelText("Requerimento"), "123");
+    await user.clear(screen.getByLabelText("Requerimento:"));
+    await user.type(screen.getByLabelText("Requerimento:"), "123");
     expect(screen.queryByText("O requerimento aceita apenas números.")).not.toBeInTheDocument();
   });
 
@@ -182,7 +182,7 @@ describe("NovaProvaView (W2-C06)", () => {
   it("caminho feliz (DP-7): cria, toast de sucesso, baixa a etiqueta e navega", async () => {
     const user = userEvent.setup();
     const { container } = renderView();
-    await screen.findByRole("button", { name: "Vendedor" });
+    await screen.findByRole("button", { name: "Vendedor:" });
 
     await preencherFormularioValido(container);
     await user.click(screen.getByRole("button", { name: "Criar Prova" }));
@@ -234,7 +234,7 @@ describe("NovaProvaView (W2-C06)", () => {
     );
     const user = userEvent.setup();
     const { container } = renderView();
-    await screen.findByRole("button", { name: "Vendedor" });
+    await screen.findByRole("button", { name: "Vendedor:" });
 
     await preencherFormularioValido(container);
     await user.click(screen.getByRole("button", { name: "Criar Prova" }));
@@ -242,14 +242,14 @@ describe("NovaProvaView (W2-C06)", () => {
     expect(await screen.findByText("Vendedor responsável inválido.")).toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Criar Prova" })).toBeEnabled();
-    expect(screen.getByLabelText("Nome")).toHaveValue("Etiq Cafe Caproni Classico");
+    expect(screen.getByLabelText("Nome:")).toHaveValue("Etiq Cafe Caproni Classico");
   });
 
   it("falha SÓ no download: painel de retry, sem navegar; retry baixa e navega", async () => {
     mocks.baixarEtiqueta.mockRejectedValueOnce(new ApiError(0, "api_inacessivel", "offline"));
     const user = userEvent.setup();
     const { container } = renderView();
-    await screen.findByRole("button", { name: "Vendedor" });
+    await screen.findByRole("button", { name: "Vendedor:" });
 
     await preencherFormularioValido(container);
     await user.click(screen.getByRole("button", { name: "Criar Prova" }));
@@ -276,7 +276,7 @@ describe("NovaProvaView (W2-C06)", () => {
     mocks.listarUsuarios.mockResolvedValueOnce(paginaVendedores([RENAN]));
     await user.click(retry);
 
-    expect(await screen.findByRole("button", { name: "Vendedor" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Vendedor:" })).toBeInTheDocument();
     await waitFor(() => expect(mocks.listarUsuarios).toHaveBeenCalledTimes(2));
   });
 });

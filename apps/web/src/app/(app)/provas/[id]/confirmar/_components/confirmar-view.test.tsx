@@ -102,14 +102,14 @@ describe("ConfirmarView (W3-C12)", () => {
     expect(screen.getByText("Requerimento: 155295")).toBeInTheDocument();
     expect(screen.getByText("Matriz")).toBeInTheDocument(); // rótulo real da rota
     expect(screen.getByTestId("assinatura-pad")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar assinatura" })).toBeInTheDocument();
   });
 
   it("assinatura + Confirmar → invoca a transição e reflete o novo estado", async () => {
     const user = userEvent.setup();
     renderView();
-    await screen.findByRole("button", { name: "Confirmar" });
-    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByRole("button", { name: "Confirmar assinatura" });
+    await user.click(screen.getByRole("button", { name: "Confirmar assinatura" }));
     await waitFor(() =>
       expect(mocks.executarTransicao).toHaveBeenCalledWith(
         "p-1",
@@ -123,7 +123,7 @@ describe("ConfirmarView (W3-C12)", () => {
     mocks.isEmpty.mockReturnValue(true);
     const user = userEvent.setup();
     renderView();
-    await user.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await user.click(await screen.findByRole("button", { name: "Confirmar assinatura" }));
     expect(await screen.findByText("Desenhe a assinatura para confirmar.")).toBeInTheDocument();
     expect(mocks.executarTransicao).not.toHaveBeenCalled();
   });
@@ -133,7 +133,7 @@ describe("ConfirmarView (W3-C12)", () => {
     renderView();
     expect(await screen.findByText(/não está aguardando uma ação sua/i)).toBeInTheDocument();
     expect(screen.queryByTestId("assinatura-pad")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Confirmar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirmar assinatura" })).not.toBeInTheDocument();
   });
 
   it("Aprovar/Reprovar; Reprovar exige motivo (RF-008)", async () => {
@@ -177,7 +177,7 @@ describe("ConfirmarView (W3-C12)", () => {
       .mockResolvedValueOnce({ ...PROVA, status: "retirada_vendedor" });
     const user = userEvent.setup();
     renderView();
-    await user.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await user.click(await screen.findByRole("button", { name: "Confirmar assinatura" }));
     // Falhou: mostra o aviso de preservação + retry; o pad NÃO foi limpo.
     expect(await screen.findByText(/assinatura foi preservada/i)).toBeInTheDocument();
     expect(mocks.clear).not.toHaveBeenCalled();
