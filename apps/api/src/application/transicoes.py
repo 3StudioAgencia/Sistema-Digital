@@ -38,6 +38,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.application.ports.assinaturas_repository import AssinaturasRepositoryPort
+from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.movimentacoes_repository import (
     IdempotenciaJaRegistradaError,
     MovimentacoesRepositoryPort,
@@ -46,6 +47,7 @@ from src.application.ports.provas_repository import ProvasRepositoryPort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.provas import ProvaListagem
 from src.domain.assinaturas import Assinatura, AssinaturaInvalidaError, validar_assinatura
+from src.domain.auditoria import EVENTO_POR_ACAO, NovoEventoAuditoria
 from src.domain.movimentacoes import Movimentacao, TransicaoIdempotenciaConflitoError
 from src.domain.provas import ProvaNaoEncontradaError
 from src.domain.state_machine.enums import Acao
@@ -88,6 +90,7 @@ class ProvasTransicaoService:
         uow: UnitOfWork,
         ator: Usuario,
         relogio: Callable[[], datetime] | None = None,
+        audit: AuditLogPort | None = None,
     ) -> None:
         self._repo = repo
         self._movs = movs
@@ -97,6 +100,10 @@ class ProvasTransicaoService:
         # para o gate de página; o motor o usa para a autorização FINA por ação (§6).
         self._ator = ator
         self._relogio = relogio or (lambda: datetime.now(UTC))
+        # W6-C20: captura do evento no log de auditoria, na MESMA transação da
+        # transição (atômica — RNF-017). Opcional: ausente nos testes que só exercem
+        # a máquina de estados (logar é efeito colateral, não muda a regra — §3.6).
+        self._audit = audit
 
     async def acoes_disponiveis(self, prova_id: str) -> tuple[Transicao, ...]:
         """Ações do fluxo de escaneamento que ESTE ator pode executar na prova
@@ -211,6 +218,25 @@ class ProvasTransicaoService:
                 ciclo_resultante = prova.ciclo_atual
                 if incrementa_ciclo(acao):
                     ciclo_resultante = await self._repo.incrementar_ciclo(prova_id)
+                # W6-C20: registra o evento no log de auditoria na MESMA transação
+                # (atômico — nasce/falha junto com a movimentação). Só no ramo de
+                # transição NOVA: o reenvio idempotente cai no ramo ``existente`` e
+                # NÃO duplica o evento. ``mov.motivo`` já vem stripado/condicional.
+                if self._audit is not None:
+                    await self._audit.registrar(
+                        NovoEventoAuditoria(
+                            evento=EVENTO_POR_ACAO[acao],
+                            prova_id=prova_id,
+                            prova_codigo=prova.codigo,
+                            prova_cliente=prova.cliente,
+                            prova_requerimento=prova.requerimento,
+                            acao=acao,
+                            estado_origem=prova.status,
+                            estado_destino=transicao.estado_destino,
+                            ciclo=prova.ciclo_atual,
+                            motivo=mov.motivo,
+                        )
+                    )
                 await self._uow.commit()
                 resultado = replace(
                     prova,

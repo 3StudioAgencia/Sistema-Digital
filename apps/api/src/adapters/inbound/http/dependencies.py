@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
 from src.adapters.outbound.db.assinaturas_repository import SqlAlchemyAssinaturasRepository
+from src.adapters.outbound.db.audit_log_repository import SqlAlchemyAuditLogRepository
 from src.adapters.outbound.db.dashboard_repository import SqlAlchemyDashboardRepository
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
@@ -24,6 +25,7 @@ from src.adapters.outbound.db.relatorios_repository import SqlAlchemyRelatoriosR
 from src.adapters.outbound.db.settings_repository import SqlAlchemySettingsRepository
 from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
+from src.application.auditoria import AuditoriaService
 from src.application.dashboard import DashboardService
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.identity_provider import IdentityProviderPort
@@ -137,6 +139,8 @@ async def get_provas_service(
             usuarios_repo=usuarios_repo,
             storage=storage,
             uow=SqlAlchemyUnitOfWork(session),
+            # W6-C20: "criou_prova" no log de auditoria, na mesma sessão/transação.
+            audit=SqlAlchemyAuditLogRepository(session),
         )
 
 
@@ -212,6 +216,8 @@ async def get_identificacao_service(
             repo=SqlAlchemyProvasRepository(session),
             rate_limiter=SqlAlchemyRateLimiter(session),
             uow=SqlAlchemyUnitOfWork(session),
+            # W6-C20: "escaneou_qr" no log de auditoria (só no sucesso da resolução).
+            audit=SqlAlchemyAuditLogRepository(session),
         )
 
 
@@ -251,6 +257,8 @@ async def get_transicao_service(
             assinaturas=SqlAlchemyAssinaturasRepository(session),
             uow=SqlAlchemyUnitOfWork(session),
             ator=ator,
+            # W6-C20: "cancelou_prova" no log de auditoria, na mesma transação.
+            audit=SqlAlchemyAuditLogRepository(session),
         )
 
 
@@ -288,6 +296,8 @@ async def get_cancelamento_service(
             assinaturas=SqlAlchemyAssinaturasRepository(session),
             uow=SqlAlchemyUnitOfWork(session),
             ator=ator,
+            # W6-C20: "cancelou_prova" no log de auditoria, na mesma transação.
+            audit=SqlAlchemyAuditLogRepository(session),
         )
 
 
@@ -323,6 +333,8 @@ async def get_reinicio_service(
             assinaturas=SqlAlchemyAssinaturasRepository(session),
             uow=SqlAlchemyUnitOfWork(session),
             ator=ator,
+            # W6-C20: "reiniciou_ciclo" no log de auditoria, na mesma transação.
+            audit=SqlAlchemyAuditLogRepository(session),
         )
 
 
@@ -413,8 +425,38 @@ async def get_relatorios_service(
         yield RelatoriosService(repo=SqlAlchemyRelatoriosRepository(session))
 
 
+async def get_auditoria_service(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[AuditoriaService]:
+    """Serviço de LEITURA do Log de Auditoria (W6-C20), JÁ gateado por ``LOG_AUDITORIA``.
+
+    "Log de Auditoria" é "Exclusivo 3Studio" (Matriz §7 ●○○○ — flag ``administrador``,
+    ADR-023), igual a Relatórios/Configurações: gate + serviço numa ÚNICA sessão RLS
+    (a linha do ator é legível por ``usuarios_select_self``), evitando duas conexões
+    NullPool (RNF-020). Os três endpoints (listar/atores/verificar) passam por aqui →
+    todos respondem 403 ao não-admin (defesa em DUAS camadas: gate + RLS
+    ``audit_log_select_admin``). READ-ONLY. Negação ÚNICA para sem-linha/inativo/não-
+    admin (anti-enumeração — CLAUDE.md §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.LOG_AUDITORIA):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield AuditoriaService(repo=SqlAlchemyAuditLogRepository(session))
+
+
 __all__ = [
     "get_admin_corrente",
+    "get_auditoria_service",
     "get_dashboard_service",
     "get_identificacao_service",
     "get_provas_consulta_service",

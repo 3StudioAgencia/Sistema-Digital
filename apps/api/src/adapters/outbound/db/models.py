@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     ForeignKey,
     Integer,
@@ -28,6 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from src.domain.auditoria import EventoAuditoria
 from src.domain.provas import EstadoProva, Rota
 from src.domain.state_machine.enums import Acao
 from src.domain.usuarios import Localizacao, Setor
@@ -256,9 +258,58 @@ class AssinaturaRow(Base):
     )
 
 
+class AuditLogRow(Base):
+    """Linha da tabela ``audit_log`` (migration 0022 — W6-C20).
+
+    Log APPEND-ONLY de TODAS as ações do sistema (RNF-006 ampliado — DP-1=C):
+    transições (C11), criação (C06) e escaneamento (C10), com metadados de IP/origem
+    e um CHAIN de integridade (``seq``/``prev_hash``/``hash``). Imutável — o trigger
+    ``trg_audit_log_append_only`` bloqueia UPDATE/DELETE e não há GRANT para eles. A
+    ESCRITA é exclusivamente via ``private.audit_log_append`` (SECURITY DEFINER); sem
+    INSERT direto. Campos de prova/ator denormalizados (auto-contido, pesquisável sem
+    JOIN). Este modelo existe para o espelho de schema (autogenerate) e o mapeamento
+    da LEITURA (a listagem do C20); a escrita não passa pelo ORM.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    seq: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
+    evento: Mapped[EventoAuditoria] = mapped_column(
+        _pg_enum(EventoAuditoria, "audit_evento_enum"), nullable=False
+    )
+    ator_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    ator_setor: Mapped[Setor | None] = mapped_column(_pg_enum(Setor, "setor_enum"), nullable=True)
+    prova_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
+    prova_codigo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prova_cliente: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prova_requerimento: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acao: Mapped[Acao | None] = mapped_column(_pg_enum(Acao, "acao_enum"), nullable=True)
+    estado_origem: Mapped[EstadoProva | None] = mapped_column(
+        _pg_enum(EstadoProva, "status_prova_enum"), nullable=True
+    )
+    estado_destino: Mapped[EstadoProva | None] = mapped_column(
+        _pg_enum(EstadoProva, "status_prova_enum"), nullable=True
+    )
+    ciclo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origem_user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origem_rotulo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prev_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 __all__ = [
     "NAMING_CONVENTION",
     "AssinaturaRow",
+    "AuditLogRow",
     "Base",
     "MovimentacaoRow",
     "ProvaRow",

@@ -53,9 +53,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0021", (
-        "head deve registrar a revisão 0021 (horas_uteis_entre: função de horas "
-        "úteis dos Relatórios — W5-C17)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0022", (
+        "head deve registrar a revisão 0022 (audit_log: log imutável de todas as "
+        "ações + chain de integridade — W6-C20)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -264,6 +264,33 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 1
     ), "0021 deve criar private.horas_uteis_entre (horas úteis — W5-C17)"
+    # W6-C20: tabela audit_log (0022) append-only + audit_evento_enum + chain + RLS.
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'audit_log'") == 1
+    ), "0022 deve criar a tabela audit_log"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'audit_evento_enum'")
+        == 1
+    ), "0022 deve criar o tipo audit_evento_enum (sincronizado com domain/auditoria)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_audit_log_append_only'",
+        )
+        == 1
+    ), "0022 deve criar o trigger append-only de audit_log (RNF-006: imutável)"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_policies WHERE tablename = 'audit_log'") == 1
+    ), "0022 deve criar 1 policy de audit_log (SELECT admin-only); escrita só via função DEFINER"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'private' AND p.proname IN "
+            "('audit_log_hash', 'audit_log_append', 'audit_log_verificar')",
+        )
+        == 3
+    ), "0022 deve criar as 3 funções do chain no schema private (hash/append/verificar)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -341,6 +368,22 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 0
     ), "downgrade da 0014 deve remover a tabela rate_limit_contadores"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'audit_log'") == 0
+    ), "downgrade da 0022 deve remover a tabela audit_log"
+    assert (
+        _scalar(database_url, "SELECT count(*) FROM pg_type WHERE typname = 'audit_evento_enum'")
+        == 0
+    ), "downgrade da 0022 deve remover o tipo audit_evento_enum"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc WHERE proname IN "
+            "('audit_log_hash', 'audit_log_append', 'audit_log_verificar', "
+            "'audit_log_append_only')",
+        )
+        == 0
+    ), "downgrade da 0022 deve remover as funções do chain de audit_log"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

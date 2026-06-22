@@ -102,6 +102,8 @@ pnpm dev                                  # http://localhost:3000
 > **Relatórios (W5-C17 — abre a Wave 5):** `uv run alembic upgrade head` chega à **`0021`** (função de horas úteis **`private.horas_uteis_entre`** dos tempos analíticos; **já aplicada no Supabase real**, `alembic_version=0021`). A tela **`/relatorios`** (**exclusiva do 3Studio** — gate de página + endpoints → 403 aos demais) traz **4 abas** (Geral / 3Studio / Vendedores / Clicheria) com uma **barra de filtros compartilhada** (De/Até + presets + Status + busca + rota + Vendedor, estado na URL), **gráficos Recharts** (barras + donut), **tabelas** e **Exportar CSV** (UTF-8 + `;`, Excel pt-BR). As métricas (tempo médio de aprovação, taxa de reprovação, **distribuição por rota somando 100%**, atrasadas — **mesma regra do Dashboard**, devolvidas, tempo médio aguardando da clicheria, etc.) são **agregadas server-side por aba** (lazy, sem N+1), **sem Realtime** (snapshot do período). **Operação:** se `pnpm add` não tiver sido sincronizado, rodar `pnpm install` (o C17 adicionou **`recharts`**). Detalhes em [`docs/relatorios.md`](./docs/relatorios.md).
 
 > **Animações (W6-C19 — abre a Wave 6, frontend-only):** consolida a camada de motion e adiciona **page transitions** (RF-023) + **reveal de entrada ("elementos surgindo em cascata") em todas as telas**. Primitivas em `apps/web/src/components/ui/motion/` (`<PageTransition>`, `<Reveal>`, `<Stagger>`/`<StaggerItem>`) sobre as fábricas de `lib/motion/variants.ts` e os tokens de `lib/motion/tokens.ts`; tudo **GPU-only** (`transform`/`opacity`) e **instantâneo** sob `prefers-reduced-motion` (hook central). Modais/drawer na faixa **150–300 ms** (RF-024). **Sem migration** (não altera o banco). Detalhes em [`docs/animations.md`](./docs/animations.md).
+>
+> **Log de Auditoria (W6-C20 — fecha a Wave 6 e o backlog v1.0):** `uv run alembic upgrade head` chega à **`0022`** (tabela imutável **`audit_log`** + funções de chain em `private`; **já aplicada no Supabase real**, `alembic_version=0022`). A tela **`/auditoria`** (**exclusiva do 3Studio** — proxy/sidebar + endpoints → 403 aos demais; **read-only**) é um **master-detail** sobre um **log imutável de todas as ações do sistema**: transições, criação e escaneamento, com **Ator/Setor/Prova/Endereço IP/Origem/Data** e um **hash de integridade encadeado** ("Registro íntegro e imutável") verificável. Filtros server-side na URL (presets/Eventos/Ator/Ordem/busca/De-Até/Linhas), color-coding por tipo, scroll infinito, drill-in no mobile. A captura é **efeito colateral atômico** dos casos de uso (não muda a regra deles); a escrita só ocorre pela função `private.audit_log_append` (anti-forja). **Pendências adiadas:** eventos periféricos (login/config) e endurecimento HMAC do chain. Detalhes em [`docs/auditoria.md`](./docs/auditoria.md). **Backlog v1.0 COMPLETO.**
 
 ---
 
@@ -148,7 +150,9 @@ Regra crítica e separação completa de responsabilidades: ver DAT §2 e `CLAUD
 | **3 · Fluxo** | 10 Escaneamento ✅ · 11 Máquina de Estados ✅ · 12 Assinatura ✅ · 13 Timeline ✅ · 14 Cancelamento ✅ · 15 Reinício ✅ | **Concluída** ✅ |
 | **4 · Dashboard** | 16 Dashboard Realtime ✅ | **Concluída** ✅ |
 | **5 · Relatórios/UX** | 17 Relatórios ✅ · ~~18 Atalhos~~ ✗ descartado (ADR-095) | 🔄 re-auditoria pendente |
-| **6 · Animações/Auditoria** | 19 Animações ✅ · 20 Log de Auditoria | 🔄 C19 entregue; C20 pendente |
+| **6 · Animações/Auditoria** | 19 Animações ✅ · 20 Log de Auditoria ✅ | **Concluída** ✅ |
+
+> **Backlog v1.0 COMPLETO.** Próximo passo: auditoria de fechamento da Wave 6 / revisão final de sistema (e a re-auditoria pendente da Wave 5).
 
 > Cada wave só inicia após concluir as dependências da anterior. **Uma sessão = um componente completo.**
 

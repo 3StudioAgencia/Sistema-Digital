@@ -12,6 +12,7 @@ import {
   Laptop,
   Plus,
   QrCode,
+  ScrollText,
   Settings,
   UserRound,
   type LucideIcon,
@@ -35,6 +36,9 @@ export const NAV_PRINCIPAL: NavItem[] = [
 ];
 
 export const NAV_SECUNDARIA: NavItem[] = [
+  // Auditoria (W6-C20): 3Studio-only — a Sidebar/proxy filtram por `log_auditoria`
+  // (admin), então só o 3Studio vê o item.
+  { href: "/auditoria", rotulo: "Auditoria", icone: ScrollText, componente: "C20" },
   { href: "/configuracoes", rotulo: "Configurações", icone: Settings },
   { href: "/informacoes", rotulo: "Informações", icone: Info },
 ];

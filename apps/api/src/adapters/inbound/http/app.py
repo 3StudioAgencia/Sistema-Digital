@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.adapters.inbound.http.auditoria import router as auditoria_router
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.auth import router as auth_router
 from src.adapters.inbound.http.dashboard import router as dashboard_router
@@ -106,6 +107,7 @@ def create_app(
     app.include_router(settings_router)
     app.include_router(dashboard_router)
     app.include_router(relatorios_router)
+    app.include_router(auditoria_router)
     return app
 
 

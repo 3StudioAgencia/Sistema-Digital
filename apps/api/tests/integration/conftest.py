@@ -51,8 +51,8 @@ async def usuarios_engine(usuarios_schema: str) -> AsyncIterator[AsyncEngine]:
     async with engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE movimentacoes, assinaturas, provas, usuarios, system_settings, "
-                "rate_limit_contadores"
+                "TRUNCATE audit_log, movimentacoes, assinaturas, provas, usuarios, "
+                "system_settings, rate_limit_contadores"
             )
         )
     try:

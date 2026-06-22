@@ -21,6 +21,13 @@ from pythonjsonlogger.json import JsonFormatter
 # Token de correlação da requisição corrente (None fora de um request).
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
+# Contexto de ORIGEM da requisição (W6-C20): IP do cliente e User-Agent, capturados
+# pelo middleware HTTP e lidos pelo adapter de auditoria ao gravar um evento. Ficam
+# aqui (junto do request_id) por serem o MESMO tipo de estado por-requisição,
+# seguro sob concorrência asyncio (cada task enxerga o seu). None fora de um request.
+client_ip_var: ContextVar[str | None] = ContextVar("client_ip", default=None)
+user_agent_var: ContextVar[str | None] = ContextVar("user_agent", default=None)
+
 
 class RequestIdFilter(logging.Filter):
     """Anexa o request_id corrente a todo LogRecord (correlação transversal)."""

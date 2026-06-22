@@ -12,7 +12,11 @@ describe("nav-items (DP-6)", () => {
       "Relatórios",
       "Usuários",
     ]);
-    expect(NAV_SECUNDARIA.map((i) => i.rotulo)).toEqual(["Configurações", "Informações"]);
+    expect(NAV_SECUNDARIA.map((i) => i.rotulo)).toEqual([
+      "Auditoria",
+      "Configurações",
+      "Informações",
+    ]);
   });
 
   it("resolve o ativo por prefixo mais longo (/provas/nova ≠ /provas)", () => {

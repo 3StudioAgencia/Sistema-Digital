@@ -36,7 +36,7 @@ from src.adapters.inbound.http.errors import (
     log_and_build_internal_error_response,
 )
 from src.domain.provas import ARTE_TAMANHO_MAXIMO
-from src.infrastructure.logging import request_id_var
+from src.infrastructure.logging import client_ip_var, request_id_var, user_agent_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
 # Whitelist de formato para o id recebido: charset seguro + limite de 128
@@ -124,8 +124,24 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
             return log_and_build_internal_error_response(request, exc)
 
 
+def _client_ip(request: Request) -> str | None:
+    """IP do cliente, best-effort (W6-C20). Atrás de Cloudflare/proxy o IP real vem
+    em ``CF-Connecting-IP`` ou no 1º salto de ``X-Forwarded-For``; sem proxy, o peer
+    direto (``request.client``). É METADADO de auditoria (não decisão de auth), então
+    é tolerante e NÃO confiável a ponto de gatear acesso — apenas registra a origem
+    provável (a confiança real depende do edge estar configurado para sobrescrever
+    esses headers)."""
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()[:64]
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()[:64]
+    return request.client.host if request.client else None
+
+
 class RequestIdMiddleware(BaseHTTPMiddleware):
-    """Gera/propaga o request_id e emite o access log estruturado."""
+    """Gera/propaga o request_id (+ IP/User-Agent — W6-C20) e emite o access log."""
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -134,6 +150,11 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         inbound = request.headers.get(REQUEST_ID_HEADER, "")
         request_id = inbound if _REQUEST_ID_PATTERN.match(inbound) else uuid.uuid4().hex
         token = request_id_var.set(request_id)
+        # Contexto de origem para a auditoria (C20): lido pelo adapter ao gravar um
+        # evento. Capturado aqui (middleware mais externo), nunca confiando num header
+        # forjável como decisão de acesso — só como metadado de origem.
+        ip_token = client_ip_var.set(_client_ip(request))
+        ua_token = user_agent_var.set(request.headers.get("user-agent") or None)
         started = time.perf_counter()
         try:
             try:
@@ -145,6 +166,8 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
                 response = log_and_build_internal_error_response(request, exc)
         finally:
             request_id_var.reset(token)
+            client_ip_var.reset(ip_token)
+            user_agent_var.reset(ua_token)
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         response.headers[REQUEST_ID_HEADER] = request_id

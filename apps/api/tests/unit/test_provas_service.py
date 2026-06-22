@@ -9,6 +9,7 @@ import datetime as dt
 import logging
 
 import pytest
+from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
     FiltrosProvas,
@@ -28,6 +29,7 @@ from src.application.provas import (
     GeracaoDeCodigoEsgotadaError,
     ProvasService,
 )
+from src.domain.auditoria import EventoAuditoria, NovoEventoAuditoria
 from src.domain.provas import (
     ArteInvalidaError,
     CriacaoDivergenteError,
@@ -136,6 +138,16 @@ class FakeUow(UnitOfWork):
 class StorageComDeleteQuebrado(FakeStorage):
     def delete(self, key: str) -> None:
         raise RuntimeError("delete indisponível")
+
+
+class FakeAuditLog(AuditLogPort):
+    """Captura as chamadas de registro (W6-C20) — conta eventos sem banco."""
+
+    def __init__(self) -> None:
+        self.eventos: list[NovoEventoAuditoria] = []
+
+    async def registrar(self, evento: NovoEventoAuditoria) -> None:
+        self.eventos.append(evento)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +267,33 @@ async def test_colisao_de_codigo_regenera_e_converge() -> None:
     # a arte NÃO é re-enviada nem apagada (key derivada do id, estável)
     assert storage.download(prova.arte_key) == JPEG_MINIMO
     assert uow.commits == 1
+
+
+async def test_colisao_de_codigo_loga_criou_prova_uma_unica_vez() -> None:
+    """W6-C20: a colisão de código é detectada no ``add`` (flush) ANTES do
+    ``audit.registrar`` (a captura fica no MESMO bloco transacional, depois do
+    add). Logo, a tentativa que falha NÃO loga; a retentativa loga UMA vez —
+    exactly-once na criação, mesmo com retry (guarda contra double-count)."""
+    repo = FakeProvasRepository()
+    usuarios = FakeUsuariosRepository()
+    usuarios.usuarios[VENDEDOR_ID] = _vendedor()
+    audit = FakeAuditLog()
+    service = ProvasService(
+        repo=repo,
+        usuarios_repo=usuarios,
+        storage=FakeStorage(),
+        uow=FakeUow(),
+        relogio=lambda: QUANDO,
+        audit=audit,
+    )
+    repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")]  # colisão na 1ª tentativa
+
+    prova = await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+
+    assert len(repo.codigos_tentados) == 2  # regenerou (retry)
+    assert len(audit.eventos) == 1  # a tentativa que falhou não logou
+    assert audit.eventos[0].evento is EventoAuditoria.CRIOU_PROVA
+    assert audit.eventos[0].prova_id == prova.id
 
 
 async def test_colisoes_esgotadas_viram_erro_interno_e_compensam_a_arte() -> None:

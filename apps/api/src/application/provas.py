@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.movimentacoes_repository import MovimentacoesRepositoryPort
 from src.application.ports.provas_repository import (
@@ -44,6 +45,7 @@ from src.application.ports.settings_repository import SettingsRepositoryPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import UsuariosRepositoryPort
+from src.domain.auditoria import EventoAuditoria, NovoEventoAuditoria
 from src.domain.movimentacoes import Movimentacao
 from src.domain.provas import (
     EXTENSAO_POR_TIPO,
@@ -106,12 +108,17 @@ class ProvasService:
         storage: StoragePort,
         uow: UnitOfWork,
         relogio: Callable[[], datetime] | None = None,
+        audit: AuditLogPort | None = None,
     ) -> None:
         self._repo = repo
         self._usuarios_repo = usuarios_repo
         self._storage = storage
         self._uow = uow
         self._relogio = relogio or (lambda: datetime.now(UTC))
+        # W6-C20: captura "criou_prova" no log de auditoria, na MESMA transação do
+        # INSERT da prova (atômica). Opcional: ausente nos testes de criação que não
+        # exercem auditoria (logar é efeito colateral — não muda a regra; §3.6).
+        self._audit = audit
 
     # ------------------------------------------------------------------- criar
     async def criar(
@@ -209,6 +216,20 @@ class ProvasService:
             try:
                 async with self._uow:
                     await self._repo.add(prova)
+                    # W6-C20: "criou_prova" na MESMA transação do INSERT (atômico).
+                    # Numa colisão de código (raise no commit), o rollback descarta
+                    # também este evento — a retentativa registra o evento da prova
+                    # que de fato persistir (exactly-once na criação bem-sucedida).
+                    if self._audit is not None:
+                        await self._audit.registrar(
+                            NovoEventoAuditoria(
+                                evento=EventoAuditoria.CRIOU_PROVA,
+                                prova_id=prova.id,
+                                prova_codigo=prova.codigo,
+                                prova_cliente=prova.cliente,
+                                prova_requerimento=prova.requerimento,
+                            )
+                        )
                     await self._uow.commit()
             except CodigoJaExisteError:
                 logger.warning(
@@ -502,11 +523,16 @@ class ProvasIdentificacaoService:
         rate_limiter: RateLimiterPort,
         uow: UnitOfWork,
         limite: int = LIMITE_IDENTIFICACAO,
+        audit: AuditLogPort | None = None,
     ) -> None:
         self._repo = repo
         self._rate_limiter = rate_limiter
         self._uow = uow
         self._limite = limite
+        # W6-C20: captura "escaneou_qr" no log de auditoria após resolução bem-
+        # sucedida (eventos sem prova — 404/malformado — não logam: anti-enumeração
+        # + ruído). Opcional: ausente nos testes de identificação (efeito colateral).
+        self._audit = audit
 
     async def identificar(self, codigo_bruto: str) -> ProvaListagem:
         """Resolve a prova pelo QR/código manual (RF-004/RF-005), idempotente.
@@ -535,6 +561,21 @@ class ProvasIdentificacaoService:
         prova = await self._repo.buscar_por_codigo(codigo)
         if prova is None:
             raise ProvaNaoEncontradaError()
+        # W6-C20: registra "escaneou_qr" só no sucesso (o 404 acima não loga —
+        # anti-enumeração RN-014). Append + commit próprio (a contagem do rate limit
+        # já foi commitada antes; este é um evento de leitura, não uma mutação
+        # atômica de domínio). Idempotente o suficiente: cada scan é um evento.
+        if self._audit is not None:
+            await self._audit.registrar(
+                NovoEventoAuditoria(
+                    evento=EventoAuditoria.ESCANEOU_QR,
+                    prova_id=prova.id,
+                    prova_codigo=prova.codigo,
+                    prova_cliente=prova.cliente,
+                    prova_requerimento=prova.requerimento,
+                )
+            )
+            await self._uow.commit()
         nomes = await self._repo.nomes_de_vendedores([prova.vendedor_id])
         logger.info(
             "prova identificada",

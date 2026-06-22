@@ -71,6 +71,7 @@ describe("Sidebar (app shell — W1-C04)", () => {
       "Escanear",
       "Relatórios",
       "Usuários",
+      "Auditoria",
       "Configurações",
       "Informações",
     ]);

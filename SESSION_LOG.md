@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 28 — 2026-06-22 — [Wave 6 / Componente C20] Interface de Log de Auditoria (fecha o backlog v1.0)
+
+**Objetivo:** W6-C20 — entregar a interface de Auditoria (3Studio-only, read-only) **fiel ao design** (master-detail, filtros, color-coding, painel de detalhe com IP/origem + hash de integridade). Último componente do backlog v1.0.
+
+**Decisão central (DP-1, bloqueante):** o design mostra um log mais amplo que o `movimentacoes` (C11) — eventos não-movimentação (Criou Prova/C06, Escaneou QR/C10), IP, Origem e hash. Apresentei os 5 Pontos de Decisão em bloco; o dono escolheu **(C) — `audit_log` unificado focado** (e seguir as recomendações nos demais).
+
+**Feito:**
+- **Backend (Ports & Adapters):** `domain/auditoria.py` (7 tipos de evento + `EVENTO_POR_ACAO` + `rotulo_origem` + filtros/dataclasses); migration **`0022`** (tabela `audit_log` append-only com campos denormalizados + IP/origem + chain `seq`/`prev_hash`/`hash`; trigger; **3 funções `private.`** hash/append/verificar; RLS admin-only + grants); `AuditLogPort` + `AuditoriaRepositoryPort`; `SqlAlchemyAuditLogRepository` (registrar via função SECURITY DEFINER; listar/atores/verificar sem N+1); `AuditoriaService` + router `/auditoria` (+ `/atores`, `POST /verificar-integridade`) gateado por `Recurso.LOG_AUDITORIA`.
+- **Captura (efeito colateral atômico, sem mudar a regra):** wired `AuditLogPort` (opcional) em `ProvasService.criar`, `ProvasIdentificacaoService.identificar`, `ProvasTransicaoService.executar` + 5 fábricas de DI. IP/UA capturados no `RequestIdMiddleware` (ContextVars).
+- **Frontend:** tela `/auditoria` (`AuditoriaView` master-detail — filtros na URL/debounce, color-coding, detalhe com rodapé de integridade, scroll infinito, drill-in mobile, botão "Verificar integridade") + `lib/auditoria/evento-labels.ts` + `lib/api/auditoria.ts` + `error.tsx`; item "Auditoria" na sidebar (`NAV_SECUNDARIA`, 3Studio-only).
+- **Docs:** `docs/auditoria.md`.
+
+**Decisões (ADRs):** ADR-100 (escopo/fonte=opção C, expande RNF-006), ADR-101 (filtros server-side/URL), ADR-102 (tipos+cores de evento), ADR-103 (read-only + chain SHA-256, sem HMAC na v1.0), ADR-104 (acesso 2 camadas + master-detail + nav), ADR-105 (captura via porta + função SECURITY DEFINER única porta de escrita + advisory lock + denormalização). Ver `DECISIONS.md`.
+
+**Testes / cobertura:**
+- Backend: `test_auditoria_dominio`, `test_equivalencia_rls_audit_log` (unit) + `test_audit_log_captura`, `test_audit_log_integridade` (**detecção de adulteração**), `test_auditoria_endpoints`, `test_rls_audit_log`, `test_migrations` (@db). **Suíte completa: 850 @db verdes** (antes da revisão). Web: `evento-labels.test.ts` + `auditoria-view.test.tsx` → **199 verdes**. `ruff`/`mypy --strict`/`tsc`/`eslint`/`build` limpos.
+- **Revisão adversarial** (workflow, 5 lentes + verificação): 7 achados, **4 confirmados, 3 refutados** (incl. "audit fora da transação" — a captura É atômica). Endereçados: (1)+(2) **hardening `lc_numeric='C'`** no hash do chain (determinismo explícito; `numeric_out` já é locale-independente — belt-and-suspenders), (3) **teste de colisão de código → exactly-once** do evento, (4) **pulso do skeleton** (opacity-only + reduced-motion). Pós-revisão: offline verde, prod re-verificado (PG17).
+
+**Migration aplicada no Supabase real:** **`0022`** (`alembic_version=0022`); `audit_log` + 1 policy admin-only + trigger + 3 funções `private`; `authenticated` só SELECT; advisors de segurança **sem item novo de `audit_log`**. Hardening `lc_numeric='C'` aplicado e verificado (`proconfig` = `search_path="" , lc_numeric=C`; chain íntegro).
+
+**Pendências / itens em aberto:**
+- **Eventos periféricos adiados:** login/logout e mudança de configuração (C09) ainda não geram evento — a camada (`AuditLogPort` + função append) está pronta para plugá-los.
+- **Endurecimento HMAC** do chain (chave em env) como opção futura (a barreira primária é o append-only do banco).
+- **Cluster Postgres local (`.tmp-pg`/5432) caiu após o run verde** (pid sumiu) — a re-verificação @db do hardening `lc_numeric='C'` não rodou local, mas a mudança é **value-preserving** (no-op em locale C/UTF-8) e foi **aplicada+verificada no Supabase real (PG17, mesmo engine)**; o `test_migrations` já provou upgrade/downgrade limpos.
+
+**Próximo passo:** **auditoria de fechamento da Wave 6 / revisão final de sistema** — o **backlog v1.0 está COMPLETO** (14 estados, 4 rotas, RBAC 2 camadas, fluxo completo, dashboard, relatórios, animações, auditoria). Pendências de auditoria viram backlog pós-v1.0.
+
+**Definition of Done:** ✅ atendida (testes ≥ cobertura, RLS versionada + espelhada, migration aplicada/documentada, acesso 3Studio em 2 camadas testado, read-only, sem N+1, `prefers-reduced-motion`, sem segredos versionados, docs do módulo). ⚠️ ressalva: re-run @db local do último hardening bloqueado pela queda do cluster (mitigado: value-preserving + verificado em prod).
+
+---
+
 ## Sessão 27 — 2026-06-19 — [Wave 6 / Componente C19] Camada Transversal de Animações
 
 **Objetivo:** W6-C19 — estabelecer a camada transversal de animações (RF-023…027) e adicionar o vocabulário de "reveal de entrada" (elementos surgindo em cascata), **sem regredir** as animações existentes (C04/C13/C14/C15/C16).
