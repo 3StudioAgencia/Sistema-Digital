@@ -1,29 +1,17 @@
-/* Dashboard (W4-C16) — layout BENTO fiel ao design (sobre o shell #eaeaea).
-   Cards claros com número grande + ícone de documento amarelo; "Atrasadas" é uma
-   LISTA por vendedor + total (≠ dos demais); atalhos Escanear (preto) e Nova Prova
-   (amarelo). Escala pela unidade --u (como o resto da plataforma); só transform/
-   opacity nas transições (GPU); reduced-motion já zera --motion-* no globals. */
-
 .pagina {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* Padding mais generoso que as demais telas (só o dashboard): afasta o bento
-     das laterais do shell, fiel à referência. Escala com --u como o resto. */
   padding: calc(56 * var(--u)) calc(64 * var(--u)) calc(48 * var(--u));
 }
 
-/* -------------------------------------------------- grade bento */
 .bento {
   flex: 1;
   min-height: 0;
   display: grid;
   gap: calc(22 * var(--u));
   grid-template-columns: 1fr 1fr 0.92fr;
-  /* Linhas 3-4 (atalhos / Na clicheria) MENORES que os contadores: os botões de
-     atalho ficam baixos e "Na clicheria" (linhas 3+4) acompanha a altura dos dois
-     somados — fiel à referência. */
   grid-template-rows: minmax(0, 2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "criadas comvend atras"
@@ -54,7 +42,6 @@
   grid-area: nova;
 }
 
-/* -------------------------------------------------- card base */
 .card {
   background: var(--dash-card);
   border-radius: var(--app-card-radius);
@@ -63,7 +50,6 @@
   min-width: 0;
 }
 
-/* Cards de contador são botões (clicáveis → listagem pré-filtrada — DP-6). */
 .cardContador {
   display: flex;
   flex-direction: column;
@@ -95,14 +81,13 @@
   font-weight: 400;
 }
 
-/* Ícone de documento: quadrado amarelo com o glifo branco (do design). */
 .cardIcone {
   flex: none;
   width: calc(58 * var(--u));
   height: calc(58 * var(--u));
   border-radius: calc(14 * var(--u));
   background: var(--app-accent);
-  color: var(--app-ink); /* ícone PRETO no box amarelo (≠ placeholder do Figma) */
+  color: var(--app-ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,12 +106,10 @@
   letter-spacing: -0.01em;
 }
 
-/* "Aprovadas" é o card largo (2 colunas) — número ainda maior, fiel ao design. */
 .largo .cardNumero {
   font-size: calc(112 * var(--u));
 }
 
-/* -------------------------------------------------- card "Atrasadas" (lista) */
 .atrasadasCard {
   display: flex;
   flex-direction: column;
@@ -162,7 +145,6 @@
   }
 }
 
-/* Cada vendedor é clicável → listagem atrasada + vendedor (DP-6). */
 .atrasadaLinha {
   width: 100%;
   display: flex;
@@ -202,7 +184,6 @@
   padding: calc(14 * var(--u)) calc(4 * var(--u));
 }
 
-/* Total em destaque ao final (o "258" do design) — clicável (todas atrasadas). */
 .atrasadasRodape {
   flex: none;
   align-self: flex-start;
@@ -226,7 +207,6 @@
   letter-spacing: -0.01em;
 }
 
-/* -------------------------------------------------- atalhos */
 .atalho {
   display: flex;
   align-items: center;
@@ -236,8 +216,6 @@
   cursor: pointer;
   font: inherit;
   border-radius: var(--app-card-radius);
-  /* Atalhos mais baixos (a referência os tem curtos); a altura final vem da linha
-     do grid (1fr, menor que os contadores) — o padding só garante respiro. */
   padding: calc(20 * var(--u)) calc(40 * var(--u));
   transition: transform var(--motion-micro) var(--motion-ease-standard);
 }
@@ -275,7 +253,6 @@
   color: var(--app-ink);
 }
 
-/* -------------------------------------------------- foco visível (acessibilidade) */
 .cardContador:focus-visible,
 .atrasadaLinha:focus-visible,
 .atrasadasRodape:focus-visible,
@@ -285,7 +262,6 @@
   outline-offset: 3px;
 }
 
-/* -------------------------------------------------- estados de carga/erro */
 .skeleton {
   animation: pulso var(--motion-pulse) ease-in-out infinite;
 }
@@ -324,7 +300,6 @@
   min-height: 44px;
 }
 
-/* -------------------------------------------------- responsivo */
 @media (max-width: 1100px) {
   .bento {
     grid-template-columns: 1fr 1fr;

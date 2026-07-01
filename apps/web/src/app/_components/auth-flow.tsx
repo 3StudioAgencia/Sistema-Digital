@@ -9,17 +9,6 @@ import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
 import styles from "../login/login.module.css";
 import { LoginPanel } from "./login-panel";
 
-/**
- * Experiência de login adaptativa (W1-C03 / DP-7).
- *
- * - **Desktop (>=768px):** split — herói com formato custom (máscara SVG) +
- *   formulário. A imagem é estática (sem parallax/zoom).
- * - **Mobile:** boas-vindas PRIMEIRO (overlay) e o formulário só aparece ao
- *   clicar em "Entrar" — troca de passo (estado), sem mudar de rota, com
- *   transição fluida (sem redirecionamento por viewport).
- *
- * Toda animação degrada para instantânea com prefers-reduced-motion.
- */
 export function AuthFlow({ expired }: { expired: boolean }) {
   const reduce = useReducedMotion();
   const [showForm, setShowForm] = useState(false);
@@ -39,8 +28,6 @@ export function AuthFlow({ expired }: { expired: boolean }) {
 
   return (
     <div className={styles.page}>
-      {/* Herói desktop — formato custom (máscara). Imagem estática; apenas um
-          fade discreto na entrada, em sintonia com o restante. */}
       <motion.div
         className={styles.hero}
         aria-hidden="true"
@@ -51,12 +38,10 @@ export function AuthFlow({ expired }: { expired: boolean }) {
         <div className={styles.heroImg} />
       </motion.div>
 
-      {/* Formulário — desktop: à direita; mobile: revelado após as boas-vindas. */}
       <div className={styles.formArea}>
         <LoginPanel expired={expired} />
       </div>
 
-      {/* Boas-vindas — overlay mobile-only; sai de cena ao clicar em Entrar. */}
       <AnimatePresence>
         {!showForm && (
           <motion.section
@@ -76,7 +61,6 @@ export function AuthFlow({ expired }: { expired: boolean }) {
               animate="show"
             >
               <motion.div variants={welcomeItem}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- SVG estático; next/image não otimiza SVG */}
                 <img
                   src="/logo-3studio.svg"
                   alt="3Studio"

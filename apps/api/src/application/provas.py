@@ -216,10 +216,6 @@ class ProvasService:
             try:
                 async with self._uow:
                     await self._repo.add(prova)
-                    # W6-C20: "criou_prova" na MESMA transação do INSERT (atômico).
-                    # Numa colisão de código (raise no commit), o rollback descarta
-                    # também este evento — a retentativa registra o evento da prova
-                    # que de fato persistir (exactly-once na criação bem-sucedida).
                     if self._audit is not None:
                         await self._audit.registrar(
                             NovoEventoAuditoria(
@@ -243,9 +239,6 @@ class ProvasService:
         )
 
     async def _compensar_arte(self, arte_key: str) -> None:
-        """Remove a arte do R2 após falha no INSERT (delete idempotente). Engole
-        a própria falha (com CRITICAL) para o erro ORIGINAL chegar ao chamador —
-        o pior caso é um objeto órfão MARCADO em log, nunca uma prova órfã."""
         try:
             await asyncio.to_thread(self._storage.delete, arte_key)
             logger.warning(

@@ -14,7 +14,6 @@ _MSG = (
 
 
 class UnconfiguredStorage(StoragePort):
-    """Stand-in explícito do storage ausente — saúde sempre ``False``."""
 
     def upload(self, key: str, data: bytes, content_type: str) -> str:
         raise StorageError(_MSG)

@@ -3,9 +3,6 @@ import localFont from "next/font/local";
 
 import "./globals.css";
 
-// Inter self-hospedada (next/font/local): build HERMÉTICO (sem rede em build —
-// alinhado à decisão do W0), zero layout shift e bom para o futuro on-prem.
-// Pesos do design (Figma): 300 Light · 400 Regular · 600 Semi Bold.
 const inter = localFont({
   src: [
     { path: "./fonts/inter-latin-300-normal.woff2", weight: "300", style: "normal" },
@@ -22,8 +19,6 @@ export const metadata: Metadata = {
     "Controle e rastreabilidade do fluxo físico-digital de provas de impressão — da criação à clicheria.",
 };
 
-// Garante layout responsivo correto no mobile (sem isso, browsers móveis
-// assumem ~980px e o breakpoint de desktop dispararia no celular).
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

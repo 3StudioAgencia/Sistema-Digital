@@ -1,13 +1,12 @@
-/* Log de Auditoria (W6-C20) — master-detail fiel ao design, sobre o shell claro. */
-
 .pagina {
   display: flex;
   flex-direction: column;
   gap: 24px;
   min-height: 0;
+  padding: calc(108 * var(--u)) 28px 28px;
+  overflow-y: auto;
 }
 
-/* Cabeçalho */
 .cabecalho {
   display: flex;
   align-items: flex-start;
@@ -136,7 +135,6 @@
   pointer-events: none;
 }
 
-/* Master-detail */
 .painel {
   display: grid;
   grid-template-columns: minmax(300px, 380px) 1fr;
@@ -211,7 +209,6 @@
   font-size: 13px;
 }
 
-/* Detalhe */
 .detalhe {
   min-width: 0;
 }
@@ -222,7 +219,7 @@
   padding: 20px 8px;
 }
 .btnVoltar {
-  display: none; /* só no mobile (drill-in) */
+  display: none;
   align-items: center;
   gap: 6px;
   border: none;
@@ -337,7 +334,6 @@
   height: 64px;
   border-radius: 16px;
   background: linear-gradient(90deg, #ececec, #f4f4f4, #ececec);
-  /* Pulso de loading consistente com as outras telas (opacity-only — GPU, §3). */
   animation: pulso var(--motion-pulse) ease-in-out infinite;
 }
 
@@ -358,7 +354,6 @@
   }
 }
 
-/* Responsivo: drill-in no mobile (lista → detalhe) */
 @media (max-width: 860px) {
   .titulo {
     font-size: 40px;

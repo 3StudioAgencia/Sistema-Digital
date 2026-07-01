@@ -192,7 +192,6 @@ class FpdfEtiquetaGenerator(EtiquetaPort):
     # ----------------------------------------------------------------- privados
     @staticmethod
     def _ajustar(pdf: FPDF, texto: str, largura: float) -> str:
-        """Trunca com reticências para caber em ``largura`` (valores longos)."""
         if pdf.get_string_width(texto) <= largura:
             return texto
         while texto and pdf.get_string_width(texto + "...") > largura:

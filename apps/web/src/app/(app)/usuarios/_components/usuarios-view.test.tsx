@@ -1,10 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { ToastProvider } from "@/components/ui/toast/ToastProvider";
-import { ApiError } from "@/lib/api/client";
-import type { PaginaUsuarios, Usuario } from "@/lib/api/usuarios";
+import { ToastProvider } from "../../../../components/ui/toast/ToastProvider";
+import { ApiError } from "../../../../lib/api/client";
+import type { PaginaUsuarios, Usuario } from "../../../../lib/api/usuarios";
 
 const mocks = vi.hoisted(() => ({
   listarUsuarios: vi.fn(),
@@ -15,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/usuarios", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/api/usuarios")>();
+  const original = await importOriginal<typeof import("../../../../lib/api/usuarios")>();
   return { ...original, ...mocks };
 });
 

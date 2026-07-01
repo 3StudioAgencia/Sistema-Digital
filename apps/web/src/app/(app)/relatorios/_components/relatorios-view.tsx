@@ -1,12 +1,5 @@
 "use client";
 
-/**
- * Relatórios (W5-C17) — shell fiel ao design: cabeçalho + Exportar CSV (caret),
- * chip de período, tab bar (4 abas) e barra de filtros COMPARTILHADA (DP-4), com a
- * aba ativa renderizada de forma lazy (só ela busca — DP-6). SEM Realtime: é um
- * snapshot do período, recomputado na troca de filtro/aba. Estado (aba + filtros)
- * na URL — refresh-safe e compartilhável (reusa os padrões do C07).
- */
 import { motion } from "framer-motion";
 import { Calendar, ChevronDown, Download, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -71,21 +64,14 @@ export function RelatoriosView() {
   const searchParams = useSearchParams();
   const toast = useToast();
   const reduced = useReducedMotion();
-  // Transição da pílula deslizante dos segmentados (GPU/layoutId) — instantânea
-  // sob prefers-reduced-motion (RNF-010).
   const transicaoPill = reduced
     ? { duration: DURATION.instant }
     : { duration: DURATION.short, ease: EASING.emphasized };
-  // Reveal de entrada (W6-C19): a página orquestra a cascata (cabeçalho → tab bar →
-  // filtros → conteúdo) na montagem; o container do conteúdo re-cascateia na troca
-  // de aba (key={aba}). Zerado sob prefers-reduced-motion pelas fábricas.
   const containerVar = staggerContainer(reduced);
   const itemVar = fadeRise(reduced);
 
   const aba = (searchParams.get("aba") as Aba | null) ?? "geral";
   const queryString = searchParams.toString();
-
-  // Filtros derivados da URL (identidade estável por query — dep dos efeitos das abas).
   const filtros = useMemo<FiltrosRelatorio>(
     () => ({
       de: searchParams.get("de") ?? undefined,
@@ -95,7 +81,6 @@ export function RelatoriosView() {
       busca: searchParams.get("busca") ?? undefined,
       vendedorId: searchParams.get("vendedor") ?? undefined,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [queryString],
   );
   const chaveFiltros = `${filtros.de ?? ""}|${filtros.ate ?? ""}|${filtros.status ?? ""}|${
@@ -119,7 +104,6 @@ export function RelatoriosView() {
     aplicarRef.current = aplicar;
   });
 
-  // Busca com debounce ≥300ms (RNF-023) — estado local p/ digitação fluida.
   const [busca, setBusca] = useState(() => searchParams.get("busca") ?? "");
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -135,12 +119,10 @@ export function RelatoriosView() {
     listarVendedores(controller.signal)
       .then(setVendedores)
       .catch(() => {
-        /* dropdown vazio degrada para "Todos" */
       });
     return () => controller.abort();
   }, []);
 
-  // Exportar CSV (caret menu).
   const [menuAberto, setMenuAberto] = useState(false);
   const exportWrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -175,18 +157,12 @@ export function RelatoriosView() {
     ...vendedores.map((v) => ({ value: v.id, label: v.nome })),
   ];
 
-  // Preset ativo pela URL (`?preset=`), não por recomputar p.de()/p.ate() a cada
-  // render — senão o destaque se perde ao virar o dia (as funções dependem de "hoje").
   const presetSelecionado = searchParams.get("preset") ?? "";
   const presetAtivo = (p: (typeof PRESETS)[number]) => presetSelecionado === p.rotulo;
-
-  // Clicar em QUALQUER ponto do box de data abre o calendário (o input preenche o
-  // pill; "De"/ícone ficam por cima sem capturar o clique) — showPicker() nativo.
   const abrirCalendario = (input: HTMLInputElement) => {
     try {
       input.showPicker();
     } catch {
-      // showPicker indisponível (navegador antigo) ou picker já aberto — no-op.
     }
   };
 
@@ -227,7 +203,6 @@ export function RelatoriosView() {
         </div>
       </motion.div>
 
-      {/* Tab bar */}
       <motion.div
         className={styles.tabBar}
         role="tablist"
@@ -257,7 +232,6 @@ export function RelatoriosView() {
         ))}
       </motion.div>
 
-      {/* Barra de filtros compartilhada (DP-4) */}
       <motion.div className={styles.filtros} variants={itemVar}>
         <div className={styles.linhaFiltros}>
           <div className={styles.campoData}>
@@ -361,10 +335,6 @@ export function RelatoriosView() {
         </div>
       </motion.div>
 
-      {/* Conteúdo da aba ativa (lazy — só a montada busca). key={aba} re-cascateia o
-          reveal na troca de aba SEM tocar o lazy-load (o conteúdo já é condicional por
-          `aba`); initial/animate próprios disparam só na (re)montagem — sem re-animar
-          em updates de dados nem os <AnimatedCounter> internos. */}
       <motion.div
         key={aba}
         className={styles.conteudo}

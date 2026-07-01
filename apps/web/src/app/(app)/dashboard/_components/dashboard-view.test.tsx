@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Dashboard } from "@/lib/api/dashboard";
+import type { Dashboard } from "../../../../lib/api/dashboard";
 
 // Router espionado (cliques nos cards/atalhos navegam — DP-6/DP-3).
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
 // Refetch do dashboard (chamado no Realtime / na carga sem SSR).
 const mocks = vi.hoisted(() => ({ fetchDashboard: vi.fn() }));
 vi.mock("@/lib/api/dashboard", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/api/dashboard")>();
+  const original = await importOriginal<typeof import("../../../../lib/api/dashboard")>();
   return { ...original, fetchDashboard: mocks.fetchDashboard };
 });
 

@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Aba Geral (W5-C17 · §0.2) — fiel ao design (bento):
- * - Linha 1: Total geral (preto, largo, com barras de volume) · Tempo médio aprov.
- *   · Taxa reprovação · Rota (lista simples).
- * - Linha 2: Provas Ativas (donut) · Tempo médio por vendedor (ranking) · Vendedor
- *   com mais artes (preto, com barras).
- * - Abaixo: tabelas Métricas por Vendedor e Provas Atrasadas.
- * Os cards de ranking derivam de `metricas_por_vendedor` (sem ida extra — DP-3).
- */
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioGeral, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { ROTA_LABELS } from "@/lib/provas/rota-labels";
@@ -34,15 +25,13 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
   const tempoPorVendedor = dados.metricas_por_vendedor
     .filter((m) => m.tempo_medio_horas !== null)
     .sort((a, b) => (b.tempo_medio_horas ?? 0) - (a.tempo_medio_horas ?? 0));
-  const top = dados.metricas_por_vendedor[0]; // já vem ordenado por volume desc
-  // Máximos para as progress bars (tempo por vendedor; volume na tabela).
+  const top = dados.metricas_por_vendedor[0];
   const maxTempo = Math.max(1, ...tempoPorVendedor.map((m) => m.tempo_medio_horas ?? 0));
   const maxVolume = Math.max(1, ...dados.metricas_por_vendedor.map((m) => m.volume));
   const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`;
 
   return (
     <div className={styles.gridGeral}>
-      {/* Total geral (preto, largo, com barras de volume) */}
       <div className={`${styles.card} ${styles.cardEscuro} ${styles.aTotal} ${styles.cTotal}`}>
         <div className={styles.totalTopo}>
           <AnimatedCounter value={dados.total_geral} className={styles.totalNumero} />
@@ -51,7 +40,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         <VolumeBars dados={dados.volume} className={styles.totalBars} />
       </div>
 
-      {/* Tempo médio aprov. */}
       <div className={`${styles.card} ${styles.aTempo} ${styles.cMetric}`}>
         <span className={styles.cardRotulo}>Tempo médio aprov.</span>
         <span className={styles.metricValor}>
@@ -60,7 +48,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         </span>
       </div>
 
-      {/* Taxa reprovação */}
       <div className={`${styles.card} ${styles.aTaxa} ${styles.cMetric}`}>
         <span className={styles.cardRotulo}>Taxa reprovação</span>
         <span className={`${styles.metricValor} ${styles.metricVermelho}`}>
@@ -69,7 +56,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         </span>
       </div>
 
-      {/* Rota (lista simples, sem barras) */}
       <div className={`${styles.card} ${styles.aRota} ${styles.cRota}`}>
         <span className={styles.cardRotulo}>Rota</span>
         <ul className={styles.rotaLista}>
@@ -82,7 +68,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         </ul>
       </div>
 
-      {/* Provas Ativas (donut + legenda) */}
       <div className={`${styles.card} ${styles.aAtivas} ${styles.cAtivas}`}>
         <span className={styles.cardRotulo}>Provas Ativas</span>
         <ProvasAtivasDonut
@@ -91,7 +76,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         />
       </div>
 
-      {/* Tempo médio de aprovação por vendedor (ranking com linha conectora) */}
       <div className={`${styles.card} ${styles.aVend}`}>
         <span className={styles.cardRotulo}>Tempo médio de aprovação por vendedor</span>
         {tempoPorVendedor.length === 0 ? (
@@ -115,7 +99,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         )}
       </div>
 
-      {/* Vendedor com mais artes (preto, com barras) */}
       <div className={`${styles.card} ${styles.cardEscuro} ${styles.aMais} ${styles.cMais}`}>
         <span className={styles.cardRotulo}>Vendedor com mais artes</span>
         <span className={styles.maisNome}>{top?.vendedor_nome ?? "—"}</span>
@@ -123,7 +106,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
         <VolumeBars dados={dados.volume} className={styles.maisBars} />
       </div>
 
-      {/* Métricas por Vendedor (ranking detalhado) */}
       <div className={`${styles.card} ${styles.aMetricas}`}>
         <div className={styles.tabelaCabecalho}>
           <div>
@@ -191,8 +173,6 @@ export function GeralTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave:
           </div>
         )}
       </div>
-
-      {/* Provas Atrasadas (aguardando ação) */}
       <div className={`${styles.card} ${styles.aAtrasadas}`}>
         <div className={styles.tabelaCabecalho}>
           <div>

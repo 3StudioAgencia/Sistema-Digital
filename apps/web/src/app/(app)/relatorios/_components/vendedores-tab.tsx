@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Aba Vendedores (W5-C17 · §0.2) — fiel ao design (bento):
- * - Linha 1: Provas Criadas (preto, com gráfico de volume) · Ranking por volume
- *   (lista ranqueada, larga).
- * - Abaixo: Detalhamento (tabela: Vendedor · Local · Aprovação · Reprovação ·
- *   Tempo · Atrasadas).
- * Ranking e Detalhamento derivam de `por_vendedor` (sem ida extra — DP-3). Aprov.%
- * = 100 − taxa de reprovação (ambas sobre as decisões do vendedor).
- */
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioVendedores, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { fmtHoras, fmtInt, fmtPct, fracao, iniciais } from "@/lib/relatorios/format";
@@ -20,7 +11,6 @@ import { EstadoErro, GridSkeleton, useRelatorio } from "./use-relatorio";
 const rotuloLocal = (l: string | null) =>
   l === "filial" ? "Filial" : l === "matriz" ? "Matriz" : "—";
 
-/** Taxa de aprovação = 100 − taxa de reprovação (ambas sobre as decisões). */
 function taxaAprovacao(taxaReprovacao: number | null): number | null {
   return taxaReprovacao === null ? null : Math.round((100 - taxaReprovacao) * 10) / 10;
 }
@@ -39,7 +29,6 @@ export function VendedoresTab({ filtros, chave }: { filtros: FiltrosRelatorio; c
 
   return (
     <div className={styles.gridVendedores}>
-      {/* Provas Criadas (preto, com gráfico de volume) */}
       <div className={`${styles.card} ${styles.cardEscuro} ${styles.sSpan4} ${styles.cTotal}`}>
         <div className={styles.totalTopo}>
           <AnimatedCounter value={dados.provas_criadas} className={styles.totalNumero} />
@@ -48,7 +37,6 @@ export function VendedoresTab({ filtros, chave }: { filtros: FiltrosRelatorio; c
         <VolumeBars dados={dados.volume} className={styles.totalBars} />
       </div>
 
-      {/* Ranking por volume (lista ranqueada com linha conectora) */}
       <div className={`${styles.card} ${styles.sSpan8}`}>
         <span className={styles.cardRotulo}>Ranking por volume</span>
         {ranking.length === 0 ? (

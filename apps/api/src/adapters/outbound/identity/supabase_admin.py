@@ -48,7 +48,6 @@ _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 
 def _parse_created_at(valor: object) -> datetime | None:
-    """``created_at`` ISO do GoTrue → datetime aware (idade p/ adoção de órfão)."""
     if not isinstance(valor, str) or not valor:
         return None
     try:
@@ -167,7 +166,6 @@ class SupabaseAdminIdentityProvider(IdentityProviderPort):
         try:
             resp = await self._client.request(metodo, caminho, json=json, params=params)
         except httpx.HTTPError as exc:
-            # Nunca logar URL completa/headers (carregam a chave) — só o tipo.
             logger.error(
                 "falha de comunicação com a Admin API",
                 extra={"event": "admin_api_erro_rede", "error_type": type(exc).__name__},

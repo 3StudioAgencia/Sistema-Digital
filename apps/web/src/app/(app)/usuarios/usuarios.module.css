@@ -1,8 +1,3 @@
-/* Gerenciador de usuários (W1-C04) — medidas extraídas do export 1920×1080:
-   título 64px, controles 56-61px pill, card raio 8 com bordas #979797,
-   colunas centralizadas (frações medidas), linhas com pitch 56px, botões de
-   linha 29px (Editar preto / Desativar #ff5959). */
-
 .pagina {
   flex: 1;
   min-height: 0;
@@ -11,7 +6,6 @@
   padding: calc(108 * var(--u)) 28px calc(25 * var(--u));
 }
 
-/* -------------------------------------------------- cabeçalho da página */
 .cabecalhoPagina {
   display: flex;
   align-items: center;
@@ -45,7 +39,6 @@
   opacity: 0.9;
 }
 
-/* -------------------------------------------------- busca + filtros */
 .filtros {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(180px, 14.6vw, 280px) clamp(150px, 14.6vw, 280px);
@@ -87,13 +80,10 @@
 }
 
 .campoSelect {
-  /* O visual do gatilho/painel vive no componente Dropdown
-     (components/ui/select) — aqui só a altura do slot no grid. */
   position: relative;
   height: calc(60 * var(--u));
 }
 
-/* -------------------------------------------------- tabela (desktop) */
 .card {
   margin-top: calc(30 * var(--u));
   flex: 1;
@@ -105,8 +95,6 @@
   overflow: hidden;
 }
 
-/* Frações de coluna MEDIDAS no design (Nome·Email·Setor·Localização·Status·
-   Perfil·Ações). */
 .grade {
   display: grid;
   grid-template-columns: 165fr 332fr 146fr 184fr 126fr 122fr 284fr;
@@ -124,8 +112,6 @@
   position: relative;
 }
 
-/* Sublinha do cabeçalho RECUADA das laterais — não encosta na borda do card
-   (referência do design). */
 .linhaCabecalho::after {
   content: "";
   position: absolute;
@@ -149,7 +135,6 @@
   padding-bottom: 8px;
 }
 
-/* Scrollbar fina como no design (#b7b7b7, ~6px) */
 .corpoTabela::-webkit-scrollbar,
 .cabecalhoTabela::-webkit-scrollbar {
   width: 6px;
@@ -190,8 +175,6 @@
   white-space: nowrap;
 }
 
-/* Divisores verticais como SEGMENTOS (não bordas): no cabeçalho começam
-   afastados do topo do card — as linhas nunca encostam na moldura. */
 .celula::after {
   content: "";
   position: absolute;
@@ -215,7 +198,6 @@
   white-space: normal;
 }
 
-/* Botões de linha — pills 29px (medido) */
 .botaoEditar,
 .botaoDesativar,
 .botaoReativar {
@@ -229,7 +211,6 @@
   transition: opacity var(--motion-micro) var(--motion-ease-standard);
 }
 
-/* Touch (tablets em layout desktop): alvos ≥ 44px (revisão W1-C04 / RNF-013) */
 @media (pointer: coarse) {
   .botaoEditar,
   .botaoDesativar,
@@ -248,8 +229,6 @@
   color: var(--app-ink);
 }
 
-/* "Reativar" não existe no mock (que mostra só linhas com Desativar);
-   usa o amarelo de ação primária da plataforma — decisão documentada. */
 .botaoReativar {
   background: var(--app-accent);
   color: var(--app-ink);
@@ -268,8 +247,6 @@
   color: var(--app-text-gray);
 }
 
-/* Célula única ocupando a linha inteira (estados vazio/carregando/erro da
-   paginação) — mantém o contrato ARIA row→cell dentro do rowgroup. */
 .celulaVazia {
   grid-column: 1 / -1;
   border-right: 0;
@@ -295,7 +272,6 @@
   color: var(--app-text-gray);
 }
 
-/* Skeleton de carga: só opacity (GPU) */
 .skeletons {
   display: block;
 }
@@ -316,7 +292,6 @@
   }
 }
 
-/* Indicador de carga é decorativo: instantâneo sob reduced-motion (RN-012). */
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
@@ -324,7 +299,6 @@
   }
 }
 
-/* -------------------------------------------------- cards (mobile) */
 .cartoes {
   display: none;
   list-style: none;
@@ -368,7 +342,7 @@
 .cartaoAcoes .botaoDesativar,
 .cartaoAcoes .botaoReativar {
   flex: 1;
-  min-height: 44px; /* touch targets (RNF-013) */
+  min-height: 44px;
 }
 
 .cartaoCarregarMais {
@@ -386,7 +360,6 @@
   cursor: pointer;
 }
 
-/* -------------------------------------------------- modal (Novo usuário) */
 .modalPainel {
   padding: calc(52 * var(--um, var(--u, 1px))) calc(60 * var(--um, var(--u, 1px)))
     calc(48 * var(--um, var(--u, 1px)));
@@ -407,7 +380,6 @@
 }
 
 .modalSeparador {
-  /* no design o separador excede a largura dos campos em 18px de cada lado */
   margin: calc(42 * var(--um, var(--u, 1px))) -18px 0;
   border: 0;
   border-top: 1px solid var(--auth-text);
@@ -447,7 +419,6 @@
   padding: 0 calc(30 * var(--um, var(--u, 1px)));
 }
 
-/* Slot do Dropdown (variante escura) — mesmo footprint dos inputs do modal. */
 .modalDropdown {
   margin-top: calc(14 * var(--um, var(--u, 1px)));
   height: calc(56 * var(--um, var(--u, 1px)));
@@ -474,7 +445,6 @@
   color: var(--auth-error);
 }
 
-/* Checkbox custom 30×30 com check branco sobre amarelo (medido no design) */
 .modalCheckboxLinha {
   margin-top: calc(32 * var(--um, var(--u, 1px)));
   display: flex;
@@ -570,7 +540,6 @@
   cursor: not-allowed;
 }
 
-/* -------------------------------------------------- responsivo (DP-7) */
 @media (max-width: 1100px) {
   .filtros {
     grid-template-columns: 1fr;
@@ -616,7 +585,7 @@
   }
 
   .card {
-    display: none; /* tabela → cards (DP-7) */
+    display: none;
   }
 
   .cartoes {

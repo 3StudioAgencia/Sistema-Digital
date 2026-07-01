@@ -1,16 +1,9 @@
 "use client";
-
-/**
- * Sidebar do app shell (W1-C04) — fiel ao design do Figma:
- * wordmark, saudação, busca (inerte até existir busca global), navegação com
- * indicador animado do item ativo (barra amarela desliza via layoutId) e
- * rodapé com avatar/usuário/Sair.
- */
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
 import type { Perfil } from "@/lib/access-matrix";
 import { podeAcessarRota } from "@/lib/access-matrix";
 import type { Usuario } from "@/lib/api/usuarios";
@@ -25,9 +18,7 @@ import styles from "./sidebar.module.css";
 
 type SidebarProps = {
   usuario: Usuario | null;
-  /** Fallback quando a linha de domínio ainda não existe (e-mail da sessão). */
   emailSessao: string;
-  /** Fecha o drawer no mobile ao navegar (no desktop é no-op). */
   onNavigate?: () => void;
 };
 
@@ -44,10 +35,6 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
   const ativo = hrefAtivo(pathname);
   const nome = primeiroNome(usuario, emailSessao);
   const subtitulo = usuario ? SETOR_LABELS[usuario.setor] : "3Studio";
-
-  // Visibilidade por perfil (W1-C05): a mesma Matriz que o proxy usa filtra o
-  // menu — itens de páginas não autorizadas nem aparecem (espelho da camada
-  // superior; o acesso direto por URL ainda é barrado pelo proxy + RLS).
   const perfil: Perfil = {
     setor: usuario?.setor ?? null,
     administrador: usuario?.administrador ?? false,
@@ -61,9 +48,7 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
       const { error } = await supabase.auth.signOut();
       if (error) await supabase.auth.signOut(); // uma retentativa
     } catch {
-      // Rede falhou: navega mesmo assim — se a sessão persistir, o /login
-      // (getUser no servidor) devolve o usuário ao shell, mostrando o estado
-      // VERDADEIRO em vez de um "logout" silenciosamente falso (revisão W1-C04).
+
     }
     router.replace("/login");
     router.refresh();
@@ -98,9 +83,8 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
 
   return (
     <div className={styles.sidebar}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- SVG estático; next/image não otimiza SVG */}
       <img
-        src="/logo-3studio.svg"
+        src="logo-3studio.svg"
         alt="3Studio"
         width={122}
         height={26}
@@ -108,9 +92,6 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
       />
 
       <p className={styles.saudacao}>Olá {nome}!</p>
-
-      {/* Busca global: alvo ainda não existe (provas = Wave 2) — campo fiel ao
-          design, porém inerte (DP-6). */}
       <div className={styles.busca} title="Disponível em breve">
         <Search size={20} strokeWidth={2} className={styles.buscaIcone} aria-hidden />
         <input

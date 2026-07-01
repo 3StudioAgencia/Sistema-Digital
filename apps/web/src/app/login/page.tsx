@@ -6,15 +6,6 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { AuthFlow } from "../_components/auth-flow";
 
 export const dynamic = "force-dynamic";
-
-/**
- * Tela de login (W1-C03) — experiência adaptativa em `<AuthFlow>`:
- * - desktop (>=768px): split com a imagem-herói (formato custom) + formulário;
- * - mobile: boas-vindas primeiro e o formulário ao clicar em "Entrar" (mesmo /login).
- *
- * Já autenticado → home do perfil (HOME_PADRAO = /dashboard). O notice de inatividade
- * chega por ?expirado=1 (DP-3).
- */
 export default async function LoginPage({
   searchParams,
 }: {

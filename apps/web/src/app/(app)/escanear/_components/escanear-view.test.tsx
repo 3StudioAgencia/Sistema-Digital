@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ToastProvider } from "@/components/ui/toast/ToastProvider";
-import { ApiError } from "@/lib/api/client";
-import type { ProvaDetalhe } from "@/lib/api/provas";
+import { ToastProvider } from "../../../../components/ui/toast/ToastProvider";
+import { ApiError } from "../../../../lib/api/client";
+import type { ProvaDetalhe } from "../../../../lib/api/provas";
 
 const mocks = vi.hoisted(() => ({
   identificarProva: vi.fn(),

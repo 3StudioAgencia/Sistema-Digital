@@ -1,19 +1,11 @@
 "use client";
 
-/**
- * Gráficos dos Relatórios (W5-C17) — Recharts (DP-8). Só barras e donut, fiéis ao
- * design. Animações desligadas sob prefers-reduced-motion (RNF-010); cores via
- * tokens do globals.css. Os contêineres são responsivos (ResponsiveContainer).
- */
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import { useReducedMotion } from "@/lib/motion/hooks";
 
 import styles from "../relatorios.module.css";
 
-/** Distribui os pontos de volume (por dia) em N faixas fixas — assim o gráfico
- * tem sempre uma quantidade densa de barras (look do design), mesmo com poucos
- * dados; faixas sem volume aparecem como uma barrinha mínima (minPointSize). */
 function emFaixas(pontos: { dia: string; total: number }[], n: number): number[] {
   if (pontos.length === 0) return [];
   const tempos = pontos.map((p) => new Date(p.dia).getTime());
@@ -27,8 +19,6 @@ function emFaixas(pontos: { dia: string; total: number }[], n: number): number[]
   return faixas;
 }
 
-/** Barras de volume (cards "Total geral" e "Vendedor com mais artes"). Bare — sem
- * eixos, fiel ao design; densas (binning + barra mínima); a última em destaque. */
 export function VolumeBars({
   dados,
   className,
@@ -68,9 +58,6 @@ export function VolumeBars({
   );
 }
 
-/** Donut "Provas Ativas" (Geral) — 2 segmentos (DP-3): Aguardando vendedor =
- * AMARELO (anel grosso, maior); Reprovada = PRETO (anel mais FINO, menor). Renderiza
- * dois `Pie` com raios diferentes para o preto ser radialmente mais estreito. */
 export function ProvasAtivasDonut({
   aguardando,
   reprovadas,
@@ -84,7 +71,6 @@ export function ProvasAtivasDonut({
   const COR_REPROVADA = "var(--app-ink)";
   const inicio = 90;
   const fim = -270;
-  // Ângulo onde o amarelo termina e o preto começa (sentido horário a partir do topo).
   const divisao = total === 0 ? inicio : inicio - (aguardando / total) * 360;
   return (
     <div className={styles.donutWrap}>

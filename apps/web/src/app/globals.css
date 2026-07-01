@@ -1,8 +1,4 @@
-/* Estilos globais mínimos — componentes usam CSS Modules (escopo local).
-   Sem framework CSS externo (CLAUDE.md §4). */
-
 :root {
-  /* Tokens de cor da fundação (a paleta definitiva chega com as telas de domínio) */
   --color-bg: #0b1220;
   --color-surface: #111a2c;
   --color-border: #24304a;
@@ -13,7 +9,6 @@
   --color-warn: #e7b416;
   --color-down: #e05252;
 
-  /* Tela de login/auth (W1-C03) — tokens extraídos do Figma (nodes 56:167, 70:20). */
   --auth-bg: #000000;
   --auth-field: #1f1f1f;
   --auth-accent: #ffcb5c;
@@ -24,53 +19,41 @@
   --auth-radius-pill: 50px;
   --auth-control-h: 56px;
 
-  /* App shell + gestão de usuários (W1-C04) — valores extraídos por amostragem
-     de pixel dos exports PNG 1:1 do Figma (cores exatas; PNG é lossless).
-     Fonte: "Gerenciamento de usuários - admin (3).png" e "- Modal (1).png". */
   --app-sidebar-bg: #000000;
   --app-sidebar-field: #181818;
   --app-sidebar-muted: #868686;
-  --app-shell-bg: #eaeaea;
-  --app-card-white: #ffffff; /* card de detalhe (W2-C08) sobre o shell cinza */
+  --app-shell-bg: #ededed;
+  --app-card-white: #ffffff;
   --app-shell-radius: 40px;
-  --app-accent: var(--auth-accent); /* #ffcb5c — mesmo amarelo do login */
-  --app-danger: #ff5959; /* botão "Desativar" */
+  --app-accent: var(--auth-accent);
+  --app-danger: #ff5959;
   --app-ink: #000000;
-  --app-text-gray: #777777; /* texto de tabela/controles claros */
-  --app-field: #d7d7d7; /* busca e filtros do conteúdo */
-  --app-divider: #b9b9b9; /* bordas/divisores da tabela */
+  --app-text-gray: #777777;
+  --app-field: #d7d7d7;
+  --app-divider: #b9b9b9;
   --app-scrollbar: #b7b7b7;
   --app-avatar: #d9d9d9;
-  --app-overlay: rgba(0, 0, 0, 0.76); /* scrim do modal (medido: alpha .763) */
+  --app-overlay: rgba(0, 0, 0, 0.76); 
   --app-modal-bg: #000000;
-  --app-modal-field: var(--auth-field); /* #1f1f1f */
-  --app-control-h: 56px; /* botões/inputs grandes (pill) */
-  --app-control-h-sm: 29px; /* botões de linha da tabela (Editar/Desativar) */
-  --app-card-radius: 30px; /* card da tabela */
+  --app-modal-field: var(--auth-field);
+  --app-control-h: 56px;
+  --app-control-h-sm: 29px;
+  --app-card-radius: 30px;
   --app-radius-pill: 999px;
-  --app-field-hover: #c9c9c9; /* derivado: hover/foco das opções do dropdown */
-  --app-modal-field-hover: #2f2f2f; /* derivado: hover das opções no dropdown escuro */
+  --app-field-hover: #c9c9c9;
+  --app-modal-field-hover: #2f2f2f;
 
-  /* Dashboard (W4-C16) — amostrados do design (cards claros sobre o shell #eaeaea,
-     número grande preto, título cinza; atalho Escanear preto, Nova Prova amarelo). */
-  --dash-card: #f6f6f6; /* fundo dos cards de contador */
-  --dash-title: #9a9a9a; /* título dos cards (cinza claro) */
-  --dash-row: #efefef; /* linha da lista de "Atrasadas" */
-  --dash-row-hover: #e7e7e7; /* hover da linha de vendedor (clicável) */
+  --dash-card: #f6f6f6;
+  --dash-title: #9a9a9a;
+  --dash-row: #efefef;
+  --dash-row-hover: #e7e7e7;
 
-  /* Unidade de ESCALA do design (Figma desenhado num quadro de 1080px de
-     altura): 1 "pixel de design" = calc(N * var(--u)). Em viewport 1080 →
-     1px exato; em janelas menores tudo encolhe proporcionalmente, com piso
-     de 0.78. No :root para valer também nos portais (modal/toasts). */
   --u: clamp(0.78px, calc(100vh / 1080), 1px);
 
-  /* Espelho CSS dos tokens de motion (lib/motion/tokens.ts — DAT §5.1): os
-     ÚNICOS literais de duração/easing permitidos em CSS. Componentes usam as
-     variáveis; o bloco @media abaixo zera tudo sob prefers-reduced-motion. */
-  --motion-micro: 150ms; /* = DURATION.micro */
-  --motion-pulse: 1200ms; /* pulso de skeleton/loading */
-  --motion-scan: 4000ms; /* varredura do QR no scanner (W3-C10) */
-  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* = EASING.standard */
+  --motion-micro: 150ms;
+  --motion-pulse: 1200ms;
+  --motion-scan: 4000ms;
+  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,

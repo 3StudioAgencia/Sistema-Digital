@@ -1,18 +1,4 @@
 "use client";
-
-/**
- * Dashboard em tempo real (W4-C16) — fiel ao design (layout bento).
- *
- * Cards de contador (clicáveis → listagem pré-filtrada do C07 — DP-6), o card
- * "Atrasadas" como LISTA por vendedor + total, e os atalhos Escanear/Nova Prova
- * (role-aware — DP-3). Os números sobem com count-up (RF-025, respeitando
- * prefers-reduced-motion).
- *
- * Eficiência (RNF-021/022): UMA única subscription do Realtime às mudanças de
- * `provas`; cada evento dispara um REFETCH único da agregação (debounced) — sem
- * polling, sem refetch por card. A queda do Realtime degrada graciosamente
- * (mantém o último valor); a carga inicial vem SSR (sem waterfall).
- */
 import { motion } from "framer-motion";
 import {
   Clock,
@@ -35,11 +21,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import styles from "../dashboard.module.css";
 
-// Coalesce rajadas de eventos numa só ida ao backend (mínimo de requisições).
 const REFETCH_DEBOUNCE_MS = 800;
 
-/** Dia de HOJE no fuso comercial (America/Sao_Paulo) como YYYY-MM-DD — casa com a
- * regra de "Criadas hoje" do backend (que usa o mesmo fuso). */
 function hojeSaoPaulo(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 }
@@ -63,14 +46,10 @@ export function DashboardView({
       setDados(novo);
       setErro(false);
     } catch {
-      // Realtime/transitório: mantém o último valor (degradação graciosa). Só a
-      // carga/retry explícito sinaliza erro na tela.
       if (!silencioso) setErro(true);
     }
   }, []);
 
-  // Carga no cliente só se o SSR não trouxe os dados (API fora no 1º byte).
-  // setState no callback do .then (não no corpo do efeito) — mesmo padrão do C07.
   useEffect(() => {
     if (inicial !== null) return;
     const controller = new AbortController();
@@ -85,9 +64,6 @@ export function DashboardView({
     return () => controller.abort();
   }, [inicial]);
 
-  // UMA subscription Realtime às mudanças de `provas` → refetch único debounced
-  // (RNF-021: sem polling, sem refetch por card). Escopo dos números: a RLS no
-  // backend (o refetch passa pelo endpoint escopado).
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     const agendarRefetch = () => {
@@ -137,9 +113,6 @@ export function DashboardView({
     );
   }
 
-  // Cascata de entrada dos cards do bento (W6-C19): o container orquestra; cada
-  // card é um motion-node que herda o disparo (variante "item"). Aplicado nos
-  // PRÓPRIOS nós do grid (sem wrapper extra) p/ não quebrar o grid-area do bento.
   const containerVar = staggerContainer(reduced);
   const itemVar = fadeRise(reduced);
 
@@ -191,7 +164,6 @@ export function DashboardView({
           irPara([["status", "recebida_clicheria"]]),
         )}
 
-        {/* Atrasadas: lista por vendedor + total (≠ dos demais cards) */}
         <motion.div
           variants={itemVar}
           className={`${styles.card} ${styles.atrasadasCard} ${styles.atrasadas}`}
@@ -235,7 +207,6 @@ export function DashboardView({
           </button>
         </motion.div>
 
-        {/* Atalhos (role-aware — DP-3) */}
         <motion.button
           type="button"
           variants={itemVar}

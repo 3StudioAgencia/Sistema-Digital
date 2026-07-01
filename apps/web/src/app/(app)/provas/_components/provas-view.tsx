@@ -1,17 +1,4 @@
 "use client";
-
-/**
- * Listagem de provas (W2-C07) — tela de operação diária.
- *
- * Tabela REPLICADA do C04 (DP-1): mesmo card/colunas/scroll/pills. Busca com
- * debounce ≥300ms (RNF-023) e paginação por scroll infinito server-side
- * (RNF-019), no MESMO padrão do Gerenciador de Usuários. O ESCOPO de dado é da
- * RLS de `provas` (C06): a UI só ADAPTA a barra (esconde "Vendedor" quando o
- * escopo é "as próprias" — DP-2). Estado de filtros/paginação na URL (DP-5):
- * refresh-safe e compartilhável; "Limpar" zera a query. Dados como estado
- * DERIVADO da chave de filtros (a chave = a query da URL): resposta atrasada de
- * filtro antigo nunca "vaza" para a tela.
- */
 import { motion } from "framer-motion";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -45,8 +32,7 @@ function formatarData(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  // Em UTC para casar com o limite de dia do filtro (o backend compara o dia em
-  // UTC); evita a prova filtrada em "09/04" aparecer como "08/04" na coluna.
+
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${dd}-${mm}-${d.getUTCFullYear()}`;
@@ -54,8 +40,7 @@ function formatarData(iso: string | null): string {
 
 export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   const reduced = useReducedMotion();
-  // Cascata de entrada (W6-C19): o corpo da tabela orquestra as linhas; cada
-  // linha surge com leve deslize lateral. Disparo só na montagem (initial→animate).
+
   const corpoVar = staggerContainer(reduced);
   const linhaVar = fadeRise(reduced, { dx: REVEAL_OFFSET.x, dy: 0 });
   const router = useRouter();
@@ -63,10 +48,8 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   const searchParams = useSearchParams();
   const chave = searchParams.toString();
 
-  // "Vendedor" só faz sentido para quem vê provas de vários vendedores (DP-2).
   const mostrarFiltroVendedor = escopo !== "proprias";
 
-  // Inputs de texto: estado local (digitação fluida) + debounce → URL.
   const [busca, setBusca] = useState(() => searchParams.get("busca") ?? "");
   const [cliente, setCliente] = useState(() => searchParams.get("cliente") ?? "");
 
@@ -80,8 +63,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   const corpoRef = useRef<HTMLDivElement | null>(null);
   const sentinelaRef = useRef<HTMLDivElement | null>(null);
 
-  // Refs "último valor" para os efeitos de debounce não dependerem da URL
-  // (evita reiniciar o timer a cada mudança de query).
   const searchParamsRef = useRef(searchParams);
   const aplicarParam = useCallback(
     (updates: Record<string, string | undefined>) => {
@@ -96,7 +77,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
     [searchParams, router, pathname],
   );
   const aplicarParamRef = useRef(aplicarParam);
-  // Atualiza os refs FORA do render (regra react-hooks/refs).
   useEffect(() => {
     searchParamsRef.current = searchParams;
     aplicarParamRef.current = aplicarParam;
@@ -104,8 +84,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
 
   const lerFiltros = useCallback((): FiltrosProvas => {
     const sp = searchParamsRef.current;
-    // status pode chegar múltiplo do deep-link do Dashboard (W4-C16): 1 valor vira
-    // string (filtro simples), vários viram array (IN). 0 → undefined.
     const statuses = sp.getAll("status").filter(Boolean) as ProvaListagem["status"][];
     return {
       busca: sp.get("busca") ?? undefined,
@@ -119,7 +97,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
     };
   }, []);
 
-  // Busca/Cliente com debounce ≥300ms — nada de requisição a cada tecla (RNF-023).
   useEffect(() => {
     const timer = setTimeout(() => {
       const atual = searchParamsRef.current.get("busca") ?? "";
@@ -137,19 +114,16 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
     return () => clearTimeout(timer);
   }, [cliente]);
 
-  // Vendedores do dropdown (escopados) — só quando o filtro aparece.
   useEffect(() => {
     if (!mostrarFiltroVendedor) return;
     const controller = new AbortController();
     listarVendedoresProvas(controller.signal)
       .then(setVendedores)
       .catch(() => {
-        /* dropdown vazio degrada para "Todos" — a RLS ainda escopa os dados */
       });
     return () => controller.abort();
   }, [mostrarFiltroVendedor]);
 
-  // Primeira página da chave corrente (e refetch via `tentativa`).
   useEffect(() => {
     const controller = new AbortController();
     listarProvas({ ...lerFiltros(), page: 1, pageSize: PAGE_SIZE }, controller.signal)
@@ -202,7 +176,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
     [carregandoMais, chave, falhaPaginacaoEm, lerFiltros, pronto],
   );
 
-  // Scroll infinito: sentinela observada DENTRO da área rolável da tabela.
   useEffect(() => {
     const sentinela = sentinelaRef.current;
     if (!sentinela || typeof IntersectionObserver === "undefined") return;
@@ -233,8 +206,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
   );
 
   const linhas = itens.map((prova, indice) => {
-    // Só os primeiros STAGGER.maxItens entram escalonados (variante); os demais
-    // renderizam imediatos (sem variante) para proteger ≥50fps em listas longas.
     const conteudo = (
       <>
         <span role="cell" className={styles.celula}>
@@ -392,8 +363,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
             </span>
           </div>
         ) : (
-          // Espaçador: mantém "Limpar" na 4ª coluna da 2ª linha quando o filtro
-          // Vendedor está escondido (escopo "as próprias").
           <div aria-hidden />
         )}
 
@@ -446,7 +415,6 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
         </p>
       ) : (
         <>
-          {/* Tabela (desktop) */}
           <div role="table" aria-label="Provas" className={styles.card}>
             <div role="rowgroup" className={styles.cabecalhoTabela}>
               <div role="row" className={`${styles.linhaCabecalho} ${styles.grade}`}>

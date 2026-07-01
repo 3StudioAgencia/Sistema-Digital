@@ -17,7 +17,6 @@ class DashboardService:
         self._repo = repo
 
     async def contadores(self) -> ContadoresDashboard:
-        """Contadores do painel (escopados pela RLS) numa consulta unica (RNF-022)."""
         return await self._repo.contadores()
 
 

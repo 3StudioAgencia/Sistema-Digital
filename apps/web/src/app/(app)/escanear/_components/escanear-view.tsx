@@ -1,19 +1,5 @@
 "use client";
 
-/**
- * Escanear prova (W3-C10) — a ponte física→digital, MOBILE-FIRST (RF-029/US-020).
- *
- * Dois modos sempre acessíveis via toggle (Câmera / Manual). A câmera lê o QR
- * in-app (RF-004) com degradação graciosa (permissão negada → o manual segue);
- * o manual usa a máscara/validação do formato REAL do C06 (DP-1) — nunca a
- * "3S- / 8 dígitos" do design (legado). Os dois caminham para o MESMO
- * `identificarProva`. Pós-identificação (DP-2): vai à tela de CONFIRMAÇÃO
- * (`/provas/[id]/confirmar`) — validar a transição é o C11 e assinar é o C12.
- *
- * Anti-enumeração (RN-014): 404 = inválido OU inexistente OU fora-de-escopo →
- * MESMA mensagem genérica; 429 = limite de tentativas. Animações sobre os tokens
- * (GPU — transform/opacity), instantâneas sob `prefers-reduced-motion`.
- */
 import { motion } from "framer-motion";
 import { Camera, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -32,7 +18,6 @@ import { CameraScanner } from "./camera-scanner";
 
 type Modo = "camera" | "manual";
 
-/** Mensagem ÚNICA p/ inválido/inexistente/fora-de-escopo (anti-enumeração — §11). */
 const MSG_NAO_ENCONTRADA = "Prova não encontrada.";
 
 export function EscanearView() {
@@ -59,9 +44,6 @@ export function EscanearView() {
       const prova = await identificarProva(codigoBruto);
       setUltimaLeitura(Date.now());
       setSucesso(true);
-      // Flash de sucesso (leve) antes de navegar ao fluxo de confirmação (DP-2);
-      // instantâneo sob prefers-reduced-motion. `buscando` segue travado: a tela
-      // está saindo, nada de nova leitura nesse meio-tempo.
       const irParaConfirmacao = () => router.push(`/provas/${prova.id}/confirmar`);
       if (reduced) irParaConfirmacao();
       else timeoutRef.current = setTimeout(irParaConfirmacao, 450);
@@ -70,7 +52,7 @@ export function EscanearView() {
       if (error instanceof ApiError && error.status === 404) {
         toast.error(MSG_NAO_ENCONTRADA);
       } else if (error instanceof ApiError && error.status === 429) {
-        toast.error(error.message); // "Muitas tentativas em pouco tempo..."
+        toast.error(error.message);
       } else {
         toast.error("Não foi possível identificar a prova. Tente novamente.");
       }
@@ -84,11 +66,6 @@ export function EscanearView() {
 
   return (
     <Stagger className={styles.pagina}>
-      {/* Reveal de entrada em cascata LEVE (W6-C19): título/instrução → toggle →
-          área de conteúdo. O wrapper do <StaggerItem> em torno do `conteudo` é
-          EXTERNO e estável: o nó-alvo do html5-qrcode (dentro do CameraScanner)
-          fica intacto — a cascata dispara só na montagem (initial/animate),
-          sem remontar o scanner nem reanimar em troca de modo/dados. */}
       <section aria-label="Escanear prova" style={{ display: "contents" }}>
         <StaggerItem>
           <header className={styles.cabecalho}>
@@ -142,8 +119,6 @@ export function EscanearView() {
   );
 }
 
-/** Rodapé "Última leitura · Ver histórico" — reutilizado dentro do card (Câmera)
- *  e no rodapé da página (Manual). DP-5: indicador local + placeholder do C13. */
 function Rodape({ rotulo, onHistorico }: { rotulo: string; onHistorico: () => void }) {
   return (
     <div className={styles.rodapeLinha}>
@@ -162,9 +137,6 @@ function rotuloUltimaLeitura(quando: number | null): string {
   return `Última leitura há ${minutos} min`;
 }
 
-// ---------------------------------------------------------------------------
-// Toggle Câmera | Manual (radiogroup, pílula deslizante por transform — GPU)
-// ---------------------------------------------------------------------------
 const MODOS: { value: Modo; label: string; Icone: typeof Camera }[] = [
   { value: "camera", label: "Câmera", Icone: Camera },
   { value: "manual", label: "Manual", Icone: KeyRound },
@@ -242,9 +214,6 @@ function ModoToggle({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Entrada manual — prefixo fixo PRV- + máscara AAAA-MM-XXXXXX (formato C06, DP-1)
-// ---------------------------------------------------------------------------
 function EntradaManual({
   onBuscar,
   ocupado,
@@ -269,8 +238,6 @@ function EntradaManual({
 
   return (
     <form className={styles.manualCard} onSubmit={submeter} aria-label="Inserir código manualmente">
-      {/* Bloco centralizado (mesma caixa do card da câmera): título + descrição +
-          input + botão + rodapé com divisória, tudo DENTRO do card (fiel ao design). */}
       <div className={styles.manualBloco}>
         <h2 className={styles.manualTitulo}>Inserir código manualmente</h2>
         <p className={styles.manualTexto}>

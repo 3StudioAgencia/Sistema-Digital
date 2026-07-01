@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { Movimentacao, Timeline } from "@/lib/api/timeline";
-import type { EstadoProva } from "@/lib/provas/status-labels";
+import type { Movimentacao, Timeline } from "../../lib/api/timeline";
+import type { EstadoProva } from "../../lib/provas/status-labels";
 
 import { construirTimeline, type EtapaNode, type EventoNode, type TimelineNode } from "./timeline";
 
-// Esqueletos canônicos por rota (espelham `sequencia_canonica` do backend — DP-1).
 const CANONICAS: Record<Timeline["rota"], EstadoProva[]> = {
   matriz: [
     "criada",
@@ -125,7 +124,7 @@ describe("construirTimeline (W3-C13)", () => {
       "futuro", // com_motorista_entrega_final
       "futuro", // recebida_clicheria
     ]);
-    // Responsável + selo de assinatura nas etapas percorridas.
+
     expect(es[1]).toMatchObject({ ator_nome: "Regiane", tem_assinatura: true });
     expect(es[1].quando).toBeTruthy();
   });
@@ -256,12 +255,10 @@ describe("construirTimeline (W3-C13)", () => {
       }),
     );
     expect(r.ciclos.map((c) => c.numero)).toEqual([1, 2]);
-    // Ciclo 1 (passado): reprovação presente; aprovada nunca alcançada (não percorrida).
     const c1 = r.ciclos[0].nodes;
     expect(c1.some((n) => n.tipo === "reprovacao")).toBe(true);
     const aprovadaC1 = etapas(c1).find((e) => e.estado === "aprovada_vendedor");
     expect(aprovadaC1?.status).toBe("nao_percorrido");
-    // Ciclo 2 (atual): aprovada é a atual.
     const aprovadaC2 = etapas(r.ciclos[1].nodes).find((e) => e.estado === "aprovada_vendedor");
     expect(aprovadaC2?.status).toBe("atual");
   });

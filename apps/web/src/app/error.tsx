@@ -6,14 +6,6 @@ import { reportClientError } from "@/lib/observability/report-error";
 
 import styles from "./error.module.css";
 
-/**
- * Error boundary da rota raiz (App Router) — W0-A-017.
- *
- * Captura erros de renderização (ex.: um corpo de API fora do contrato) e
- * degrada para uma tela amigável com retry, em vez da tela de erro padrão do
- * Next (DoD: "error boundaries cobrindo a rota"; RNF-014/016). Componente de
- * client por exigência do App Router.
- */
 export default function RouteError({
   error,
   reset,
@@ -22,7 +14,6 @@ export default function RouteError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Em produção o `digest` correlaciona com o log do servidor (Pilar 5).
     reportClientError(error, { boundary: "root", digest: error.digest });
   }, [error]);
 

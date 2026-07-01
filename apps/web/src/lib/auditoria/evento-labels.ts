@@ -1,12 +1,3 @@
-/**
- * Tipos de evento do Log de Auditoria (W6-C20) — rótulos + cor do ponto.
- *
- * Espelha 1:1 o `audit_evento_enum` do backend (CLAUDE.md §6 — valores lowercase).
- * As cores são o color-coding dos pontos do design (DP-3): cada tipo de evento tem
- * um ponto colorido na lista master-detail. Módulo de DADOS (sem JSX), reutilizável
- * pela view e pelos testes.
- */
-
 export type EventoAuditoria =
   | "criou_prova"
   | "escaneou_qr"
@@ -26,7 +17,6 @@ export const EVENTO_LABELS: Record<EventoAuditoria, string> = {
   cancelou_prova: "Cancelou prova",
 };
 
-/** Cor do ponto por tipo de evento (color-coding do design — DP-3). */
 export const EVENTO_COR: Record<EventoAuditoria, string> = {
   criou_prova: "#f59e0b", // âmbar
   escaneou_qr: "#f97316", // laranja
@@ -37,7 +27,6 @@ export const EVENTO_COR: Record<EventoAuditoria, string> = {
   cancelou_prova: "#6b7280", // cinza (terminal administrativo)
 };
 
-/** Ordem do dropdown "Eventos" (criação → escaneamento → transições da §6). */
 export const EVENTO_ORDEM: EventoAuditoria[] = [
   "criou_prova",
   "escaneou_qr",
@@ -48,12 +37,10 @@ export const EVENTO_ORDEM: EventoAuditoria[] = [
   "cancelou_prova",
 ];
 
-/** Rótulo legível de um evento; cai no valor cru se vier algo fora do enum. */
 export function rotuloEvento(evento: string): string {
   return EVENTO_LABELS[evento as EventoAuditoria] ?? evento;
 }
 
-/** Cor do ponto de um evento; cinza neutro para valores desconhecidos. */
 export function corEvento(evento: string): string {
   return EVENTO_COR[evento as EventoAuditoria] ?? "#9ca3af";
 }

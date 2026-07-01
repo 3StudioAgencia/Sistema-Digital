@@ -1,18 +1,5 @@
 "use client";
 
-/**
- * Modal "Novo usuário" / "Editar usuário" (W1-C04) — fiel ao design do Figma.
- *
- * Validação em TEMPO REAL espelhando o backend (lib/validacao.ts): senha
- * min. 8 com letra e número, e-mail, setor obrigatório e localização exigida
- * apenas para Vendedor (RN-009 — o campo condicional aparece só nesse caso).
- *
- * O formulário interno é REMONTADO a cada abertura (key por modo/usuário):
- * o estado inicial vem direto dos props, sem efeito de sincronização.
- *
- * E-mail não é editável (identidade do Supabase Auth) e senha só existe na
- * criação — decisão documentada em docs/usuarios.md.
- */
 import { useId, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
@@ -40,8 +27,6 @@ type Props = {
 
 export function UsuarioFormModal({ estado, onFechar, onSalvo }: Props) {
   const tituloId = useId();
-  // Vive no PAI para o ESC/overlay não fecharem o modal no meio do submit —
-  // fechar durante o voo engoliria o 409/422 da resposta (revisão W1-C04).
   const [enviando, setEnviando] = useState(false);
   return (
     <MotionModal

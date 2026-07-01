@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * Aba 3Studio (W5-C17 · §0.2) — fiel ao design (bento):
- * - Linha 1: Provas Criadas (preto, largo, com gráfico de volume) · Reinícios de
- *   ciclo · Devolvidas · Canceladas (vermelho).
- * - Linha 2: Reprov. aguardando (vermelho) · Tempo até 1ª movimentação (+horas) ·
- *   Top motivos de cancelamento (largo, com barras vermelhas + contagem).
- * Devolvidas = reprovações no período; Top motivos = movimentacoes.motivo (DP-3).
- */
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioStudio, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { fmtDec, fracao } from "@/lib/relatorios/format";
@@ -29,7 +21,6 @@ export function StudioTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave
 
   return (
     <div className={styles.gridStudio}>
-      {/* Provas Criadas (preto, largo, com gráfico de volume) */}
       <div className={`${styles.card} ${styles.cardEscuro} ${styles.sSpan4} ${styles.cTotal}`}>
         <div className={styles.totalTopo}>
           <AnimatedCounter value={dados.provas_criadas} className={styles.totalNumero} />
@@ -70,7 +61,6 @@ export function StudioTab({ filtros, chave }: { filtros: FiltrosRelatorio; chave
         </span>
       </div>
 
-      {/* Top motivos de cancelamento (barras vermelhas + contagem) */}
       <div className={`${styles.card} ${styles.sSpan5}`}>
         <span className={styles.cardRotulo}>Top motivos de cancelamento</span>
         {dados.top_motivos_cancelamento.length === 0 ? (

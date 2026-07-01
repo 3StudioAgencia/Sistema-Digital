@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * Log de Auditoria (W6-C20) — master-detail fiel ao design, read-only, 3Studio-only.
- *
- * Cabeçalho + barra de filtros (presets/Eventos/Ator/Ordem/busca/De/Até/Linhas) +
- * dois painéis: a lista rolável (ponto colorido por tipo de evento, nome do evento,
- * ator, hora) e o painel de detalhe (Ator/Setor/Prova/IP/Origem/Data + rodapé
- * "Registro íntegro e imutável" com o hash do chain). Estado de filtros na URL
- * (refresh-safe — reusa o padrão do C07); busca com debounce ≥300ms; paginação por
- * scroll infinito server-side. No mobile, lista → detalhe em drill-in. A
- * imutabilidade é estrutural; a tela só LÊ (e oferece a verificação do chain).
- */
 import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, Search, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -39,7 +28,7 @@ import styles from "../auditoria.module.css";
 const DEBOUNCE_MS = 300;
 
 function hojeIso(): string {
-  return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
+  return new Date().toLocaleDateString("en-CA");
 }
 function isoMenosDias(dias: number): string {
   const d = new Date();
@@ -131,7 +120,6 @@ export function AuditoriaView() {
     };
   }, []);
 
-  // Busca com debounce ≥300ms (RNF-023).
   useEffect(() => {
     const timer = setTimeout(() => {
       const atual = searchParamsRef.current.get("busca") ?? "";
@@ -140,18 +128,14 @@ export function AuditoriaView() {
     return () => clearTimeout(timer);
   }, [busca]);
 
-  // Atores do dropdown (escopados — admin).
   useEffect(() => {
     const controller = new AbortController();
     listarAtoresAuditoria(controller.signal)
       .then(setAtores)
       .catch(() => {
-        /* dropdown vazio degrada para "Todos" */
       });
     return () => controller.abort();
   }, []);
-
-  // Primeira página da chave corrente (e refetch via `tentativa`).
   useEffect(() => {
     const controller = new AbortController();
     listarAuditoria({ ...lerFiltros(), page: 1 }, controller.signal)
@@ -160,7 +144,7 @@ export function AuditoriaView() {
         setFalha(null);
         setFalhaChave(null);
         setFalhaPaginacaoEm(null);
-        setSelId(null); // volta a selecionar o 1º item da nova consulta
+        setSelId(null);
         setDetalheMobile(false);
       })
       .catch((error: unknown) => {
@@ -283,7 +267,6 @@ export function AuditoriaView() {
         </button>
       </motion.header>
 
-      {/* Barra de filtros (DP-2) */}
       <motion.div className={styles.filtros} variants={itemVar}>
         <div className={styles.linhaFiltros}>
           <div className={styles.presets} role="group" aria-label="Período rápido">
@@ -341,7 +324,6 @@ export function AuditoriaView() {
               value={searchParams.get("de") ?? ""}
               onChange={(e) => aplicarParam({ de: e.target.value || undefined, preset: undefined })}
             />
-            <Calendar className={styles.campoDataIcone} aria-hidden />
           </label>
           <label className={styles.campoData}>
             <span className={styles.campoDataPrefixo}>Até</span>
@@ -351,7 +333,6 @@ export function AuditoriaView() {
               value={searchParams.get("ate") ?? ""}
               onChange={(e) => aplicarParam({ ate: e.target.value || undefined, preset: undefined })}
             />
-            <Calendar className={styles.campoDataIcone} aria-hidden />
           </label>
           <Dropdown<string>
             ariaLabel="Linhas por página"
@@ -363,7 +344,6 @@ export function AuditoriaView() {
         </div>
       </motion.div>
 
-      {/* Master-detail */}
       <motion.div
         className={styles.painel}
         data-mostrando={detalheMobile ? "detalhe" : "lista"}
@@ -390,7 +370,6 @@ export function AuditoriaView() {
           </p>
         ) : (
           <>
-            {/* Lista (esquerda) */}
             <div className={styles.lista} ref={listaRef} aria-label="Eventos do log">
               {carregando ? (
                 <div className={styles.skeletons} aria-hidden>
@@ -456,7 +435,6 @@ export function AuditoriaView() {
               )}
             </div>
 
-            {/* Detalhe (direita) */}
             <div className={styles.detalhe}>
               {selecionado ? (
                 <Detalhe registro={selecionado} onVoltar={() => setDetalheMobile(false)} />

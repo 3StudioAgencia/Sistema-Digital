@@ -1,9 +1,3 @@
-/* Relatórios (W5-C17) — fiel ao design (sobre o shell #eaeaea). Cabeçalho +
-   Exportar CSV, chip de período, tab bar (4 abas), barra de filtros compartilhada
-   e o conteúdo da aba ativa (cards/gráficos/tabelas). Escala pela unidade --u (como
-   o resto da plataforma); só transform/opacity nas transições (GPU); reduced-motion
-   já zera --motion-* no globals. Recharts para barras/donut (decisão DP-8). */
-
 .pagina {
   flex: 1;
   min-height: 0;
@@ -13,7 +7,6 @@
   overflow-y: auto;
 }
 
-/* -------------------------------------------------- cabeçalho */
 .cabecalho {
   display: flex;
   align-items: center;
@@ -29,7 +22,6 @@
   letter-spacing: -0.02em;
 }
 
-/* Exportar CSV (preto, com caret + menu de abas) */
 .exportWrap {
   position: relative;
   flex: none;
@@ -82,9 +74,6 @@
   background: var(--app-modal-field-hover);
 }
 
-/* -------------------------------------------------- tab bar */
-/* Container branco ocupa a largura toda; as abas têm tamanho de CONTEÚDO (não
-   esticam — fiel ao design: itens agrupados à esquerda, resto do pill branco). */
 .tabBar {
   margin-top: calc(26 * var(--u));
   display: flex;
@@ -95,7 +84,7 @@
   padding: calc(7 * var(--u)) calc(8 * var(--u));
 }
 .tab {
-  position: relative; /* ancora a pílula deslizante (.segPill inset:0) */
+  position: relative;
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -113,9 +102,6 @@
   color: var(--auth-text);
 }
 
-/* -------------------------------------------------- filtros */
-/* Altura única (--rel-h) em TODOS os controles → linha harmônica. Cada linha
-   ocupa a largura toda; o último controle (Status/Vendedor) encosta à direita. */
 .filtros {
   --rel-h: calc(50 * var(--u));
   margin-top: calc(14 * var(--u));
@@ -127,21 +113,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* Gap CONSTANTE entre os controles; o tamanho (largura) é que preenche a linha:
-     os campos (datas/busca) CRESCEM para ocupar a folga, os segmentados ficam no
-     tamanho do conteúdo e os dropdowns têm largura fixa (Status/Vendedor alinhados
-     à direita). Sem buraco, sem variar o espaçamento. */
   gap: calc(12 * var(--u));
   width: 100%;
 }
 
-/* Campo de data = trigger no estilo do dropdown: pill branca, prefixo "De/Até" à
-   esquerda e o ícone de calendário na OUTRA PONTA (space-between). O input preenche
-   TODO o pill (clique em qualquer ponto abre o calendário); o prefixo e o ícone
-   ficam sobrepostos sem capturar o clique (pointer-events:none). */
 .campoData {
   position: relative;
-  flex: 1 1 auto; /* cresce para preencher a linha (gap constante) */
+  flex: 1 1 auto;
   height: var(--rel-h);
   background: #fff;
   border-radius: var(--app-radius-pill);
@@ -157,10 +135,9 @@
   font-size: calc(15 * var(--u));
   color: var(--app-ink);
   cursor: pointer;
-  /* espaço à esquerda para o prefixo "De/Até" e à direita para o ícone. */
   padding: 0 calc(48 * var(--u)) 0 calc(58 * var(--u));
 }
-/* esconde o indicador nativo de calendário — usamos o ícone custom à direita. */
+
 .campoData input::-webkit-calendar-picker-indicator {
   display: none;
 }
@@ -184,8 +161,6 @@
   pointer-events: none;
 }
 
-/* Segmented controls (presets de período / toggle de rota): pill branca, item
-   ATIVO em preto; hover apenas escurece o texto (não vira preto). */
 .presets,
 .toggleRota {
   display: inline-flex;
@@ -196,14 +171,13 @@
   border-radius: var(--app-radius-pill);
   padding: 0 calc(6 * var(--u));
 }
-/* Os presets compartilham a folga da 1ª linha com as datas (para a data não ficar
-   grande demais — pedido do dono): cresce junto e os botões preenchem por igual. */
+
 .presets {
   flex: 1 1 auto;
 }
 .preset,
 .opcaoRota {
-  position: relative; /* ancora a pílula deslizante (.segPill inset:0) */
+  position: relative;
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -215,7 +189,7 @@
   white-space: nowrap;
 }
 .preset {
-  flex: 1 1 0; /* divide a largura do segmentado de período por igual */
+  flex: 1 1 0;
 }
 .preset:not([data-ativo]):hover,
 .opcaoRota:not([data-ativo]):hover {
@@ -225,8 +199,7 @@
 .opcaoRota[data-ativo] {
   color: var(--auth-text);
 }
-/* Pílula preta DESLIZANTE entre as opções (Framer Motion layoutId — só transform,
-   GPU; instantânea sob prefers-reduced-motion). Mesmo padrão do segmentado do C09. */
+
 .segPill {
   position: absolute;
   inset: 0;
@@ -266,15 +239,12 @@
   height: calc(20 * var(--u));
 }
 
-/* Dropdowns (Status/Vendedor) — altura única + largura fixa; o visual de pílula
-   BRANCA alinhada à esquerda vem da variante "branco" do componente Dropdown. */
 .dropdownCampo {
   height: var(--rel-h);
   width: calc(230 * var(--u));
   flex: none;
 }
 
-/* -------------------------------------------------- conteúdo / grid */
 .conteudo {
   margin-top: calc(22 * var(--u));
   flex: 1;
@@ -287,7 +257,6 @@
   align-content: start;
 }
 
-/* -------------------------------------------------- cards */
 .card {
   background: #fff;
   border-radius: var(--app-card-radius);
@@ -308,10 +277,6 @@
   grid-column: 1 / -1;
 }
 
-/* -------------------------------------------------- Geral — bento fiel ao design */
-/* Grade de 12 colunas (auto-flow): permite linhas com divisões diferentes —
-   Rota (span 2) mais estreita que Vendedor com mais artes (span 3), mesmo ambos
-   à direita; Tempo/Taxa (span 3) maiores que a Rota (span 2) na 1ª linha. */
 .gridGeral {
   display: grid;
   gap: calc(18 * var(--u));
@@ -345,7 +310,7 @@
 .aAtrasadas {
   grid-column: 1 / -1;
 }
-/* altura mínima única dos cards das 2 primeiras linhas (linha harmônica) */
+
 .aTotal,
 .aTempo,
 .aTaxa,
@@ -356,7 +321,6 @@
   min-height: calc(210 * var(--u));
 }
 
-/* Total geral (preto): número grande + rótulo na base; barras de volume embaixo */
 .cTotal {
   justify-content: space-between;
 }
@@ -381,8 +345,6 @@
   margin-top: auto;
 }
 
-/* Tempo Médio Aguardando (Clicheria): rótulo no topo, número + "horas" à esquerda e
-   barras de atividade à direita, ambos ao rodapé. */
 .cTempo {
   justify-content: space-between;
 }
@@ -405,7 +367,6 @@
   margin-left: calc(8 * var(--u));
 }
 
-/* Cards de métrica (Tempo médio / Taxa): rótulo no topo, número grande embaixo */
 .cMetric {
   justify-content: space-between;
 }
@@ -426,13 +387,12 @@
   margin-left: calc(8 * var(--u));
 }
 
-/* Rota: lista simples (rótulo à esquerda, valor à direita) — SEM barras */
 .cRota .rotaLista {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: calc(13 * var(--u));
-  margin-top: auto; /* alinha a lista de rotas ao fundo do card */
+  margin-top: auto;
 }
 .rotaItem {
   display: flex;
@@ -445,12 +405,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Provas Ativas: donut + legenda */
 .cAtivas {
   gap: calc(16 * var(--u));
 }
 
-/* Ranking "tempo médio por vendedor": nº · nome · linha conectora · valor */
 .rankLista {
   list-style: none;
   display: flex;
@@ -475,7 +433,7 @@
   color: var(--app-ink);
   white-space: nowrap;
 }
-/* Progress bar do tempo de cada vendedor (proporcional ao maior tempo). */
+
 .rankBar {
   flex: 1;
   height: calc(5 * var(--u));
@@ -498,7 +456,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Vendedor com mais artes (preto): rótulo · nome · número grande · barras embaixo */
 .cMais {
   gap: calc(4 * var(--u));
 }
@@ -519,7 +476,6 @@
   margin-top: auto;
 }
 
-/* ------------------------------ 3Studio / Vendedores / Clicheria — bento (12 col) */
 .gridStudio,
 .gridVendedores,
 .gridClicheria {
@@ -558,7 +514,6 @@
   grid-column: 1 / -1;
 }
 
-/* Top motivos de cancelamento: motivo · barra vermelha (proporcional) · contagem */
 .motivosLista {
   list-style: none;
   display: flex;
@@ -689,7 +644,6 @@
   margin-left: 6px;
 }
 
-/* sub-stats do card escuro (Vendedores Filial) */
 .subStats {
   display: flex;
   gap: calc(24 * var(--u));
@@ -710,7 +664,6 @@
   font-weight: 500;
 }
 
-/* -------------------------------------------------- listas (distribuição/ranking/motivos) */
 .lista {
   list-style: none;
   display: flex;
@@ -759,7 +712,6 @@
   font-size: calc(13 * var(--u));
 }
 
-/* -------------------------------------------------- tabelas */
 .tabela {
   width: 100%;
   border-collapse: collapse;
@@ -782,8 +734,7 @@
 .num {
   font-variant-numeric: tabular-nums;
 }
-/* Alinha à direita o CABEÇALHO e o VALOR das colunas numéricas (specificity maior
-   que `.tabela th`, que forçava o header à esquerda → números desalinhados). */
+
 .tabela th.num,
 .tabela td.num {
   text-align: right;
@@ -822,7 +773,6 @@
   padding: 2px 12px;
 }
 
-/* Cabeçalho das tabelas: título + subtítulo (uppercase) + contagem à direita */
 .tabelaCabecalho {
   display: flex;
   align-items: flex-start;
@@ -852,7 +802,6 @@
   letter-spacing: 0.06em;
 }
 
-/* # com marcador (ponto amarelo) no 1º colocado da tabela de métricas */
 .rankCelula {
   display: inline-flex;
   align-items: center;
@@ -866,7 +815,6 @@
   background: var(--app-accent);
 }
 
-/* Coluna VOLUME: barra proporcional + valor */
 .volCell {
   display: flex;
   align-items: center;
@@ -893,7 +841,6 @@
   color: var(--app-ink);
 }
 
-/* Pill de status na tabela de Provas Atrasadas */
 .statusPill {
   display: inline-block;
   font-size: calc(13 * var(--u));
@@ -904,7 +851,6 @@
   white-space: nowrap;
 }
 
-/* -------------------------------------------------- gráficos */
 .chart {
   width: 100%;
   height: calc(150 * var(--u));
@@ -955,7 +901,6 @@
   flex: none;
 }
 
-/* -------------------------------------------------- empty / loading / erro */
 .vazio {
   color: var(--app-text-gray);
   font-size: calc(15 * var(--u));
@@ -1002,7 +947,6 @@
   min-height: 44px;
 }
 
-/* foco acessível */
 .tab:focus-visible,
 .preset:focus-visible,
 .opcaoRota:focus-visible,
@@ -1014,7 +958,6 @@
   outline-offset: 3px;
 }
 
-/* -------------------------------------------------- responsivo */
 @media (max-width: 1100px) {
   .grid {
     grid-template-columns: repeat(2, 1fr);

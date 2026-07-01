@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * Aba Clicheria (W5-C17 · §0.2) — fiel ao design (bento). Ótica de quem recebe a
- * prova no fim do fluxo (perspectiva "rumo à clicheria" — DP-3):
- * - Linha 1: Tempo Médio Aguardando (preto, com gráfico de atividade) · Recebidas
- *   no período · Em trânsito · Origens.
- * - Linha 2: Provas recebidas por rota de origem (distribuição pelas 4 rotas) ·
- *   Fluxo de ciclo (Recebidas / Em trânsito / Total origens).
- */
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { fetchRelatorioClicheria, type FiltrosRelatorio } from "@/lib/api/relatorios";
 import { ROTA_LABELS } from "@/lib/provas/rota-labels";
@@ -39,7 +31,6 @@ export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; ch
 
   return (
     <div className={styles.gridClicheria}>
-      {/* Tempo Médio Aguardando (preto, com gráfico de atividade) */}
       <div className={`${styles.card} ${styles.cardEscuro} ${styles.sSpan4} ${styles.cTempo}`}>
         <span className={styles.cardRotulo}>Tempo Médio Aguardando</span>
         <div className={styles.cTempoCorpo}>
@@ -72,7 +63,6 @@ export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; ch
         <span className={styles.metricValor}>{dados.origens}</span>
       </div>
 
-      {/* Provas recebidas por rota de origem (distribuição pelas 4 rotas) */}
       <div className={`${styles.card} ${styles.sSpan6}`}>
         <span className={styles.cardRotulo}>Provas recebidas por rota de origem</span>
         {totalRecebidas === 0 ? (
@@ -100,7 +90,6 @@ export function ClicheriaTab({ filtros, chave }: { filtros: FiltrosRelatorio; ch
         )}
       </div>
 
-      {/* Fluxo de ciclo (recap: Recebidas / Em trânsito / Total origens) */}
       <div className={`${styles.card} ${styles.sSpan6}`}>
         <span className={styles.cardRotulo}>Fluxo de ciclo</span>
         <ol className={styles.rankLista}>

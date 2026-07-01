@@ -1,16 +1,4 @@
 "use client";
-
-/**
- * Gerenciador de usuários (W1-C04) — tabela fiel ao design, busca com debounce
- * ≥300ms (RNF-023), filtros server-side e paginação por scroll infinito dentro
- * da área rolável da tabela (RNF-019; mantém o visual do Figma, sem paginador).
- *
- * Dados modelados como estado DERIVADO da chave de filtros: o efeito só agenda
- * a busca (nenhum setState síncrono) e a resposta carrega a chave a que
- * pertence — respostas atrasadas de filtros antigos nunca "vazam" para a tela.
- * Mutações atualizam a lista em memória com a resposta do backend (mínimo de
- * requisições — RNF-020); criar refaz a primeira página.
- */
 import { motion } from "framer-motion";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,20 +32,15 @@ export function UsuariosView() {
   const reduced = useReducedMotion();
   const containerVar = staggerContainer(reduced);
   const itemVar = fadeRise(reduced);
-
   const [busca, setBusca] = useState("");
   const [buscaAplicada, setBuscaAplicada] = useState("");
   const [setor, setSetor] = useState<"" | Setor>("");
   const [statusFiltro, setStatusFiltro] = useState<"" | "ativo" | "inativo">("");
-
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [falha, setFalha] = useState<Falha | null>(null);
-  const [tentativa, setTentativa] = useState(0); // “tentar novamente” / pós-criação
+  const [tentativa, setTentativa] = useState(0);
   const [carregandoMais, setCarregandoMais] = useState(false);
-  // Falha de paginação TRAVA o auto-carregamento (a sentinela visível
-  // re-dispararia para sempre — revisão W1-C04); o retry vira botão manual.
   const [falhaPaginacaoEm, setFalhaPaginacaoEm] = useState<string | null>(null);
-
   const [modalForm, setModalForm] = useState<EstadoForm | null>(null);
   const [confirmacao, setConfirmacao] = useState<{ usuario: Usuario; acao: AcaoStatus } | null>(
     null,
@@ -68,13 +51,11 @@ export function UsuariosView() {
 
   const chaveFiltros = `${buscaAplicada}|${setor}|${statusFiltro}`;
 
-  // Busca com debounce ≥ 300 ms — nada de requisição a cada tecla (RNF-023).
   useEffect(() => {
     const timer = setTimeout(() => setBuscaAplicada(busca.trim()), DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [busca]);
 
-  // Primeira página da chave corrente (e refetch via `tentativa`).
   useEffect(() => {
     const controller = new AbortController();
     listarUsuarios(
@@ -121,8 +102,6 @@ export function UsuariosView() {
           page: proxima,
           pageSize: PAGE_SIZE,
         });
-        // Tudo guardado pela CHAVE: resposta atrasada de filtros antigos não
-        // contamina a lista nem o número da página corrente.
         setResultado((atual) =>
           atual && atual.chave === chaveFiltros
             ? {
@@ -143,7 +122,6 @@ export function UsuariosView() {
     [buscaAplicada, carregandoMais, chaveFiltros, falhaPaginacaoEm, pronto, setor, statusFiltro],
   );
 
-  // Scroll infinito: sentinela observada DENTRO da área rolável da tabela.
   useEffect(() => {
     const sentinela = sentinelaRef.current;
     if (!sentinela || typeof IntersectionObserver === "undefined") return;
@@ -173,8 +151,6 @@ export function UsuariosView() {
   }
 
   function substituirItem(usuario: Usuario) {
-    // Item mutado que deixou de satisfazer o filtro server-side SAI da lista
-    // (em vez de exibir "Inativo" numa lista de Ativos — revisão W1-C04).
     const mantem = aindaCasaComFiltros(usuario);
     setResultado((atual) =>
       atual
@@ -196,7 +172,7 @@ export function UsuariosView() {
       toast.success("Alterações salvas.");
     } else {
       toast.success("Usuário cadastrado.");
-      setTentativa((t) => t + 1); // refaz a primeira página (lista ordenada por nome)
+      setTentativa((t) => t + 1);
     }
   }
 
@@ -242,8 +218,6 @@ export function UsuariosView() {
       role="row"
       key={usuario.id}
       className={`${styles.linha} ${styles.grade}`}
-      // Cascata só nos primeiros STAGGER.maxItens (12) itens (orquestrada pelo
-      // container abaixo); o restante da página renderiza imediato (≥50fps).
       variants={indice < STAGGER.maxItens ? itemVar : undefined}
     >
       <span role="cell" className={styles.celula}>

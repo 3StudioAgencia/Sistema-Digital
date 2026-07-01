@@ -1,22 +1,5 @@
 "use client";
 
-/**
- * Leitor de QR por câmera (W3-C10) — in-app, sem app externo (RF-004).
- *
- * Usa `html5-qrcode` (stack do CLAUDE.md §4) via import DINÂMICO client-only (a
- * lib toca `navigator`/DOM e não pode entrar no bundle SSR). A câmera só abre por
- * GESTO do usuário ("Abrir câmera") — exigência do `getUserMedia` no mobile e
- * fiel ao design ("Pronto para escanear"). Degradação graciosa (RNF-014):
- * permissão negada / sem câmera NÃO bloqueia a tela — o componente mostra o aviso
- * e o campo manual segue acessível (o toggle nunca some). Lê o QR em tempo real
- * (≤ 2 s — RNF-002); o payload é o PRÓPRIO código (C06), repassado intacto.
- *
- * Layout (fiel ao design): card branco em DUAS colunas — visor cinza quadrado
- * (placeholder do QR com molduras + scanline, ou o <video> da câmera) à esquerda;
- * painel "Pronto para escanear" + "Abrir câmera" e o rodapé "Última leitura / Ver
- * histórico" à direita. O visor é dimensionado pela ALTURA do card (quadrado que
- * cabe) — nunca estoura o card.
- */
 import { motion } from "framer-motion";
 import type { Html5Qrcode } from "html5-qrcode";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
@@ -33,11 +16,8 @@ export function CameraScanner({
   ocupado,
   rodape,
 }: {
-  /** Chamado com o texto lido do QR (o próprio código — C06). */
   onDetectar: (codigo: string) => void;
-  /** A identificação está em curso: trava o botão e congela o feedback. */
   ocupado: boolean;
-  /** Rodapé "Última leitura / Ver histórico" — renderizado dentro do card. */
   rodape: ReactNode;
 }) {
   const reduced = useReducedMotion();
@@ -47,10 +27,6 @@ export function CameraScanner({
   const [estado, setEstado] = useState<Estado>("pronto");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const detectouRef = useRef(false);
-  // Vida do componente: um `start()` é assíncrono (1-2 s no mobile — prompt de
-  // permissão + abertura do track). Se desmontar nesse meio-tempo, este ref deixa
-  // o `iniciar()` saber que precisa PARAR o track recém-aberto (senão a câmera
-  // ficaria ligada em segundo plano) e não tocar estado morto.
   const vivoRef = useRef(true);
 
   async function parar(): Promise<void> {
@@ -61,15 +37,12 @@ export function CameraScanner({
       await scanner.stop();
       scanner.clear();
     } catch {
-      // já parado / parando — não é erro acionável
     }
   }
 
-  // Para a câmera ao desmontar (trocar para Manual desmonta este componente —
-  // render condicional no view): nunca deixa a câmera ligada em segundo plano.
   useEffect(() => {
     return () => {
-      vivoRef.current = false; // um start() que resolver após o unmount será parado
+      vivoRef.current = false;
       void parar();
     };
   }, []);
@@ -86,7 +59,7 @@ export function CameraScanner({
       });
       scannerRef.current = scanner;
       await scanner.start(
-        { facingMode: "environment" }, // câmera traseira no celular (RF-029)
+        { facingMode: "environment" },
         {
           fps: 10,
           qrbox: (w: number, h: number) => {
@@ -95,33 +68,25 @@ export function CameraScanner({
           },
         },
         (texto) => {
-          if (detectouRef.current || !vivoRef.current) return; // só a 1ª leitura, e só se vivo
+          if (detectouRef.current || !vivoRef.current) return;
           detectouRef.current = true;
           void parar();
           onDetectar(texto);
         },
         () => {
-          // callback de "frame sem QR" — silencioso (roda a cada quadro)
         },
       );
       if (!vivoRef.current) {
-        // Desmontou durante o handshake do start(): o cleanup já chamou parar() com
-        // o scanner AINDA iniciando — o stop() de lá lança ("not running") e é
-        // engolido, então o track só foi de fato aberto AGORA. Encerra ESTE scanner
-        // diretamente (não via scannerRef, que o cleanup já zerou) — a câmera nunca
-        // fica ligada em segundo plano. Não toca estado morto.
         scannerRef.current = null;
         try {
           await scanner.stop();
           scanner.clear();
         } catch {
-          // já parado/parando — não acionável
         }
         return;
       }
       setEstado("ativo");
     } catch {
-      // Permissão negada OU nenhuma câmera: degrada — o manual segue disponível.
       await parar();
       if (vivoRef.current) setEstado("indisponivel");
     }
@@ -133,8 +98,6 @@ export function CameraScanner({
   return (
     <div className={styles.cameraCard}>
       <div className={styles.visor}>
-        {/* Container do html5-qrcode (recebe o <video>) — sempre no DOM (a lib
-            busca por id); escondido por CSS quando a câmera não está ativa. */}
         <div
           id={scannerId}
           className={`${styles.scanner} ${ativaCamera ? styles.scannerVisivel : styles.scannerOculto}`}
@@ -233,17 +196,12 @@ export function CameraScanner({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Arte do QR (placeholder do estado "pronto") — SVG decorativo, determinístico
-// (semente fixa → sem mismatch de hidratação). Três finder patterns + módulos de
-// dados + um quadrado amarelo central, como no design.
-// ---------------------------------------------------------------------------
 function construirModulos(): { x: number; y: number }[] {
-  const N = 25; // grade de 25 módulos (viewBox 100 → passo 4)
+  const N = 25;
   const ehFinder = (c: number, r: number) =>
     (c < 8 && r < 8) || (c > 16 && r < 8) || (c < 8 && r > 16);
   const ehCentro = (c: number, r: number) => c >= 9 && c <= 15 && r >= 9 && r <= 15;
-  let semente = 0x6d2b79f5; // fixa → mesmo padrão no servidor e no cliente
+  let semente = 0x6d2b79f5;
   const proximo = () => {
     semente = (semente * 1103515245 + 12345) & 0x7fffffff;
     return semente / 0x7fffffff;

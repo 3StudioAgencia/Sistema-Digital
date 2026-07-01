@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "@/lib/api/client";
-import type { PaginaProvas, ProvaListagem } from "@/lib/api/provas";
+import { ApiError } from "../../../../lib/api/client";
+import type { PaginaProvas, ProvaListagem } from "../../../../lib/api/provas";
 
 // Mock controlável de next/navigation: `nav.search` simula a query da URL;
 // replace/push são espionados (o estado de filtros é escrito na URL — DP-5).
@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   listarVendedoresProvas: vi.fn(),
 }));
 vi.mock("@/lib/api/provas", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/api/provas")>();
+  const original = await importOriginal<typeof import("../../../../lib/api/provas")>();
   return { ...original, ...mocks };
 });
 

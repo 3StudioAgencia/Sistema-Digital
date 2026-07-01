@@ -6,15 +6,6 @@ import { reportClientError } from "@/lib/observability/report-error";
 
 import styles from "../error.module.css";
 
-/**
- * Error boundary do grupo AUTENTICADO `(app)` (W1-A-016).
- *
- * Renderiza DENTRO do `(app)/layout.tsx`, então preserva o app shell (sidebar +
- * navegação) — o usuário recupera no contexto (retry desta seção ou navega por
- * outra), em vez de cair no boundary raiz genérico que substitui o shell inteiro
- * (DoD §8: "error boundaries cobrindo a rota"; RNF-014/016). Reutiliza o estilo
- * do boundary raiz (`../error.module.css`).
- */
 export default function AppError({
   error,
   reset,

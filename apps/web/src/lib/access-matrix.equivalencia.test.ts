@@ -1,11 +1,3 @@
-/**
- * Harness de equivalência (lado web) — W1-C05.
- *
- * Trava `access-matrix.ts` à Matriz canônica (`access-matrix.cells.json`). O
- * lado api (`apps/api/tests/unit/test_equivalencia_matriz.py`) trava `rbac.py`
- * ao MESMO arquivo — logo as duas linguagens concordam por construção (regra do
- * PR único — DAT §7.3).
- */
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,12 +1,5 @@
 "use client";
 
-/**
- * Confirmação de desativar/reativar (W1-C04 / US-015).
- *
- * Desativar bloqueia o login SEM apagar histórico — o texto deixa isso claro.
- * Erros de regra (RN-010: autodesativação, último admin) chegam do backend e
- * viram toast com a mensagem da regra.
- */
 import { useId, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
@@ -53,8 +46,6 @@ export function ConfirmarStatusModal({ confirmacao, onFechar, onConfirmado }: Pr
     <MotionModal
       open={confirmacao !== null}
       onClose={() => {
-        // ESC/overlay não fecham no meio da chamada — o resultado (sucesso ou
-        // erro de regra) precisa chegar visível ao usuário (revisão W1-C04).
         if (!enviando) onFechar();
       }}
       labelledBy={tituloId}

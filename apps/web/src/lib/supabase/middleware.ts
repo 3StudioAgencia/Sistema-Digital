@@ -49,17 +49,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     },
   });
 
-  // NÃO inserir código entre o createServerClient acima e o getUser abaixo.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // §3.5: nunca cachear respostas que carregam refresh de sessão.
   response.headers.set("Cache-Control", "no-store");
-
-  // Camada superior do RBAC (W1-C05): só para usuários autenticados. A proteção
-  // de autenticação (redirect p/ /login de quem não tem sessão) é do layout do
-  // grupo (app) — aqui cuidamos do enforcement por PERFIL.
   if (user) {
     const { data: claims } = await supabase.auth.getClaims();
     const perfil = perfilDeClaims(claims?.claims);
@@ -71,10 +65,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   return response;
 }
 
-/**
- * Redireciona à home do perfil preservando os cookies de refresh e deixando o
- * flash de acesso negado (lido e limpo pelo toast no destino — DP-4).
- */
 function redirectAcessoNegado(request: NextRequest, refreshed: NextResponse): NextResponse {
   const destino = request.nextUrl.clone();
   destino.pathname = HOME_PADRAO;

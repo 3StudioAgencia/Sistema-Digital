@@ -13,17 +13,6 @@ import styles from "../login/login.module.css";
 
 type FocusedField = "email" | "senha" | null;
 
-/**
- * Bloco do formulário de login (cliente) — wordmark, título, campos e botão,
- * com entrada coreografada e microinterações harmônicas.
- *
- * - signInWithPassword (Supabase Auth); em falha, mensagem GENÉRICA que não
- *   revela se errou e-mail ou senha (acceptance do Backlog C03 / §3.4).
- * - "Esqueci minha senha" é inerte nesta wave (DP-5): exibe uma dica.
- * - Foco do campo: o contorno faz fade-in/out (só opacity — GPU). Hover/press
- *   usam a MESMA mola (SPRING.interactive) do resto da UI, para harmonia.
- * - Tudo degrada para instantâneo com prefers-reduced-motion (RN-012, RNF-010).
- */
 export function LoginPanel({ expired }: { expired: boolean }) {
   const router = useRouter();
   const reduce = useReducedMotion();
@@ -51,7 +40,7 @@ export function LoginPanel({ expired }: { expired: boolean }) {
       transition: { duration: reduce ? DURATION.instant : DURATION.long, ease: EASING.emphasized },
     },
   };
-  // Contorno do campo: fade suave (opacity). Hover/press dos botões: mola comum.
+
   const ringTransition = { duration: reduce ? 0 : DURATION.short, ease: EASING.standard };
   const press = reduce
     ? {}
@@ -69,7 +58,6 @@ export function LoginPanel({ expired }: { expired: boolean }) {
         password: senha,
       });
       if (signInError) {
-        // Genérico de propósito: não revela QUAL campo falhou (anti-enumeração).
         setError("E-mail ou senha inválidos. Verifique e tente novamente.");
         setLoading(false);
         return;
@@ -85,7 +73,6 @@ export function LoginPanel({ expired }: { expired: boolean }) {
   return (
     <motion.div className={styles.panel} variants={container} initial="hidden" animate="show">
       <motion.div className={styles.wordmarkWrap} variants={item}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- SVG estático; next/image não otimiza SVG */}
         <img
           src="/logo-3studio.svg"
           alt="3Studio"

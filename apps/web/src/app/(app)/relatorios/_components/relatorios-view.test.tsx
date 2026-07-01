@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RelatorioGeral } from "@/lib/api/relatorios";
+import type { RelatorioGeral } from "../../../../lib/api/relatorios";
 
 // Router espionado (aba/filtros vão para a URL via replace).
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));

@@ -1,15 +1,7 @@
-/**
- * Enforcement de RBAC da camada SUPERIOR (W1-A-002).
- *
- * As funções puras (`can`/`podeAcessarRota`/`perfilDeClaims`) já têm cobertura;
- * o que faltava era o caminho que de fato BLOQUEIA: `updateSession` →
- * getUser() → getClaims() → decisão → 302 + flash. Aqui mockamos o client do
- * `@supabase/ssr` e exercemos o `updateSession` real.
- */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FLASH_ACESSO_NEGADO, HOME_PADRAO } from "@/lib/access-matrix";
+import { FLASH_ACESSO_NEGADO, HOME_PADRAO } from "../../lib/access-matrix";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),

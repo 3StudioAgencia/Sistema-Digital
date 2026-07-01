@@ -1,10 +1,5 @@
 "use client";
 
-/**
- * Hook de carga por ABA (W5-C17) — busca a agregação da aba ativa (lazy — só a aba
- * montada busca; DP-6). Cancela em troca de filtro/aba (AbortController), distingue
- * 403 (acesso) de erro transitório, e expõe `recarregar`. SEM Realtime (snapshot).
- */
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
@@ -24,14 +19,9 @@ export function useRelatorio<T>(
   buscar: (signal: AbortSignal) => Promise<T>,
   chave: string,
 ): EstadoRelatorio<T> {
-  // Resultado/erro são CARIMBADOS com a chave que os produziu: a tela só mostra o
-  // que casa com a chave corrente (stale-response safe — padrão do C07). Assim o
-  // efeito NUNCA chama setState de forma síncrona (react-hooks/set-state-in-effect):
-  // o reset ao trocar de chave é derivado no render, não imperativo.
   const [resultado, setResultado] = useState<{ chave: string; dados: T } | null>(null);
   const [falha, setFalha] = useState<{ chave: string; tipo: TipoErro } | null>(null);
   const [tentativa, setTentativa] = useState(0);
-  // Ref para o efeito não depender da identidade de `buscar` (recriada a cada render).
   const buscarRef = useRef(buscar);
   useEffect(() => {
     buscarRef.current = buscar;

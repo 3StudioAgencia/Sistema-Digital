@@ -1,9 +1,4 @@
-/* AppShell (W1-C04) — geometria do design: fundo preto, shell #eaeaea com
-   raio 40 e margem 16/18 nas bordas; sidebar ~495px @1920 (fluida via clamp). */
-
 .layout {
-  /* A unidade de escala --u (1 px de design do quadro 1080 do Figma) vive no
-     :root (globals.css) para valer também nos portais (modal/toasts). */
   display: flex;
   height: 100dvh;
   background: var(--app-sidebar-bg);
@@ -11,8 +6,6 @@
 
 .sidebarDesktop {
   flex: none;
-  /* Levemente mais estreita que o quadro do Figma (495 @1920), a pedido do
-     dono — o conteúdo ganha respiro sem mudar a hierarquia da sidebar. */
   width: clamp(264px, 23.5vw, 450px);
   min-height: 0;
 }
@@ -58,7 +51,6 @@
 }
 
 .drawer {
-  /* Drawer mobile: tamanhos cheios (touch) — não escala com a altura. */
   --u: 1px;
 
   position: absolute;

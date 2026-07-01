@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * AppShell (W1-C04 / ADR-026) — o layout de TODA a plataforma autenticada.
- *
- * Duas zonas (design do Figma): sidebar preta fixa à esquerda + área de
- * conteúdo ("shell branco" #eaeaea, raio 40) onde cada página renderiza. Novas
- * páginas plugam criando rotas dentro do grupo (app) — nada do shell se repete.
- *
- * Responsividade (DP-7, breakpoint 768px): sidebar vira drawer com hambúrguer;
- * o conteúdo ocupa a tela com raio reduzido. Animações GPU-only com tokens e
- * degradação por prefers-reduced-motion.
- */
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
@@ -33,10 +22,6 @@ type AppShellProps = {
 export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
   const pathname = usePathname();
   const reduced = useReducedMotion();
-  // Estado DERIVADO: o drawer guarda em qual rota foi aberto — navegar para
-  // outra rota o fecha naturalmente. O reset guardado em fase de render
-  // (padrão oficial "storing information from previous renders") garante que
-  // VOLTAR à rota original (back/forward) não reabra o drawer (revisão W1-C04).
   const [abertoNaRota, setAbertoNaRota] = useState<string | null>(null);
   const [rotaAnterior, setRotaAnterior] = useState(pathname);
   if (rotaAnterior !== pathname) {
@@ -119,10 +104,7 @@ export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
         </header>
 
         <main className={styles.conteudo}>
-          {/* Transição de página (RF-023): fade + leve translateY do conteúdo
-              que ENTRA. Re-montada a cada navegação pelo key={pathname}. A
-              primitiva <PageTransition> (W6-C19) encapsula o comportamento que
-              antes vivia inline aqui — GPU-only, instantânea sob reduced-motion. */}
+
           <PageTransition key={pathname} className={styles.conteudoInterno}>
             {children}
           </PageTransition>

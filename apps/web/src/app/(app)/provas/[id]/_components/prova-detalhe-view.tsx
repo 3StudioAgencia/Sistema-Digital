@@ -115,10 +115,6 @@ export function ProvaDetalheView({
     acoesRef.current = { router, toast };
   });
 
-  // Detalhe da prova. 404 = inexistente OU fora do escopo (RLS) — MESMO caminho:
-  // toast genérico + volta à listagem, sem revelar a existência (§11). O estado
-  // inicial já é "carregando" (e o retry o re-arma no handler) — nada de setState
-  // síncrono no corpo do efeito.
   useEffect(() => {
     const controller = new AbortController();
     obterProva(provaId, controller.signal)
@@ -138,7 +134,6 @@ export function ProvaDetalheView({
     return () => controller.abort();
   }, [provaId, tentativa]);
 
-  // Arte por proxy (DP-5): blob → objectURL. Revoga ao desmontar/trocar.
   const provaIdCarregada = prova?.id;
   useEffect(() => {
     if (!provaIdCarregada) return;
@@ -151,7 +146,7 @@ export function ProvaDetalheView({
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setArteFalhou(true); // degrada para placeholder; não derruba a tela
+        setArteFalhou(true);
       });
     return () => {
       controller.abort();
@@ -159,17 +154,12 @@ export function ProvaDetalheView({
     };
   }, [provaIdCarregada]);
 
-  // Revoga o objectURL da etiqueta no unmount/troca (o modal pode estar ABERTO
-  // ao sair por sidebar/back/troca de prova — `fecharModal` só cobre o fechar
-  // manual). Também revoga o anterior ao re-visualizar. Único ponto de revogação.
   useEffect(() => {
     if (!etiquetaUrl) return;
     return () => URL.revokeObjectURL(etiquetaUrl);
   }, [etiquetaUrl]);
 
   function voltar() {
-    // Preserva os filtros da listagem via histórico do navegador (DP-6); sem
-    // histórico (entrada direta/refresh) cai na listagem.
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/provas");
   }
@@ -206,34 +196,20 @@ export function ProvaDetalheView({
     setEtiquetaUrl(null); // o efeito de cleanup revoga o objectURL anterior
   }
 
-  // W3-C14: cancelamento concluído — reflete o novo estado (Cancelada) a partir da
-  // resposta (sem refetch — §3.3), fecha o modal e recarrega a timeline (a nova
-  // movimentação aparece). A irreversibilidade some o botão (estado terminal).
   function aoCancelar(atualizada: ProvaDetalhe) {
     setProva(atualizada);
     setCancelarAberto(false);
     setRecarregarTimeline((n) => n + 1);
   }
 
-  // W3-C15: reinício concluído — reflete o novo estado ("Criada" + ciclo_atual
-  // incrementado) a partir da resposta (sem refetch), fecha o modal e recarrega a
-  // timeline (a movimentação de reinício e o novo ciclo aparecem separados — C13).
-  // O botão some sozinho (a prova não está mais em "Reprovada pelo Vendedor").
   function aoReiniciar(atualizada: ProvaDetalhe) {
     setProva(atualizada);
     setReiniciarAberto(false);
     setRecarregarTimeline((n) => n + 1);
   }
 
-  // Reveal de entrada (W6-C19): as SEÇÕES de topo surgem em cascata na montagem
-  // (Voltar → card de metadados → histórico). `staggerContainer` orquestra a partir
-  // do `.pagina`; cada seção é um item `fadeRise`. As fábricas zeram tudo sob
-  // prefers-reduced-motion (instantâneo) e só tocam transform/opacity (GPU — §3.4).
-  // `initial="hidden" animate="show"` dispara SÓ na montagem — refetch/recarga da
-  // timeline não re-dispara a cascata.
   const containerVar = staggerContainer(reduced);
   const itemVar = fadeRise(reduced);
-  // Feedback tátil de toque nas ações (mola única da plataforma — C03/SPRING).
   const toque = reduced ? {} : { whileTap: { scale: 0.97 }, transition: SPRING.interactive };
 
   return (
@@ -330,9 +306,6 @@ export function ProvaDetalheView({
                   {baixando ? "Baixando…" : "Baixar etiqueta"}
                 </motion.button>
 
-                {/* W3-C15: reiniciar ciclo (construtivo) na MESMA linha — só ao
-                    3Studio (podeReiniciar) e SÓ em "Reprovada pelo Vendedor" (o único
-                    estado onde o motor do C11 aceita o reinício — RN-006). */}
                 {podeReiniciar && prova.status === "reprovada_vendedor" && (
                   <motion.button
                     type="button"
@@ -344,8 +317,6 @@ export function ProvaDetalheView({
                   </motion.button>
                 )}
 
-                {/* W3-C14: ação destrutiva na MESMA linha — só ao 3Studio
-                    (podeCancelar) e só em estados ATIVOS (some em Cancelada/Recebida). */}
                 {podeCancelar && estaAtiva(prova.status) && (
                   <motion.button
                     type="button"
@@ -360,9 +331,6 @@ export function ProvaDetalheView({
             </div>
           </motion.article>
 
-          {/* Histórico (W3-C13): a timeline visual lê GET /provas/{id}/movimentacoes
-              e desenha o caminho da rota. Falha do histórico é isolada na própria
-              ProofTimeline — não derruba este detalhe (§3.6). */}
           <motion.section
             className={styles.historico}
             aria-label="Histórico de movimentações"

@@ -4,16 +4,6 @@ import { useEffect } from "react";
 
 import { reportClientError } from "@/lib/observability/report-error";
 
-/**
- * Global error boundary (App Router) — captura erros lançados no PRÓPRIO
- * `layout.tsx` raiz (que o `error.tsx` não cobre, pois renderiza dentro dele).
- * Substitui `<html>`/`<body>`, então precisa renderizá-los.
- *
- * Estilos INLINE de propósito (exceção justificada à convenção de CSS Modules):
- * este é o boundary de falha catastrófica — deve renderizar uma mensagem usável
- * mesmo que o pipeline de CSS (globals.css/módulos) não tenha carregado. É o
- * padrão recomendado pelo Next para `global-error`.
- */
 export default function GlobalError({
   error,
   reset,

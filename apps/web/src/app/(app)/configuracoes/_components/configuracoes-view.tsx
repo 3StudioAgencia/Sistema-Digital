@@ -1,19 +1,5 @@
 "use client";
 
-/**
- * Configurações do sistema (W2-C09) — exclusiva do 3Studio (Matriz §7).
- *
- * Tela de cards no padrão do design (cartão branco + "Salvar" POR card — save
- * granular). Implementa os settings reais do RF-022 (DP-6): tempo de atraso
- * (RN-008/US-016) e template de etiqueta (RN-011/DP-5: padrão ou sobrescrita dos
- * 5 parâmetros do C06). Sem cache (DP-4): salvar reflete imediatamente.
- *
- * Acesso: o proxy (C05) já gateia a rota ao admin; em profundidade, o GET/PUT
- * respondem 403 a não-admin → estado "restrito" (a UI não confia só no proxy).
- *
- * Animações sobre os tokens (GPU — transform/opacity), instantâneas sob
- * prefers-reduced-motion.
- */
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -79,7 +65,6 @@ export function ConfiguracoesView() {
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        // 403 = não-3Studio (defesa em profundidade; o proxy já redireciona).
         if (error instanceof ApiError && error.status === 403) {
           setEstado("restrito");
           return;
@@ -105,10 +90,6 @@ export function ConfiguracoesView() {
 
   const delayConfig = acharConfig(configs, CHAVE_DELAY);
   const etiquetaConfig = acharConfig(configs, CHAVE_ETIQUETA);
-
-  // Reveal de entrada (W6-C19): a coluna de cards orquestra a cascata; cada card
-  // é um item. Dispara só na montagem (initial→animate), sem re-disparar a cada
-  // refetch de configs. As fábricas zeram tudo sob prefers-reduced-motion.
   const containerVar = staggerContainer(reduced);
   const itemVar = fadeRise(reduced);
 
@@ -159,9 +140,6 @@ export function ConfiguracoesView() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Card genérico (título + descrição + campos + "Salvar" próprio)
-// ---------------------------------------------------------------------------
 type CardProps = {
   titulo: string;
   descricao: string;
@@ -199,9 +177,6 @@ function Card({ titulo, descricao, children, onSalvar, salvando, reduced, itemVa
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tempo de atraso (RF-022a / RN-008 / US-016)
-// ---------------------------------------------------------------------------
 function validarDelay(valor: string): string | null {
   const texto = valor.trim();
   if (!texto) return "Informe o tempo em horas úteis.";
@@ -274,9 +249,6 @@ function CardDelay({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Template de etiqueta (RF-022b / RN-011 / DP-5)
-// ---------------------------------------------------------------------------
 type CampoNum = "largura" | "altura" | "margem" | "qr_zona_quieta_modulos";
 
 const LIMITES: Record<CampoNum, { min: number; max: number; inteiro: boolean; rotulo: string }> = {
@@ -321,7 +293,6 @@ function CardEtiqueta({
   const [erros, setErros] = useState<Partial<Record<CampoNum, string>>>({});
   const [salvando, setSalvando] = useState(false);
 
-  // Validação só vale no modo personalizado (no padrão os campos não se aplicam).
   function errosPersonalizado(): Partial<Record<CampoNum, string>> {
     const e: Partial<Record<CampoNum, string>> = {};
     for (const campo of Object.keys(LIMITES) as CampoNum[]) {
@@ -333,8 +304,6 @@ function CardEtiqueta({
 
   async function salvar() {
     if (modo === "padrao") {
-      // Padrão: grava os defaults do C06 (sobrescritas não se aplicam) — limpa
-      // quaisquer dimensões personalizadas antigas da linha persistida.
       setSalvando(true);
       await aoSalvar(CHAVE_ETIQUETA, { ...ETIQUETA_FALLBACK, modo: "padrao" });
       setSalvando(false);
@@ -459,9 +428,6 @@ function CardEtiqueta({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Segmented control (Padrão | Personalizado) — pílula deslizante (GPU)
-// ---------------------------------------------------------------------------
 const MODOS: { value: ModoEtiqueta; label: string }[] = [
   { value: "padrao", label: "Padrão" },
   { value: "personalizado", label: "Personalizado" },
@@ -486,8 +452,6 @@ function Segmento({
       role="radiogroup"
       aria-labelledby={labelledBy}
       onKeyDown={(event) => {
-        // Padrão WAI-ARIA de radiogroup (espelha o segmented de Rota do C06):
-        // setas movem E selecionam (com wrap); Home/End vão aos extremos.
         const teclas = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
         if (!teclas.includes(event.key)) return;
         event.preventDefault();
@@ -515,7 +479,6 @@ function Segmento({
             type="button"
             role="radio"
             aria-checked={ativa}
-            // Roving tabindex: só a opção ativa é tab stop (há sempre uma).
             tabIndex={ativa ? 0 : -1}
             className={styles.segmentoItem}
             data-ativa={ativa || undefined}

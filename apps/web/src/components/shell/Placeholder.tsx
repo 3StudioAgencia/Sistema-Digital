@@ -1,9 +1,4 @@
-/**
- * Placeholder neutro das páginas ainda não construídas (DP-6).
- *
- * Mantém o usuário DENTRO do shell (a navegação não quebra) e aponta o
- * componente do roadmap que entregará a página real.
- */
+
 import { Reveal } from "@/components/ui/motion";
 
 import styles from "./placeholder.module.css";
