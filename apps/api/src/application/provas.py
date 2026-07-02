@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 
 from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.etiqueta import EtiquetaPort
+from src.application.ports.event_bus import EventBusPort
 from src.application.ports.movimentacoes_repository import MovimentacoesRepositoryPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
@@ -109,6 +110,7 @@ class ProvasService:
         uow: UnitOfWork,
         relogio: Callable[[], datetime] | None = None,
         audit: AuditLogPort | None = None,
+        eventos: EventBusPort | None = None,
     ) -> None:
         self._repo = repo
         self._usuarios_repo = usuarios_repo
@@ -119,6 +121,10 @@ class ProvasService:
         # INSERT da prova (atômica). Opcional: ausente nos testes de criação que não
         # exercem auditoria (logar é efeito colateral — não muda a regra; §3.6).
         self._audit = audit
+        # Etapa 3 (realtime): sinal genérico "prova mudou" para o SSE do dashboard,
+        # na MESMA transação do INSERT (só entregue no commit). Opcional: ausente nos
+        # testes que não exercem o realtime (efeito colateral — §3.6).
+        self._eventos = eventos
 
     # ------------------------------------------------------------------- criar
     async def criar(
@@ -226,6 +232,11 @@ class ProvasService:
                                 prova_requerimento=prova.requerimento,
                             )
                         )
+                    # Etapa 3 (realtime): sinaliza "prova mudou" na MESMA transação
+                    # do INSERT — só entregue no commit (atômico). A criação nasce
+                    # ``CRIADA`` e alimenta o contador "Criadas hoje" do dashboard.
+                    if self._eventos is not None:
+                        await self._eventos.publicar_mudanca_de_prova()
                     await self._uow.commit()
             except CodigoJaExisteError:
                 logger.warning(

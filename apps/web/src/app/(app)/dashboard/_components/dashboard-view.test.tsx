@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Dashboard } from "../../../../lib/api/dashboard";
 
@@ -15,8 +15,15 @@ vi.mock("@/lib/api/dashboard", async (importOriginal) => {
   return { ...original, fetchDashboard: mocks.fetchDashboard };
 });
 
-// Realtime removido na migração Supabase->local (etapa 3 fará SSE/WS próprio);
-// o dashboard usa a carga SSR inicial + refetch manual, então não há mock de WS.
+// Realtime (etapa 3): o stream SSE é encapsulado em `assinarDashboard`. Mockamos o
+// helper (como `fetchDashboard`) para capturar os callbacks e simular sinais sem
+// tocar em EventSource (a lógica do helper é testada em `eventos.test.ts`).
+const eventos = vi.hoisted(() => ({ assinarDashboard: vi.fn(), fechar: vi.fn() }));
+vi.mock("@/lib/api/eventos", () => ({ assinarDashboard: eventos.assinarDashboard }));
+
+type OpcoesStream = { onMudou: () => void; onExpira: () => void };
+const ultimasOpcoes = (): OpcoesStream =>
+  eventos.assinarDashboard.mock.calls.at(-1)?.[0] as OpcoesStream;
 
 import { DashboardView } from "./dashboard-view";
 
@@ -35,6 +42,14 @@ const DADOS: Dashboard = {
 beforeEach(() => {
   nav.push.mockReset();
   mocks.fetchDashboard.mockReset();
+  eventos.assinarDashboard.mockReset();
+  eventos.fechar.mockReset();
+  // Por padrão o stream devolve o cleanup (o componente o chama no unmount/expira).
+  eventos.assinarDashboard.mockReturnValue(eventos.fechar);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("DashboardView (W4-C16)", () => {
@@ -110,5 +125,36 @@ describe("DashboardView (W4-C16)", () => {
     render(<DashboardView inicial={null} podeCriarProva />);
     await waitFor(() => expect(screen.getByLabelText("6894")).toBeInTheDocument());
     expect(mocks.fetchDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  // Realtime (etapa 3) — SSE
+  it("abre o stream SSE ao montar e o fecha ao desmontar", () => {
+    const { unmount } = render(<DashboardView inicial={DADOS} podeCriarProva />);
+    expect(eventos.assinarDashboard).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(eventos.fechar).toHaveBeenCalled();
+  });
+
+  it("sinal 'mudou' do stream rebusca a agregação (debounced)", async () => {
+    mocks.fetchDashboard.mockResolvedValue(DADOS);
+    render(<DashboardView inicial={DADOS} podeCriarProva />);
+    ultimasOpcoes().onMudou();
+    await waitFor(() => expect(mocks.fetchDashboard).toHaveBeenCalled(), { timeout: 2000 });
+  });
+
+  it("'expira' renova a sessão (POST /api/auth/refresh) e reabre o stream", async () => {
+    const fetchSpy = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<DashboardView inicial={DADOS} podeCriarProva />);
+    ultimasOpcoes().onExpira();
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/auth/refresh",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(eventos.assinarDashboard).toHaveBeenCalledTimes(2); // reabriu com token fresco
+    });
+    // O stream corrente foi fechado antes de reabrir (evita conexão duplicada).
+    expect(eventos.fechar).toHaveBeenCalled();
   });
 });

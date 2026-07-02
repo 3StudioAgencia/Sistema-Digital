@@ -37,6 +37,18 @@ def coerce_asyncpg_url(url: str) -> str:
     return url
 
 
+def to_asyncpg_dsn(url: str) -> str:
+    """DSN aceito pelo ``asyncpg.connect()`` a partir de uma URL do SQLAlchemy.
+
+    Inverso de ``coerce_asyncpg_url``: o ``asyncpg`` cru NÃO entende o sufixo de
+    driver ``+asyncpg`` (só ``postgresql://``/``postgres://``). Usado pelo listener
+    de ``LISTEN/NOTIFY`` (etapa 3 da migração), que abre uma conexão asyncpg
+    dedicada FORA do engine SQLAlchemy. As URLs do Settings já são normalizadas
+    para ``postgresql+asyncpg://`` (``_validate_pg_url``).
+    """
+    return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+
 class Settings(BaseSettings):
     """Fonte única de configuração do backend."""
 

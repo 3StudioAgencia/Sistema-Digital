@@ -19,6 +19,7 @@ from src.adapters.outbound.db.assinaturas_repository import SqlAlchemyAssinatura
 from src.adapters.outbound.db.audit_log_repository import SqlAlchemyAuditLogRepository
 from src.adapters.outbound.db.auth_credentials_writer import SqlAlchemyAuthCredentialsWriter
 from src.adapters.outbound.db.dashboard_repository import SqlAlchemyDashboardRepository
+from src.adapters.outbound.db.event_bus_pg import PgNotifyEventBus
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
 from src.adapters.outbound.db.rate_limiter import SqlAlchemyRateLimiter
@@ -144,6 +145,9 @@ async def get_provas_service(
             uow=SqlAlchemyUnitOfWork(session),
             # W6-C20: "criou_prova" no log de auditoria, na mesma sessão/transação.
             audit=SqlAlchemyAuditLogRepository(session),
+            # Etapa 3 (realtime): sinaliza "prova criada" ao SSE do dashboard, na
+            # MESMA transação (NOTIFY entregue só no commit).
+            eventos=PgNotifyEventBus(session),
         )
 
 
@@ -262,6 +266,9 @@ async def get_transicao_service(
             ator=ator,
             # W6-C20: "cancelou_prova" no log de auditoria, na mesma transação.
             audit=SqlAlchemyAuditLogRepository(session),
+            # Etapa 3 (realtime): sinaliza "prova mudou" ao SSE do dashboard, na
+            # MESMA transação (NOTIFY entregue só no commit).
+            eventos=PgNotifyEventBus(session),
         )
 
 
@@ -301,6 +308,9 @@ async def get_cancelamento_service(
             ator=ator,
             # W6-C20: "cancelou_prova" no log de auditoria, na mesma transação.
             audit=SqlAlchemyAuditLogRepository(session),
+            # Etapa 3 (realtime): sinaliza "prova mudou" ao SSE do dashboard, na
+            # MESMA transação (NOTIFY entregue só no commit).
+            eventos=PgNotifyEventBus(session),
         )
 
 
@@ -338,6 +348,9 @@ async def get_reinicio_service(
             ator=ator,
             # W6-C20: "reiniciou_ciclo" no log de auditoria, na mesma transação.
             audit=SqlAlchemyAuditLogRepository(session),
+            # Etapa 3 (realtime): sinaliza "prova mudou" ao SSE do dashboard, na
+            # MESMA transação (NOTIFY entregue só no commit).
+            eventos=PgNotifyEventBus(session),
         )
 
 
@@ -367,6 +380,31 @@ async def get_dashboard_service(
                 detail="Acesso negado.",
             )
         yield DashboardService(repo=SqlAlchemyDashboardRepository(session))
+
+
+async def autorizar_stream_dashboard(request: Request, user: AuthenticatedUser) -> None:
+    """Autoriza o stream SSE do dashboard (etapa 3) numa sessão RLS CURTA.
+
+    Diferente de ``get_dashboard_service`` (dependência-gerador que mantém a sessão
+    aberta por toda a resposta — inviável num stream de vida longa: o ``NullPool``
+    prenderia uma conexão física por conexão SSE), este helper ABRE, autoriza e
+    FECHA a sessão, deixando o gerador do stream SEM sessão presa (os refetches são
+    do próprio endpoint ``GET /dashboard``, cada um na sua sessão curta). Mesmo par
+    do gate do dashboard: ``Recurso.DASHBOARD`` (universal) + a linha do ator
+    legível por ``usuarios_select_self``. Negação ÚNICA (anti-enumeração — §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.DASHBOARD):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
 
 
 async def get_settings_service(
@@ -458,6 +496,7 @@ async def get_auditoria_service(
 
 
 __all__ = [
+    "autorizar_stream_dashboard",
     "get_admin_corrente",
     "get_auditoria_service",
     "get_dashboard_service",

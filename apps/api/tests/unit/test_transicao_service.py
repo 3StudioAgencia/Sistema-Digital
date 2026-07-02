@@ -13,6 +13,7 @@ import datetime as dt
 
 import pytest
 from src.application.ports.assinaturas_repository import AssinaturasRepositoryPort
+from src.application.ports.event_bus import EventBusPort
 from src.application.ports.movimentacoes_repository import MovimentacoesRepositoryPort
 from src.application.ports.provas_repository import (
     FiltrosProvas,
@@ -157,12 +158,23 @@ class FakeUoW(UnitOfWork):
         self.rollbacks += 1
 
 
+class FakeEventBus(EventBusPort):
+    """Conta as publicações do sinal de realtime (etapa 3)."""
+
+    def __init__(self) -> None:
+        self.publicacoes = 0
+
+    async def publicar_mudanca_de_prova(self) -> None:
+        self.publicacoes += 1
+
+
 def _servico(
     repo: FakeProvasRepo,
     movs: FakeMovsRepo,
     uow: FakeUoW,
     ator: Usuario,
     assinaturas: FakeAssinaturasRepo | None = None,
+    eventos: FakeEventBus | None = None,
 ) -> ProvasTransicaoService:
     return ProvasTransicaoService(
         repo=repo,
@@ -171,6 +183,7 @@ def _servico(
         uow=uow,
         ator=ator,
         relogio=lambda: QUANDO,
+        eventos=eventos,
     )
 
 
@@ -531,6 +544,69 @@ async def test_acao_operacional_sem_assinatura_e_422() -> None:
     assert assin.registradas == []
     assert movs.registradas == []
     assert uow.commits == 0 and repo.status_atualizado is None
+
+
+# ---------------------------------------------------------------------------
+# Realtime (etapa 3) — o sinal "prova mudou" sai SÓ no ramo de transição NOVA,
+# junto do commit; nunca no reenvio idempotente nem quando a transação falha.
+# ---------------------------------------------------------------------------
+async def test_publica_evento_de_realtime_no_caminho_feliz() -> None:
+    repo, movs, uow = FakeProvasRepo(_prova()), FakeMovsRepo(), FakeUoW()
+    eventos = FakeEventBus()
+    svc = _servico(repo, movs, uow, _vendedor(), eventos=eventos)
+    await svc.executar(
+        prova_id="a",
+        acao=Acao.IDENTIFICAR_E_ASSINAR,
+        assinatura_imagem=PNG,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    assert eventos.publicacoes == 1
+    assert uow.commits == 1
+
+
+async def test_nao_publica_evento_no_reenvio_idempotente() -> None:
+    """RNF-015: o reenvio converge no ramo ``existente`` e NÃO re-sinaliza — senão
+    dispararia um refetch à toa em todos os navegadores (thundering herd)."""
+    prova = _prova(status=EstadoProva.RETIRADA_VENDEDOR)
+    existente = Movimentacao(
+        id="m1",
+        prova_id=prova.id,
+        estado_origem=EstadoProva.CRIADA,
+        estado_destino=EstadoProva.RETIRADA_VENDEDOR,
+        acao=Acao.IDENTIFICAR_E_ASSINAR,
+        ator_id=VENDEDOR_ID,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    repo, movs, uow = FakeProvasRepo(prova), FakeMovsRepo(existente=existente), FakeUoW()
+    eventos = FakeEventBus()
+    svc = _servico(repo, movs, uow, _vendedor(), eventos=eventos)
+    await svc.executar(
+        prova_id=prova.id,
+        acao=Acao.IDENTIFICAR_E_ASSINAR,
+        assinatura_imagem=PNG,
+        idempotency_key="33333333-3333-3333-3333-333333333333",
+    )
+    assert eventos.publicacoes == 0
+    assert uow.commits == 0
+
+
+async def test_nao_publica_evento_quando_a_transacao_falha() -> None:
+    """RNF-017: erro ao gravar a movimentação aborta ANTES do sinal — nada é
+    publicado (no banco, o pg_notify também só seria entregue no commit)."""
+    repo = FakeProvasRepo(_prova())
+    movs = FakeMovsRepo(falha=RuntimeError("falha no INSERT da movimentação"))
+    uow = FakeUoW()
+    eventos = FakeEventBus()
+    svc = _servico(repo, movs, uow, _vendedor(), eventos=eventos)
+    with pytest.raises(RuntimeError):
+        await svc.executar(
+            prova_id="a",
+            acao=Acao.IDENTIFICAR_E_ASSINAR,
+            assinatura_imagem=PNG,
+            idempotency_key="33333333-3333-3333-3333-333333333333",
+        )
+    assert eventos.publicacoes == 0
+    assert uow.commits == 0
 
 
 # ---------------------------------------------------------------------------

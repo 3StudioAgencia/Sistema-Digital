@@ -39,6 +39,7 @@ from datetime import UTC, datetime
 
 from src.application.ports.assinaturas_repository import AssinaturasRepositoryPort
 from src.application.ports.audit_log import AuditLogPort
+from src.application.ports.event_bus import EventBusPort
 from src.application.ports.movimentacoes_repository import (
     IdempotenciaJaRegistradaError,
     MovimentacoesRepositoryPort,
@@ -91,6 +92,7 @@ class ProvasTransicaoService:
         ator: Usuario,
         relogio: Callable[[], datetime] | None = None,
         audit: AuditLogPort | None = None,
+        eventos: EventBusPort | None = None,
     ) -> None:
         self._repo = repo
         self._movs = movs
@@ -104,6 +106,10 @@ class ProvasTransicaoService:
         # transição (atômica — RNF-017). Opcional: ausente nos testes que só exercem
         # a máquina de estados (logar é efeito colateral, não muda a regra — §3.6).
         self._audit = audit
+        # Etapa 3 (realtime): sinal genérico "prova mudou" para o SSE do dashboard,
+        # na MESMA transação (só entregue no commit — atômico/idempotente). Opcional:
+        # ausente nos testes que não exercem o realtime (efeito colateral — §3.6).
+        self._eventos = eventos
 
     async def acoes_disponiveis(self, prova_id: str) -> tuple[Transicao, ...]:
         """Ações do fluxo de escaneamento que ESTE ator pode executar na prova
@@ -237,6 +243,13 @@ class ProvasTransicaoService:
                             motivo=mov.motivo,
                         )
                     )
+                # Etapa 3 (realtime): sinaliza "prova mudou" na MESMA transação — o
+                # pg_notify só é ENTREGUE no COMMIT (descarta em rollback), então é
+                # atômico com a mudança de status e só ocorre neste ramo de transição
+                # NOVA (o reenvio idempotente converge no ramo ``existente`` acima e
+                # NÃO re-sinaliza — evita refetch à toa em todos os navegadores).
+                if self._eventos is not None:
+                    await self._eventos.publicar_mudanca_de_prova()
                 await self._uow.commit()
                 resultado = replace(
                     prova,

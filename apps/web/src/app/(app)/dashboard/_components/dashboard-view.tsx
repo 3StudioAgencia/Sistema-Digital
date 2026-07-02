@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { type Dashboard, fetchDashboard } from "@/lib/api/dashboard";
+import { assinarDashboard } from "@/lib/api/eventos";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { fadeRise, staggerContainer } from "@/lib/motion/variants";
 
@@ -60,10 +61,52 @@ export function DashboardView({
     return () => controller.abort();
   }, [inicial]);
 
-  // Realtime (live-update do dashboard) DESATIVADO na migração Supabase->local:
-  // dependia do WebSocket Realtime do Supabase. A substituição por SSE/WebSocket
-  // do FastAPI é a etapa 3 — por ora o painel usa a carga SSR + refetch manual
-  // (botão "Tentar novamente"). `refetch` segue disponível para essa etapa.
+  // Realtime (etapa 3): stream SSE (`/api/dashboard/stream`) → a cada sinal "mudou",
+  // rebusca a agregação (debounce ~800 ms + jitter — colapsa rajadas e descorrelaciona
+  // clientes, evitando thundering herd). O servidor fecha o stream pouco antes de o
+  // token expirar (evento `expira`): renovamos o cookie (`/api/auth/refresh`) e
+  // reabrimos — o EventSource não faz refresh sozinho. Queda do stream degrada
+  // graciosamente (reabre ou fica no último valor; sem polling — RNF-021). O count-up
+  // do <AnimatedCounter> reage sozinho às mudanças de `dados` via setDados.
+  useEffect(() => {
+    let ativo = true;
+    let fechar: (() => void) | null = null;
+    let debounceId: ReturnType<typeof setTimeout> | null = null;
+
+    const agendarRefetch = () => {
+      if (debounceId !== null) clearTimeout(debounceId);
+      debounceId = setTimeout(() => void refetch(), 800 + Math.floor(Math.random() * 400));
+    };
+
+    function conectar() {
+      if (!ativo) return;
+      fechar = assinarDashboard({
+        onMudou: agendarRefetch,
+        onExpira: () => {
+          // Fecha o stream corrente (cancela o auto-reconnect do EventSource),
+          // renova o cookie httpOnly e reabre com o token fresco.
+          fechar?.();
+          fechar = null;
+          void (async () => {
+            try {
+              await fetch("/api/auth/refresh", { method: "POST", cache: "no-store" });
+            } catch {
+              // Refresh falhou: reabrimos mesmo assim (o handshake do stream refaz a
+              // auth; se falhar, degrada para SSR + refetch manual — sem loop).
+            }
+            conectar();
+          })();
+        },
+      });
+    }
+
+    conectar();
+    return () => {
+      ativo = false;
+      if (debounceId !== null) clearTimeout(debounceId);
+      fechar?.();
+    };
+  }, [refetch]);
 
   const irPara = useCallback(
     (params: [string, string][]) => {

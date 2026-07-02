@@ -8,9 +8,10 @@ Aqui, e somente aqui:
 Execução: ``uv run uvicorn src.main:app --reload``
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from functools import partial
 
 from fastapi import FastAPI
@@ -28,6 +29,7 @@ from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure import database
 from src.infrastructure.config import Settings, get_settings
 from src.infrastructure.logging import configure_logging
+from src.infrastructure.realtime import EventoHub, PgEventListener
 
 logger = logging.getLogger("rastreio.main")
 
@@ -86,20 +88,35 @@ def build_app() -> FastAPI:
     jwt_verifier = build_jwt_verifier(settings)
     password_hasher = Argon2PasswordHasher()
     token_issuer = _build_token_issuer(settings)
+    # Etapa 3 (realtime): hub in-process de fan-out para os streams SSE do dashboard
+    # + o listener LISTEN/NOTIFY que o alimenta (uma conexão asyncpg dedicada de
+    # sessão, derivada de MIGRATIONS_DATABASE_URL). O hub vai ao ``create_app``; o
+    # listener sobe/encerra com o processo (lifespan).
+    dashboard_hub = EventoHub()
+    dashboard_listener = PgEventListener(settings, dashboard_hub)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # Endurecimento operacional (M-01): em staging/produção, recusa subir se o
         # role de conexão ignora a RLS (superuser/BYPASSRLS). No-op em dev/test.
         await database.verificar_role_runtime_nao_privilegiado(engine, settings.app_env)
+        # Etapa 3 (realtime): sobe o listener de LISTEN/NOTIFY (resiliente — reconecta
+        # sozinho). Uma tarefa por processo; o fan-out entre processos é do Postgres.
+        listener_task = asyncio.create_task(dashboard_listener.run())
         logger.info(
             "api iniciada",
             extra={"env": settings.app_env, "r2_configured": settings.r2_configured},
         )
-        yield
-        # Backend stateless: nada a persistir no shutdown — apenas devolve recursos
-        await engine.dispose()
-        logger.info("api encerrada")
+        try:
+            yield
+        finally:
+            # Backend stateless: nada a persistir — só devolve recursos. Cancela o
+            # listener e fecha a conexão dedicada antes de dispor o engine.
+            listener_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await listener_task
+            await engine.dispose()
+            logger.info("api encerrada")
 
     return create_app(
         settings=settings,
@@ -112,6 +129,7 @@ def build_app() -> FastAPI:
         password_hasher=password_hasher,
         token_issuer=token_issuer,
         system_session_factory=system_session_factory,
+        dashboard_hub=dashboard_hub,
         lifespan=lifespan,
     )
 

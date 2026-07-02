@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 31 — 2026-07-02 — [Migração / fora do backlog] Etapa 3 — Realtime próprio (SSE + Postgres LISTEN/NOTIFY)
+
+**Objetivo:** fechar a migração Supabase → local implementando o **realtime próprio do dashboard** (etapa 3), substituindo o Realtime do Supabase (neutralizado na ADR-113). Escopo travado: **só o realtime**. Método: plano aprovado antes de codar + fatias verificáveis.
+
+**Feito (por fatias):**
+- **Levantamento + plano:** confirmei o design da ADR-114 (SSE + `LISTEN/NOTIFY`, evento **genérico** → refetch escopado pela RLS) e uma **validação de arquitetura** dedicada apontou 4 correções obrigatórias (emitir só no ramo novo; listener em conexão direta com DSN convertido; auth em sessão RLS curta; filas *bounded*+drop+cleanup). 4 decisões do dono: **on-prem**, **`LISTEN/NOTIFY`** (não só-in-process), **TTL curto + refresh ao reconectar**, **só dashboard**.
+- **Fatia 1 (backend núcleo):** `domain/eventos.py`, porta `EventBusPort` + `PgNotifyEventBus` (pg_notify atômico, molde do `AuditLogPort`), `EventoHub`+`PgEventListener` (`infrastructure/realtime.py`), `to_asyncpg_dsn`, wiring no `lifespan` (`main.py`) + nas 4 fábricas (`dependencies.py`), emissão no ramo NOVO de `transicoes.py`/`provas.py`. **ADR-115/117.**
+- **Fatia 2 (endpoint SSE):** `GET /dashboard/stream` (`StreamingResponse`, headers anti-buffer, heartbeat, TTL do `exp`, sessão RLS curta `autorizar_stream_dashboard`). **ADR-116.**
+- **Fatia 3 (frontend):** `lib/api/eventos.ts` (`assinarDashboard`) + gancho no `dashboard-view.tsx` (debounce+jitter, `expira`→refresh→reabre, cleanup no unmount).
+- **Fatia 4 (docs):** `docs/realtime.md`, ADR-114..118, CHANGELOG/SESSION_LOG, reconciliação do `CLAUDE.md` (§11 + topo), memória. **ADR-118** (deploy on-prem + contrato do reverse proxy).
+
+**Decisões (ADRs):** ADR-114 (Aceita e ENTREGUE — design), ADR-115 (encaixe hexagonal + emissão atômica), ADR-116 (endpoint SSE — `StreamingResponse` puro/sessão curta/TTL+refresh), ADR-117 (hub + listener asyncpg), ADR-118 (on-prem + reverse proxy). Ver `DECISIONS.md`.
+
+**Testes / cobertura:**
+- api: `ruff`/`mypy --strict` limpos; **suíte @db 864 passed/0 failed** (`REQUIRE_DB_TESTS=1`). Novos: `test_realtime.py`, `test_dashboard_stream.py`, `test_realtime_notify.py` (pg_notify commit/rollback/idempotente + `PgEventListener`→hub), `test_dashboard_stream_endpoints.py`.
+- web: `pnpm lint` 0 erros (2 warnings pré-existentes não-realtime); `pnpm build` ✅; `pnpm exec vitest run` **200 passed (31 arq.)** (novos: `eventos.test.ts` + casos SSE no `dashboard-view.test.tsx`).
+- **Sem migration/RLS** (`LISTEN/NOTIFY` não precisa; head segue `0023`).
+
+**Pendências / em aberto:**
+- [ ] **Smoke test ao vivo no navegador** (o único elo fora dos testes automatizados): backend :8001 + `pnpm dev` → login → abrir `/dashboard` → transicionar prova noutra aba → contadores sobem ao vivo. Roteiro em `docs/realtime.md §7`.
+- [ ] **Operação on-prem:** configurar o reverse proxy conforme `docs/realtime.md §4` (sem buffering/gzip p/ `text/event-stream`; `proxy_read_timeout` > 20 s; conexão direta p/ o `LISTEN`).
+- [ ] Vestigiais inócuos herdados da Sessão 30 (dropar `custom_access_token_hook`, aposentar `keep_alive.py`) — opcionais.
+- [ ] 2 warnings de lint pré-existentes no web (`Calendar` em auditoria-view; `useMemo` dep em relatorios-view) — alheios.
+
+**Próximo passo:**
+- **Migração Supabase → local COMPLETA** (Banco + Auth + Realtime). Retomar a **auditoria de fechamento da Wave 6 / revisão final de sistema** (backlog v1.0 já estava completo).
+
+**Definition of Done:** ✅ atendida no aplicável (testes ≥ piso; sem console/log crítico; error boundary/degradação graciosa cobertos; animações preservadas com `prefers-reduced-motion`; escritas idempotentes; sem N+1 — o refetch reusa a consulta única do C16). **Sem migration/RLS** neste componente. Falta só o smoke ao vivo + a config de proxy (operação).
+
+---
+
 ## Sessão 30 — 2026-07-02 — [Migração / fora do backlog] Supabase → LOCAL (Banco + Autenticação)
 
 **Objetivo:** tirar o projeto do Supabase e rodar tudo local. Pedido do dono, "por partes", com plano aprovado antes de codar e execução por fatias verificáveis. "Supabase" = 3 subsistemas: **Banco**, **Auth (GoTrue)**, **Realtime**.

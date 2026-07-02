@@ -92,8 +92,9 @@ warn_unreachable = true
 pretty = true
 
 [[tool.mypy.overrides]]
-# SDKs sem stubs completos; a fronteira tipada é o nosso adapter
-module = ["boto3.*", "botocore.*", "moto.*"]
+# SDKs sem stubs completos; a fronteira tipada é o nosso adapter. asyncpg é usado
+# cru só pelo listener de LISTEN/NOTIFY (etapa 3) — a fronteira é PgEventListener.
+module = ["boto3.*", "botocore.*", "moto.*", "asyncpg.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

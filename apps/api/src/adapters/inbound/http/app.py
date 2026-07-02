@@ -36,6 +36,7 @@ from src.application.ports.password_hasher import PasswordHasherPort
 from src.application.ports.storage import StoragePort
 from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
+from src.infrastructure.realtime import EventoHub
 
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]] | None
 
@@ -54,6 +55,8 @@ def create_app(
     password_hasher: PasswordHasherPort | None = None,
     token_issuer: TokenIssuerPort | None = None,
     system_session_factory: async_sessionmaker[AsyncSession] | None = None,
+    # Etapa 3 (realtime): hub in-process que faz fan-out dos sinais SSE do dashboard.
+    dashboard_hub: EventoHub | None = None,
     lifespan: Lifespan = None,
 ) -> FastAPI:
     """Cria a aplicação FastAPI com middlewares, handlers de erro e routers.
@@ -90,6 +93,11 @@ def create_app(
     app.state.password_hasher = password_hasher or Argon2PasswordHasher()
     app.state.token_issuer = token_issuer
     app.state.system_session_factory = system_session_factory
+    # Etapa 3 (realtime): sempre há um hub (default seguro, como o JwtVerifier deny-all
+    # e o gerador de etiqueta) — os testes que não o passam ainda conseguem abrir o
+    # stream SSE. O listener LISTEN/NOTIFY que ALIMENTA o hub é subido pelo composition
+    # root (``main.py``) no lifespan; em teste/offline o hub existe mas fica sem fonte.
+    app.state.dashboard_hub = dashboard_hub or EventoHub()
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
     # para fora: BodyLimit → ErrorHandling → CORS → RequestId.
