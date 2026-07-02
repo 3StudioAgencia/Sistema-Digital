@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -9,6 +10,7 @@ import type { Usuario } from "@/lib/api/usuarios";
 import { DURATION, EASING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { PageTransition } from "@/components/ui/motion";
+import logo3studio from "@/assets/logo-3studio.svg";
 
 import { Sidebar } from "./Sidebar";
 import styles from "./app-shell.module.css";
@@ -99,8 +101,7 @@ export function AppShell({ usuario, emailSessao, children }: AppShellProps) {
           >
             <Menu size={24} aria-hidden />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element -- SVG estático */}
-          <img src="/logo-3studio.svg" alt="3Studio" width={94} height={20} />
+          <Image src={logo3studio} alt="3Studio" width={94} height={20} />
         </header>
 
         <main className={styles.conteudo}>

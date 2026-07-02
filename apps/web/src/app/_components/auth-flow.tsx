@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, type Variants, motion } from "framer-motion";
 
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
+import logo3studio from "@/assets/logo-3studio.svg";
 
 import styles from "../login/login.module.css";
 import { LoginPanel } from "./login-panel";
@@ -61,8 +63,8 @@ export function AuthFlow({ expired }: { expired: boolean }) {
               animate="show"
             >
               <motion.div variants={welcomeItem}>
-                <img
-                  src="/logo-3studio.svg"
+                <Image
+                  src={logo3studio}
                   alt="3Studio"
                   width={122}
                   height={28}

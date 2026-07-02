@@ -14,7 +14,7 @@
 .heroImg {
   position: absolute;
   inset: 0;
-  background-image: url("/login-bg.jpg");
+  background-image: url("../../assets/login-bg.jpg");
   background-size: cover;
   background-position: center;
 }
@@ -190,7 +190,7 @@
   left: 0;
   right: 0;
   height: 64%;
-  background-image: url("/login-bg.jpg");
+  background-image: url("../../assets/login-bg.jpg");
   background-size: cover;
   background-position: center top;
 }
@@ -268,8 +268,8 @@
     flex: 0 0 52%;
     margin: 24px;
     overflow: hidden;
-    -webkit-mask-image: url("/login-shape.svg");
-    mask-image: url("/login-shape.svg");
+    -webkit-mask-image: url("../../assets/login-shape.svg");
+    mask-image: url("../../assets/login-shape.svg");
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
     -webkit-mask-repeat: no-repeat;

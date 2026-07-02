@@ -93,4 +93,4 @@ antialiasing/compositing — dentro da tolerância).
   (busca global de provas) só existe a partir da Wave 2.
 - `/` e `/inicio` redirecionam para `HOME_PADRAO` (`/dashboard`) — a home do
   perfil definida no C05 (● a todos na Matriz §7; ADR-030/W1-A-003).
-- A wordmark reutiliza `public/logo-3studio.svg` (C03); ícones: `lucide-react`.
+- A wordmark reutiliza `src/assets/logo-3studio.svg` (C03) — **importada e renderizada via `next/image`** (`<Image>`); movida de `public/` para `src/assets/` (ADR-106); ícones: `lucide-react`.
