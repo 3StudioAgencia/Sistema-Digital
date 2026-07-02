@@ -2,6 +2,13 @@
 
 > Documento-mestre de contexto para o **Claude Code**. Leia este arquivo **primeiro**, em **toda** sessão, antes de qualquer ação. Ele tem precedência sobre suposições. Em caso de conflito entre este arquivo e o código existente, este arquivo vence — e o código deve ser corrigido.
 
+> ⚙️ **ATUALIZAÇÃO ESTRUTURAL — 2026-07-02: migração Supabase → LOCAL (ADR-107..113, fora do backlog v1.0).** O projeto **deixou de usar o Supabase**. Onde este documento (e o DAT) mencionam Supabase Auth/Postgres/Realtime, leia com esta ressalva:
+> - **Banco:** PostgreSQL **local** (não mais o Postgres gerenciado do Supabase). Schema **idêntico**, pelas mesmas migrations Alembic.
+> - **Autenticação:** **própria em FastAPI** (não mais Supabase Auth/GoTrue) — o backend **EMITE e verifica** JWT **ES256** (par de chaves), senha em **argon2id**, refresh token rotativo, **cookies httpOnly**. **A regra "PyJWT só verifica, nunca emite" está REVOGADA** (ADR-109). O par `request.jwt.claims` + `SET LOCAL ROLE authenticated` e **toda a RLS continuam idênticos** (o contrato de claims é preservado verbatim; a RLS de `provas` casa por `user_id`, não `sub`).
+> - **Realtime:** neutralizado (o dashboard usa a carga SSR); substituição por SSE/WS próprio = **etapa 3** (ADR-113).
+> - **Frontend:** `lib/auth/` (jose) no lugar de `@supabase/ssr`; rewrite `/api/*`→backend; cookies httpOnly same-origin.
+> Detalhes: `CHANGELOG.md [Unreleased]`, `DECISIONS.md ADR-107..113`, `SESSION_LOG.md` Sessão 30, memória `migracao-supabase-local`.
+
 ---
 
 ## 1. O que é este projeto
@@ -78,10 +85,10 @@ Estes pilares têm precedência sobre conveniências de implementação. Todo PR
 - **Python 3.12** (piso 3.11) · **FastAPI** (async, OpenAPI automático).
 - **SQLAlchemy 2.0** async · **Pydantic v2** (validação + enforcement da máquina de estados).
 - **Alembic** — migrations versionadas das **tabelas de domínio**.
-- **PyJWT ≥ 2.8** — **apenas verifica** a assinatura dos JWT do Supabase Auth. **Nunca emite tokens.** (Não usar `python-jose`.)
+- **PyJWT ≥ 2.8** + **cryptography** (ES256) + **argon2-cffi** — auth **PRÓPRIA** (ADR-109; migração 2026-07): o backend **EMITE** (login) **e verifica** o JWT ES256 próprio; senha em **argon2id**; refresh token rotativo. *(Antes: PyJWT só verificava o JWT do Supabase — regra revogada.)* (Não usar `python-jose`.)
 
 **Banco / Auth / Realtime**
-- **PostgreSQL via Supabase** (free tier) · **Supabase Auth** (fonte de verdade da autenticação) · **Supabase Realtime** (WebSocket) · **Row Level Security** (camada inferior do RBAC).
+- **PostgreSQL LOCAL** (ADR-108; *antes: via Supabase*) · **Auth PRÓPRIA em FastAPI** (ADR-109; JWT ES256 emitido+verificado, argon2id, refresh rotativo, cookies httpOnly — *antes: Supabase Auth*) · **Realtime** neutralizado → SSE/WS próprio na etapa 3 (ADR-113; *antes: Supabase Realtime*) · **Row Level Security** (camada inferior do RBAC — **inalterada**; lê `request.jwt.claims` do NOSSO JWT via os helpers `app_*`).
 
 **Storage**
 - **Cloudflare R2** (S3-compatível, egress zero) · **boto3** — artes das provas.
@@ -241,9 +248,10 @@ uv run alembic upgrade head                 # migrations (usa MIGRATIONS_DATABAS
 uv run pytest --cov                         # testes + cobertura (offline; @db pula sem Postgres)
 uv run ruff check . && uv run mypy          # lint + types (strict; mypy lê files do pyproject)
 uv run python -m src.tasks.keep_alive       # keep-alive: ping read-only ao banco (W0-C02; exit 0/≠0)
-uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>"
-                                            # 1º admin (W1-C04): upsert da linha de domínio a partir
-                                            # da conta de auth EXISTENTE (exige SUPABASE_SECRET_KEY)
+uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>" --senha "<Senha>"
+                                            # 1º admin (W1-C04 → Sessão 30): cria a credencial LOCAL
+                                            # (argon2id em auth_credentials) + a linha de domínio numa
+                                            # única transação via owner direto (sem Supabase)
 
 # Frontend (apps/web)
 cd apps/web && pnpm install
@@ -320,9 +328,9 @@ Ao final de **toda** sessão de trabalho, **antes** de encerrar, o Claude Code d
 - ❌ Não colocar regras de transição no banco — elas vivem em `rules.py`.
 - ❌ Não criar tabelas de domínio pelo painel do Supabase — só via Alembic.
 - ❌ Não criar/alterar RLS sem versionar o `.sql` em `migrations/rls/`.
-- ❌ Não emitir JWT no backend (Supabase Auth emite; PyJWT só verifica).
+- ❌ ~~Não emitir JWT no backend~~ — **REVOGADO (ADR-109, Sessão 30):** o backend AGORA **emite** o JWT ES256 próprio no login (além de verificar). Ao mexer na auth, preserve o **contrato de claims verbatim** (`sub`/`user_id`/`setor`/`administrador`/`aud="authenticated"`) e o role Postgres `authenticated` — é o que mantém RLS + gates + `access-matrix.ts` intactos.
 - ❌ Não animar `width/height/top/left`; só `transform`/`opacity`.
-- ❌ Não adicionar polling no dashboard (uma subscription Realtime).
+- ❌ ~~Não adicionar polling no dashboard (uma subscription Realtime)~~ — **suspenso (ADR-113, Sessão 30):** o Realtime do Supabase foi removido; o mecanismo de live-update próprio (SSE/WS no FastAPI) fica para a **etapa 3** da migração. Até lá o dashboard usa a carga SSR — **não** introduzir polling novo nesse intervalo.
 - ❌ Não revelar a existência/ator de uma prova fora do escopo (anti-enumeração: mensagem genérica idêntica para "não existe" e "sem permissão").
 - ❌ Não escrever literais de duração/easing fora de `motion/tokens.ts`.
 - ❌ Não implementar a migração de dados do DAT §6 (greenfield, sem dados legados).

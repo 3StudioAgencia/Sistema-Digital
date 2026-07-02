@@ -2,18 +2,18 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  push: vi.fn(),
-  refresh: vi.fn(),
-  signInWithPassword: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class CredenciaisInvalidasError extends Error {}
+  return { push: vi.fn(), refresh: vi.fn(), login: vi.fn(), CredenciaisInvalidasError };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
 }));
 
-vi.mock("@/lib/supabase/client", () => ({
-  getSupabaseBrowserClient: () => ({ auth: { signInWithPassword: mocks.signInWithPassword } }),
+vi.mock("@/lib/auth/client", () => ({
+  login: mocks.login,
+  CredenciaisInvalidasError: mocks.CredenciaisInvalidasError,
 }));
 
 import { AuthFlow } from "./auth-flow";

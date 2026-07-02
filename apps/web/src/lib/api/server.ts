@@ -1,77 +1,48 @@
 /**
- * Acesso server-side ao backend (W1-C04) — usado pelo layout do app shell.
+ * Acesso server-side ao backend (migração Supabase->local).
  *
- * Busca a linha de domínio do usuário logado (GET /usuarios/me) com o access
- * token da sessão (cookies). DEGRADA para null em qualquer falha (API fora,
- * usuário não provisionado, env ausente): o shell renderiza com fallback em
- * vez de derrubar a árvore inteira (RNF-014/016).
+ * Lê o cookie httpOnly `access_token` (via next/headers) e chama o backend
+ * DIRETO por `BACKEND_INTERNAL_URL` (SSR não usa o rewrite /api, que é do
+ * browser), com Bearer. DEGRADA para null em qualquer falha (API fora, sessão
+ * ausente, env): o shell renderiza com fallback em vez de derrubar a árvore
+ * (RNF-014/016).
  */
+import { cookies } from "next/headers";
 import { cache } from "react";
 
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { ACCESS_COOKIE } from "@/lib/auth/verify";
 
 import type { Dashboard } from "./dashboard";
 import type { Usuario } from "./usuarios";
 
+const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://127.0.0.1:8000";
 // Curto de propósito: este fetch roda NO SERVIDOR antes do primeiro byte do
-// shell — com a API fora, o TTFB de toda página autenticada ficaria preso até
-// aqui (revisão W1-C04). 2s cobre o caso normal; na falha, o shell degrada
-// para o fallback de e-mail.
+// shell — com a API fora, o TTFB ficaria preso aqui. 2s cobre o caso normal.
 const TIMEOUT_MS = 2_000;
 
-// Memoizado por REQUISIÇÃO com React `cache()`: o layout do grupo `(app)` e uma
-// página que também precise do perfil (ex.: `/provas`, que deriva o escopo —
-// W2-C07) compartilham UMA única ida ao `/usuarios/me` por render, em vez de
-// duas idênticas em sequência (mínimo de requisições — RNF-020).
-export const fetchUsuarioAtual = cache(async (): Promise<Usuario | null> => {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) return null;
-
-  const supabase = await getSupabaseServerClient();
-  // getSession aqui NÃO protege nada (a proteção é o getUser do layout) — só
-  // fornece o access token para a chamada ao NOSSO backend.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+async function backendGet<T>(path: string): Promise<T | null> {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   if (!token) return null;
-
   try {
-    const response = await fetch(`${base}/usuarios/me`, {
+    const response = await fetch(`${BACKEND}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) return null;
-    return (await response.json()) as Usuario;
+    return (await response.json()) as T;
   } catch {
     return null;
   }
-});
+}
 
-// Carga INICIAL do dashboard no servidor (W4-C16): evita um waterfall de
-// requisição no cliente (TTFB já traz os números — RNF-001 ≤ 3s). DEGRADA para
-// null em qualquer falha; o cliente assume com o refetch via Realtime.
+// Memoizado por REQUISIÇÃO (React `cache`): o layout e uma página que também
+// precise do perfil compartilham UMA ida ao /usuarios/me por render (RNF-020).
+export const fetchUsuarioAtual = cache(
+  async (): Promise<Usuario | null> => backendGet<Usuario>("/usuarios/me"),
+);
+
+// Carga INICIAL do dashboard no servidor (W4-C16): evita waterfall no cliente.
 export async function fetchDashboard(): Promise<Dashboard | null> {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) return null;
-
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) return null;
-
-  try {
-    const response = await fetch(`${base}/dashboard`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as Dashboard;
-  } catch {
-    return null;
-  }
+  return backendGet<Dashboard>("/dashboard");
 }

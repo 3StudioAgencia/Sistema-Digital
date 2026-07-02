@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Dashboard } from "../../../../lib/api/dashboard";
 
@@ -8,41 +8,15 @@ import type { Dashboard } from "../../../../lib/api/dashboard";
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
 
-// Refetch do dashboard (chamado no Realtime / na carga sem SSR).
+// Refetch do dashboard (usado na carga sem SSR e no botão "Tentar novamente").
 const mocks = vi.hoisted(() => ({ fetchDashboard: vi.fn() }));
 vi.mock("@/lib/api/dashboard", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../../../lib/api/dashboard")>();
   return { ...original, fetchDashboard: mocks.fetchDashboard };
 });
 
-// Fake do Realtime: captura o callback de postgres_changes e conta subscriptions.
-const rt = vi.hoisted(() => ({
-  handler: null as null | ((p: unknown) => void),
-  channels: 0,
-  subscribes: 0,
-  removed: 0,
-}));
-vi.mock("@/lib/supabase/client", () => ({
-  getSupabaseBrowserClient: () => ({
-    channel: () => {
-      rt.channels += 1;
-      const ch = {
-        on: (_e: string, _c: unknown, cb: (p: unknown) => void) => {
-          rt.handler = cb;
-          return ch;
-        },
-        subscribe: () => {
-          rt.subscribes += 1;
-          return ch;
-        },
-      };
-      return ch;
-    },
-    removeChannel: () => {
-      rt.removed += 1;
-    },
-  }),
-}));
+// Realtime removido na migração Supabase->local (etapa 3 fará SSE/WS próprio);
+// o dashboard usa a carga SSR inicial + refetch manual, então não há mock de WS.
 
 import { DashboardView } from "./dashboard-view";
 
@@ -61,14 +35,6 @@ const DADOS: Dashboard = {
 beforeEach(() => {
   nav.push.mockReset();
   mocks.fetchDashboard.mockReset();
-  rt.handler = null;
-  rt.channels = 0;
-  rt.subscribes = 0;
-  rt.removed = 0;
-});
-
-afterEach(() => {
-  vi.useRealTimers();
 });
 
 describe("DashboardView (W4-C16)", () => {
@@ -99,47 +65,6 @@ describe("DashboardView (W4-C16)", () => {
     expect(screen.getByText("Nova Prova")).toBeInTheDocument();
   });
 
-  it("usa UMA única subscription do Realtime (RNF-021) e limpa no unmount", () => {
-    const { unmount } = render(<DashboardView inicial={DADOS} podeCriarProva />);
-    expect(rt.channels).toBe(1);
-    expect(rt.subscribes).toBe(1);
-    unmount();
-    expect(rt.removed).toBe(1);
-  });
-
-  it("evento Realtime dispara UM refetch (debounced) e atualiza os números", async () => {
-    vi.useFakeTimers();
-    mocks.fetchDashboard.mockResolvedValue({ ...DADOS, criadas_hoje: 26 });
-    render(<DashboardView inicial={DADOS} podeCriarProva />);
-    expect(screen.getByLabelText("25")).toBeInTheDocument();
-
-    // Rajada de eventos → um só refetch após o debounce.
-    act(() => {
-      rt.handler?.({});
-      rt.handler?.({});
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
-    });
-    // Sob fake timers, waitFor entra em deadlock (poll por timer): asserção direta
-    // após o flush do debounce + microtasks do refetch.
-    expect(mocks.fetchDashboard).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText("26")).toBeInTheDocument();
-  });
-
-  it("queda do Realtime degrada graciosamente: mantém o último valor (sem crash)", async () => {
-    vi.useFakeTimers();
-    mocks.fetchDashboard.mockRejectedValue(new Error("realtime caiu"));
-    render(<DashboardView inicial={DADOS} podeCriarProva />);
-
-    act(() => rt.handler?.({}));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
-    });
-    // Último valor preservado (não some, não quebra a tela).
-    expect(screen.getByLabelText("25")).toBeInTheDocument();
-  });
-
   it("clica em 'Com Vendedor' → listagem pré-filtrada por múltiplos status (DP-6)", async () => {
     const user = userEvent.setup();
     render(<DashboardView inicial={DADOS} podeCriarProva />);
@@ -165,21 +90,17 @@ describe("DashboardView (W4-C16)", () => {
   });
 
   // Corte do C18 (Atalhos Rápidos) — decisão de produto: NÃO existe atalho de
-  // Relatórios. Relatórios é acessível só pela sidebar (3Studio). Este guard
-  // falharia se um atalho/CTA de relatórios reaparecesse no dashboard.
+  // Relatórios. Relatórios é acessível só pela sidebar (3Studio).
   it("corte do C18: nenhum atalho/CTA do dashboard leva a Relatórios", async () => {
     const user = userEvent.setup();
     render(<DashboardView inicial={DADOS} podeCriarProva />);
-    // Nenhum texto "Relatório(s)" no painel (o único acesso é o item de menu).
     expect(screen.queryByText(/relat[óo]rio/i)).toBeNull();
-    // Clicar TODOS os botões nunca navega para /relatorios.
     for (const botao of screen.getAllByRole("button")) {
       await user.click(botao);
     }
     for (const chamada of nav.push.mock.calls) {
       expect(String(chamada[0])).not.toMatch(/\/relatorios/);
     }
-    // Os únicos atalhos continuam sendo Escanear (universal) e Nova Prova (3Studio).
     expect(screen.getByText("Escanear QR Code")).toBeInTheDocument();
     expect(screen.getByText("Nova Prova")).toBeInTheDocument();
   });

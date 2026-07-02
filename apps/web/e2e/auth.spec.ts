@@ -67,14 +67,13 @@ test.describe("Login e sessão (W1-C03)", () => {
   });
 
   test("credenciais inválidas → mensagem genérica (sem revelar o campo)", async ({ page }) => {
-    // Mocka só o endpoint de token do Supabase: signInWithPassword falha (400).
-    await page.route("**/auth/v1/token**", (route) =>
+    // Mocka o login do backend (via rewrite /api): responde 401 (inválido).
+    await page.route("**/api/auth/login", (route) =>
       route.fulfill({
-        status: 400,
+        status: 401,
         contentType: "application/json",
         body: JSON.stringify({
-          error: "invalid_grant",
-          error_description: "Invalid login credentials",
+          error: { code: "http_error", message: "E-mail ou senha inválidos." },
         }),
       }),
     );

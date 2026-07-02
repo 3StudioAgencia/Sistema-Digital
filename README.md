@@ -3,8 +3,10 @@
 Plataforma web da **3Studio** para controle e rastreabilidade do fluxo físico-digital de provas de impressão — da criação à conclusão na clicheria — com máquina de estados de **14 estados** em **4 rotas**, RBAC em duas camadas e identificação por QR Code (câmera) com fallback de digitação manual.
 
 - **Versão (baseline):** v1.0 — Junho/2026
-- **Custo-alvo:** R$ 0 (free tier Supabase + Cloudflare R2)
+- **Custo-alvo:** R$ 0 (infra local + Cloudflare R2)
 - **Documentação de contexto:** [`CLAUDE.md`](./CLAUDE.md) · [`DECISIONS.md`](./DECISIONS.md) · [`CHANGELOG.md`](./CHANGELOG.md) · [`SESSION_LOG.md`](./SESSION_LOG.md)
+
+> ⚠️ **Migração em curso (Sessão 30 · 2026-07-02): Supabase → infra LOCAL.** O projeto **saiu do Supabase**. **Etapa 1 (banco):** PostgreSQL **local** (nativo, porta 5432; migrations Alembic idênticas ao schema anterior). **Etapa 2 (auth):** **autenticação própria no FastAPI** — JWT **ES256** emitido pelo backend, refresh rotativo persistido/revogável (`auth_sessions`), senhas em **argon2id** (`auth_credentials`), cookies **httpOnly**. **Etapa 3 (pendente):** live-update próprio (SSE/WS) para repor o Realtime — hoje **neutralizado** (dashboard usa carga SSR). Notas de Auth/Usuários abaixo que citam Supabase valem como **histórico**; a operação atual é a desta migração. Ver ADR-107..113 e `SESSION_LOG.md` (Sessão 30).
 
 ---
 
@@ -13,8 +15,8 @@ Plataforma web da **3Studio** para controle e rastreabilidade do fluxo físico-d
 | Camada | Tecnologias |
 | --- | --- |
 | **Frontend** | Next.js (App Router, ≥14) · TypeScript (strict) · CSS Modules · Framer Motion · Recharts · html5-qrcode · qrcode.react · react-signature-canvas |
-| **Backend** | Python 3.12 · FastAPI (async) · SQLAlchemy 2.0 async · Pydantic v2 · Alembic · PyJWT (só verifica) |
-| **Banco / Auth / Realtime** | PostgreSQL (Supabase) · Supabase Auth · Supabase Realtime · Row Level Security |
+| **Backend** | Python 3.12 · FastAPI (async) · SQLAlchemy 2.0 async · Pydantic v2 · Alembic · PyJWT (verifica **e emite** o JWT ES256 próprio — Sessão 30) · argon2-cffi (argon2id) |
+| **Banco / Auth / Realtime** | PostgreSQL **local** (nativo, porta 5432) · **Auth própria** no FastAPI (ES256 + refresh rotativo + cookies httpOnly) · Realtime **neutralizado** (SSE/WS próprio → etapa 3) · Row Level Security |
 | **Storage** | Cloudflare R2 (S3-compatível) · boto3 |
 | **Testes** | pytest · pytest-asyncio · httpx · Playwright |
 
@@ -42,8 +44,9 @@ Detalhamento completo da arquitetura em [`CLAUDE.md §5`](./CLAUDE.md).
 
 - **Node.js** LTS + **pnpm**
 - **Python** 3.12 (piso 3.11) + **uv**
-- **Docker** (Postgres local para dev/testes — opcional: a suíte roda offline sem ele)
-- Contas: **Supabase** (projeto) e **Cloudflare R2** (bucket) — provisionamento em [`docs/setup-infra.md`](./docs/setup-infra.md)
+- **PostgreSQL** local (nativo, porta 5432 — cria os bancos `rastreio` e `rastreio_test`). O `docker compose up -d db` segue disponível como alternativa; a suíte de testes roda offline sem Postgres.
+- **Par de chaves EC P-256** para o JWT ES256 próprio (`AUTH_JWT_PRIVATE_KEY`/`AUTH_JWT_PUBLIC_KEY`, PEM em base64) — a privada só no backend; a pública também no `apps/web/.env` (server-only) para a verificação no proxy/SSR.
+- Conta **Cloudflare R2** (bucket) — provisionamento em [`docs/setup-infra.md`](./docs/setup-infra.md). *(Supabase não é mais necessário — ver banner acima.)*
 
 > **Plataformas de deploy confirmadas:** **Vercel** (web) + **Railway** (API), on-prem futuro revisável (ADR-009, *Aceita*); gerenciadores de pacote `uv`/`pnpm` confirmados (ADR-010). Ver `DECISIONS.md`.
 
@@ -53,11 +56,12 @@ Detalhamento completo da arquitetura em [`CLAUDE.md §5`](./CLAUDE.md).
 
 ```bash
 # 1. Variáveis de ambiente (preencher a partir dos exemplos)
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
+cp apps/api/.env.example apps/api/.env       # DATABASE_URL/MIGRATIONS_DATABASE_URL → Postgres local;
+cp apps/web/.env.example apps/web/.env        #   AUTH_ISSUER + AUTH_JWT_PRIVATE_KEY/PUBLIC_KEY (ES256);
+                                              #   web: BACKEND_INTERNAL_URL + AUTH_JWT_PUBLIC_KEY (server-only)
 
-# 2. Postgres local (dev/testes)
-docker compose up -d db
+# 2. Postgres local (nativo na porta 5432 — bancos `rastreio` e `rastreio_test`).
+#    Alternativa em container: docker compose up -d db
 
 # 3. Backend
 cd apps/api
@@ -73,11 +77,11 @@ pnpm dev                                  # http://localhost:3000
 
 > Estes comandos são consolidados conforme os componentes são implementados. A fonte canônica de comandos é este README + `CLAUDE.md §9`.
 >
-> **Auth (W1-C03):** preencha `SUPABASE_URL` (api) e a *publishable key* em `NEXT_PUBLIC_SUPABASE_ANON_KEY` (web). O backend **verifica** o JWT do Supabase (**ES256 via JWKS + HS256 fallback**; prova em `GET /auth/me`) — nunca emite. Arquitetura, fluxo e validação local em [`docs/auth.md`](./docs/auth.md). Ajuste o **TTL do access token** no dashboard do Supabase (a inatividade de 30 min no app é complementar).
+> **Auth (W1-C03 → migrada na Sessão 30):** autenticação **própria** — o backend **emite E verifica** o JWT **ES256** próprio (`POST /auth/login` | `/auth/refresh` | `/auth/logout`; cookies **httpOnly**, refresh rotativo persistido em `auth_sessions`, senhas em **argon2id**). Configure o par de chaves EC (`AUTH_JWT_PRIVATE_KEY`/`AUTH_JWT_PUBLIC_KEY`, PEM base64) e o `AUTH_ISSUER`. O frontend fala com o backend por **rewrite same-origin** `/api/:path*` (`BACKEND_INTERNAL_URL`, default `http://127.0.0.1:8000`); a verificação no proxy/SSR usa `jose` com a chave **pública**. O **contrato de claims** (`sub`/`user_id`/`setor`/`administrador`/`aud="authenticated"`) foi preservado **verbatim** — RLS + gates + `access-matrix.ts` intactos. A inatividade de 30 min no app segue complementar. *(As vars `SUPABASE_*` no `.env` estão comentadas — histórico.)* Arquitetura e validação em [`docs/auth.md`](./docs/auth.md).
 >
-> **Usuários (W1-C04):** a gestão de usuários exige a chave secreta da Admin API no backend — **`SUPABASE_SECRET_KEY`** (Dashboard → Project Settings → API Keys → *Secret keys*; **server-only**, jamais no frontend). Sem ela a app sobe e a gestão responde 503. Configure também a **política de senha** no dashboard (Authentication → Providers → Password: mínimo 8, letras e dígitos — a API valida o mesmo). Primeiro administrador: `uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>"` (a conta precisa existir no Supabase Auth). Detalhes em [`docs/usuarios.md`](./docs/usuarios.md) e [`docs/app-shell.md`](./docs/app-shell.md).
+> **Usuários (W1-C04 → migrada na Sessão 30):** a gestão **não depende mais** da Admin API do Supabase. A criação de usuário é **atômica** — credencial (`auth_credentials`, argon2id) **+** linha de domínio (`usuarios`) numa **única transação**; despromoção/desativação **revogam** as sessões ativas. A **política de senha** é validada pela própria API (mínimo 8, letras e dígitos). Primeiro administrador: `uv run python -m src.tasks.bootstrap_admin -- --email <email> --nome "<Nome>" --senha "<Senha>"` (cria credencial + domínio localmente, sem conta prévia). Detalhes em [`docs/usuarios.md`](./docs/usuarios.md) e [`docs/app-shell.md`](./docs/app-shell.md).
 >
-> **RBAC (W1-C05):** rode `uv run alembic upgrade head` (cria o **Custom Access Token Hook** e a RLS de `usuarios`) e **habilite o hook** no dashboard: Authentication → Hooks → *Customize Access Token (JWT) Claims* → `public.custom_access_token_hook`. Sem isso o JWT não carrega `setor`/`administrador` no topo e a RLS/proxy tratam todos como menor privilégio. A Matriz §7 é fonte única (`apps/web/src/lib/access-matrix.ts` + RLS em `apps/api/migrations/rls/`) — toda mudança exige **PR único** cobrindo as duas camadas. Detalhes em [`docs/rbac.md`](./docs/rbac.md).
+> **RBAC (W1-C05 · claims na Sessão 30):** `uv run alembic upgrade head` aplica a RLS de `usuarios`. Com a auth própria, os claims `setor`/`administrador` passaram a ser **preenchidos pelo emissor ES256 do backend** (o `custom_access_token_hook` do Supabase ficou **vestigial** — não precisa habilitar nada no dashboard). A Matriz §7 é fonte única (`apps/web/src/lib/access-matrix.ts` + RLS em `apps/api/migrations/rls/`) — toda mudança exige **PR único** cobrindo as duas camadas. Detalhes em [`docs/rbac.md`](./docs/rbac.md).
 >
 > **Provas (W2-C06):** `uv run alembic upgrade head` cria a tabela **`provas`** (rota imutável via trigger), a **RLS por perfil** e o role de runtime `rastreio_runtime` (migrations `0007`–`0009`; **já aplicadas no Supabase real**, `alembic_version=0009`). O upload da **arte** usa o bucket R2 **`rastreio-provas-artes`** (já existe) e exige as 4 vars **`R2_*`** no ambiente da api (`R2_BUCKET=rastreio-provas-artes` + endpoint/keys via API token do Cloudflare; sem elas a criação responde 503 com erro claro). A **etiqueta PDF** (95×55 mm, QR + código `PRV-AAAA-MM-NNNNNN`) é gerada sob demanda — libs novas da api: `segno`, `fpdf2`, `python-multipart` (entram no `uv sync`). Fluxo local: api de pé → web `/provas/nova` (admin). Em produção, ative o role de runtime não-owner (passo de operação — [`docs/provas.md`](./docs/provas.md) §6).
 >
@@ -132,7 +136,7 @@ pnpm test:e2e                             # Playwright E2E (telas, responsivo, e
 ## Banco de dados e migrations
 
 - **Tabelas de domínio** → gerenciadas **exclusivamente** por Alembic (`apps/api/migrations/`).
-- **Tabelas de Auth** (`auth.*`) → gerenciadas pelo Supabase. **Não tocar via Alembic.**
+- **Tabelas de Auth** (`auth_credentials`, `auth_sessions`) → **agora locais e versionadas por Alembic** (migration `0023`, Sessão 30). As funções `private.auth_*` (SECURITY DEFINER) ficam no mesmo lote. *(O schema `auth.*` do Supabase deixou de existir neste projeto.)*
 - **Políticas RLS** → versionadas em `apps/api/migrations/rls/`. **Reaplicar após qualquer recriação de tabela.**
 - **Enums de domínio** → criados via `CREATE TYPE` em migrations; alterações via `ALTER TYPE ... ADD VALUE`.
 

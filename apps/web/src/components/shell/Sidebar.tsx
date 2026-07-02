@@ -11,8 +11,8 @@ import { SETOR_LABELS } from "@/lib/api/usuarios";
 import { DURATION } from "@/lib/motion/tokens";
 import { SPRING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
+import { logout } from "@/lib/auth/client";
+import logo3studio from "@/assets/logo-3studio.svg";
 import { NAV_PRINCIPAL, NAV_SECUNDARIA, hrefAtivo, type NavItem } from "./nav-items";
 import styles from "./sidebar.module.css";
 
@@ -43,13 +43,7 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
   const secundarias = NAV_SECUNDARIA.filter((item) => podeAcessarRota(perfil, item.href));
 
   async function sair() {
-    const supabase = getSupabaseBrowserClient();
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) await supabase.auth.signOut(); // uma retentativa
-    } catch {
-
-    }
+    await logout();
     router.replace("/login");
     router.refresh();
   }
@@ -83,8 +77,8 @@ export function Sidebar({ usuario, emailSessao, onNavigate }: SidebarProps) {
 
   return (
     <div className={styles.sidebar}>
-      <img
-        src="logo-3studio.svg"
+      <Image
+        src={logo3studio}
         alt="3Studio"
         width={122}
         height={26}

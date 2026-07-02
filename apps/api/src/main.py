@@ -17,15 +17,14 @@ from fastapi import FastAPI
 
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import build_jwt_verifier
+from src.adapters.outbound.auth.argon2_hasher import Argon2PasswordHasher
+from src.adapters.outbound.auth.es256_issuer import Es256TokenIssuer
+from src.adapters.outbound.auth.keys import carregar_chave_privada_ec
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
-from src.adapters.outbound.identity.supabase_admin import (
-    SupabaseAdminIdentityProvider,
-    UnconfiguredIdentityProvider,
-)
 from src.adapters.outbound.storage.r2_storage import R2Storage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
-from src.application.ports.identity_provider import IdentityProviderPort
 from src.application.ports.storage import StoragePort
+from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure import database
 from src.infrastructure.config import Settings, get_settings
 from src.infrastructure.logging import configure_logging
@@ -45,30 +44,48 @@ def _build_storage(settings: Settings) -> StoragePort:
     return UnconfiguredStorage()
 
 
-def _build_identity_provider(settings: Settings) -> IdentityProviderPort:
-    """Admin API real quando a chave secreta está configurada; stand-in claro
-    caso contrário (gestão de usuários responde 503 — mesma filosofia do R2)."""
-    if settings.supabase_url is not None and settings.supabase_secret_key is not None:
-        return SupabaseAdminIdentityProvider(
-            supabase_url=settings.supabase_url,
-            secret_key=settings.supabase_secret_key.get_secret_value(),
+def _build_token_issuer(settings: Settings) -> TokenIssuerPort | None:
+    """Emissor ES256 quando o par de chaves está configurado; ``None`` caso
+    contrário (o endpoint de login responde 503 — mesma filosofia do R2)."""
+    if settings.auth_jwt_private_key is None:
+        return None
+    private_key = carregar_chave_privada_ec(settings.auth_jwt_private_key.get_secret_value())
+    return Es256TokenIssuer(
+        private_key=private_key,
+        issuer=settings.auth_issuer,
+        access_ttl_seconds=settings.auth_access_ttl_seconds,
+    )
+
+
+def _exigir_auth_configurada(settings: Settings) -> None:
+    """Fail-fast: fora de dev/test, RECUSA subir sem o par de chaves ES256 — senão
+    a app subiria sem emitir/verificar token e NINGUÉM logaria (degradação
+    silenciosa é pior que falhar cedo)."""
+    if settings.app_env in ("staging", "production") and not settings.auth_configured:
+        raise RuntimeError(
+            "AUTH_JWT_PRIVATE_KEY/AUTH_JWT_PUBLIC_KEY ausentes em "
+            f"'{settings.app_env}': a autenticação não funcionaria. Configure o par de "
+            "chaves ES256 (base64 do PEM)."
         )
-    logger.warning("SUPABASE_SECRET_KEY não configurada — gestão de usuários indisponível (503)")
-    return UnconfiguredIdentityProvider()
 
 
 def build_app() -> FastAPI:
     """Monta a aplicação completa a partir do ambiente."""
     settings = get_settings()
     configure_logging(settings.log_level)
+    _exigir_auth_configurada(settings)
 
     engine = database.create_runtime_engine(settings)
     # Fábrica de sessões de REQUEST: fail-closed na RLS (W1-A-001) — recusa
     # transação sem claims propagados, em vez de cair no role owner (BYPASSRLS).
     session_factory = database.create_request_session_factory(engine)
+    # Sessão de SISTEMA (sem claims, não fail-closed) para o caminho PRÉ-AUTH
+    # (login/refresh/logout), que roda antes de existir qualquer claim.
+    system_session_factory = database.create_session_factory(engine)
     storage = _build_storage(settings)
     jwt_verifier = build_jwt_verifier(settings)
-    identity_provider = _build_identity_provider(settings)
+    password_hasher = Argon2PasswordHasher()
+    token_issuer = _build_token_issuer(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -81,8 +98,6 @@ def build_app() -> FastAPI:
         )
         yield
         # Backend stateless: nada a persistir no shutdown — apenas devolve recursos
-        if isinstance(identity_provider, SupabaseAdminIdentityProvider):
-            await identity_provider.aclose()
         await engine.dispose()
         logger.info("api encerrada")
 
@@ -92,9 +107,11 @@ def build_app() -> FastAPI:
         db_ping=partial(database.ping, engine),
         jwt_verifier=jwt_verifier,
         session_factory=session_factory,
-        identity_provider=identity_provider,
         # Template padrão da etiqueta (RN-011); o C09 trará a configuração.
         etiqueta_generator=FpdfEtiquetaGenerator(),
+        password_hasher=password_hasher,
+        token_issuer=token_issuer,
+        system_session_factory=system_session_factory,
         lifespan=lifespan,
     )
 

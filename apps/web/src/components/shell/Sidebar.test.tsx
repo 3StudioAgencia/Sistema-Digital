@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   pathname: { value: "/usuarios" },
   replace: vi.fn(),
   refresh: vi.fn(),
-  signOut: vi.fn(),
+  logout: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -16,8 +16,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh, push: vi.fn() }),
 }));
 
-vi.mock("@/lib/supabase/client", () => ({
-  getSupabaseBrowserClient: () => ({ auth: { signOut: mocks.signOut } }),
+vi.mock("@/lib/auth/client", () => ({
+  logout: mocks.logout,
 }));
 
 import { Sidebar } from "./Sidebar";
@@ -49,7 +49,7 @@ const ANA_VENDEDORA: Usuario = {
 beforeEach(() => {
   mocks.pathname.value = "/usuarios";
   mocks.replace.mockClear();
-  mocks.signOut.mockReset().mockResolvedValue({ error: null });
+  mocks.logout.mockReset().mockResolvedValue(undefined);
 });
 
 describe("Sidebar (app shell — W1-C04)", () => {
@@ -73,7 +73,6 @@ describe("Sidebar (app shell — W1-C04)", () => {
       "Usuários",
       "Auditoria",
       "Configurações",
-      "Informações",
     ]);
   });
 
@@ -85,8 +84,8 @@ describe("Sidebar (app shell — W1-C04)", () => {
     const rotulos = within(nav)
       .getAllByRole("link")
       .map((l) => l.textContent);
-    // Só universais (Dashboard/Provas/Escanear) + neutra (Informações).
-    expect(rotulos).toEqual(["Dashboard", "Provas", "Escanear", "Informações"]);
+    // Só universais (Dashboard/Provas/Escanear).
+    expect(rotulos).toEqual(["Dashboard", "Provas", "Escanear"]);
     // Exclusivos de admin ausentes:
     expect(within(nav).queryByText("Nova prova")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Usuários")).not.toBeInTheDocument();
@@ -112,11 +111,11 @@ describe("Sidebar (app shell — W1-C04)", () => {
     expect(screen.getByText("Olá fulano.tal!")).toBeInTheDocument();
   });
 
-  it("Sair faz signOut e volta ao login", async () => {
+  it("Sair faz logout e volta ao login", async () => {
     const user = userEvent.setup();
     render(<Sidebar usuario={MONICA} emailSessao="monica@3studio.test" />);
     await user.click(screen.getByRole("button", { name: "Sair" }));
-    expect(mocks.signOut).toHaveBeenCalledTimes(1);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
     expect(mocks.replace).toHaveBeenCalledWith("/login");
   });
 });

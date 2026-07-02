@@ -61,18 +61,18 @@ class Settings(BaseSettings):
     # Migrations/Alembic: conexão direta/sessão (porta 5432) — DDL exige sessão.
     migrations_database_url: str
 
-    # --- Supabase Auth (Wave 1/C03 — verificação de JWT, DP-2) -----------
-    # URL do projeto (deriva o JWKS quando supabase_jwks_url está vazio).
-    supabase_url: str | None = None
-    # JWKS do projeto p/ verificação ES256 (assimétrica). Vazio → derivado de
-    # supabase_url. O default atual do Supabase é ES256 (ADR-018).
-    supabase_jwks_url: str | None = None
-    # Segredo HS256 legado — fallback opcional de verificação (PyJWT só verifica).
-    supabase_jwt_secret: SecretStr | None = None
-    # Chave SECRETA da Admin API (W1-C04 — provisionamento de usuários).
-    # Formato novo ``sb_secret_...`` (ou a service_role legada). SERVER-ONLY:
-    # jamais em NEXT_PUBLIC_*/bundle de cliente — dá acesso com BYPASSRLS.
-    supabase_secret_key: SecretStr | None = None
+    # --- Auth própria: JWT ES256 emitido pela app (autenticação local) -------
+    # Par de chaves EC P-256 em BASE64 do PEM (linha única — evita PEM multilinha
+    # em .env). A privada é SERVER-ONLY (assina); a pública verifica (backend e,
+    # na Fase 3, o proxy do Next). Sem o par, a app recusa subir (fail-fast) fora
+    # de dev/test — ver ``exigir_auth_configurada``.
+    auth_jwt_private_key: SecretStr | None = None
+    auth_jwt_public_key: str | None = None
+    # Emissor (claim ``iss``) dos tokens próprios — validado na verificação.
+    auth_issuer: str = "rastreio-api"
+    # TTL do access token (curto) e do refresh token rotativo (mais longo).
+    auth_access_ttl_seconds: int = 1800  # 30 min
+    auth_refresh_ttl_seconds: int = 604800  # 7 dias
 
     # --- Cloudflare R2 (S3-compatível) -----------------------------------
     # Opcionais por design: o ambiente pode não ter credenciais reais
@@ -149,39 +149,13 @@ class Settings(BaseSettings):
         return self.r2_bucket is not None
 
     @property
-    def identity_admin_configured(self) -> bool:
-        """Admin API utilizável: precisa da URL do projeto E da chave secreta."""
-        return self.supabase_url is not None and self.supabase_secret_key is not None
+    def auth_configured(self) -> bool:
+        """Emissão/verificação de token utilizável: precisa do par de chaves ES256."""
+        return self.auth_jwt_private_key is not None and self.auth_jwt_public_key is not None
 
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
-
-    @property
-    def effective_jwks_url(self) -> str | None:
-        """URL do JWKS para verificação assimétrica (ES256).
-
-        Explícita (``SUPABASE_JWKS_URL``) ou derivada de ``SUPABASE_URL`` no
-        endpoint padrão do GoTrue. ``None`` quando nada está configurado — aí o
-        verifier opera só com HS256 (se houver segredo) ou rejeita tudo.
-        """
-        if self.supabase_jwks_url:
-            return self.supabase_jwks_url
-        if self.supabase_url:
-            return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-        return None
-
-    @property
-    def effective_issuer(self) -> str | None:
-        """Emissor (``iss``) esperado dos JWT do Supabase: ``<supabase_url>/auth/v1``.
-
-        Mesma base de ``effective_jwks_url`` — derivar ambos do MESMO campo evita
-        divergência. ``None`` quando ``SUPABASE_URL`` não está configurada: aí a
-        validação de ``iss`` fica desligada (W1-A-013), preservando os setups de
-        teste que não montam auth e o fallback HS256 legado sem URL."""
-        if self.supabase_url:
-            return f"{self.supabase_url.rstrip('/')}/auth/v1"
-        return None
 
 
 @lru_cache

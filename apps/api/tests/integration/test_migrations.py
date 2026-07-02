@@ -53,9 +53,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0022", (
-        "head deve registrar a revisão 0022 (audit_log: log imutável de todas as "
-        "ações + chain de integridade — W6-C20)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0023", (
+        "head deve registrar a revisão 0023 (auth_local: credenciais + sessões da "
+        "autenticação própria — migração Supabase->local)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -291,6 +291,24 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 3
     ), "0022 deve criar as 3 funções do chain no schema private (hash/append/verificar)"
+    # Migração Supabase->local (0023): tabelas de auth (RLS deny-all) + funções
+    # private.auth_* (login/refresh/logout/provisionamento).
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_class WHERE relname IN "
+            "('auth_credentials', 'auth_sessions') AND relrowsecurity",
+        )
+        == 2
+    ), "0023 deve criar auth_credentials/auth_sessions com RLS habilitada (deny-all)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'private' AND p.proname LIKE 'auth_%'",
+        )
+        == 8
+    ), "0023 deve criar as 8 funções private.auth_* (autenticação própria)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"
@@ -384,6 +402,21 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 0
     ), "downgrade da 0022 deve remover as funções do chain de audit_log"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_class WHERE relname IN ('auth_credentials', 'auth_sessions')",
+        )
+        == 0
+    ), "downgrade da 0023 deve remover as tabelas de auth"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'private' AND p.proname LIKE 'auth_%'",
+        )
+        == 0
+    ), "downgrade da 0023 deve remover as funções private.auth_*"
 
     # Repetibilidade: aplicar de novo após downgrade funciona (e deixa o banco pronto)
     command.upgrade(alembic_cfg, "head")

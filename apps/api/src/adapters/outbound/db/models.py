@@ -94,6 +94,57 @@ class UsuarioRow(Base):
     )
 
 
+class AuthCredencialRow(Base):
+    """Linha de ``auth_credentials`` (migration 0023 — autenticação própria).
+
+    Credencial de login local: 1:1 com ``usuarios`` por ``user_id`` (= usuarios.id
+    = ``sub`` do JWT). Substitui o ``auth.users`` do Supabase. Sem FK física (a
+    criação é atômica — credencial + linha de domínio na mesma transação). Acesso
+    de runtime SÓ via funções ``private.auth_*`` (RLS deny-all); este modelo existe
+    para o espelho de schema (autogenerate), não para leitura de runtime.
+    """
+
+    __tablename__ = "auth_credentials"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    senha_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class AuthSessionRow(Base):
+    """Linha de ``auth_sessions`` (migration 0023 — refresh tokens rotativos).
+
+    Guarda o SHA-256 (hex) do refresh token opaco — nunca o token cru — com
+    ``expires_at`` e ``revoked_at`` (NULL = ativo). Acesso de runtime SÓ via funções
+    ``private.auth_*`` (RLS deny-all); este modelo existe para o espelho de schema.
+    """
+
+    __tablename__ = "auth_sessions"
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+
+    id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    refresh_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class ProvaRow(Base):
     """Linha da tabela ``provas`` (migration 0007 — W2-C06).
 
@@ -310,6 +361,8 @@ __all__ = [
     "NAMING_CONVENTION",
     "AssinaturaRow",
     "AuditLogRow",
+    "AuthCredencialRow",
+    "AuthSessionRow",
     "Base",
     "MovimentacaoRow",
     "ProvaRow",

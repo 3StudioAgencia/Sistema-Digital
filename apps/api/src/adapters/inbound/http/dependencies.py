@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.adapters.inbound.http.auth import AuthenticatedUser, get_current_user
 from src.adapters.outbound.db.assinaturas_repository import SqlAlchemyAssinaturasRepository
 from src.adapters.outbound.db.audit_log_repository import SqlAlchemyAuditLogRepository
+from src.adapters.outbound.db.auth_credentials_writer import SqlAlchemyAuthCredentialsWriter
 from src.adapters.outbound.db.dashboard_repository import SqlAlchemyDashboardRepository
 from src.adapters.outbound.db.movimentacoes_repository import SqlAlchemyMovimentacoesRepository
 from src.adapters.outbound.db.provas_repository import SqlAlchemyProvasRepository
@@ -28,7 +29,7 @@ from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepos
 from src.application.auditoria import AuditoriaService
 from src.application.dashboard import DashboardService
 from src.application.ports.etiqueta import EtiquetaPort
-from src.application.ports.identity_provider import IdentityProviderPort
+from src.application.ports.password_hasher import PasswordHasherPort
 from src.application.ports.storage import StoragePort
 from src.application.provas import (
     ProvasConsultaService,
@@ -57,13 +58,15 @@ async def get_usuarios_service(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Persistência não configurada.",
         )
-    identity: IdentityProviderPort = request.app.state.identity_provider
+    hasher: PasswordHasherPort = request.app.state.password_hasher
     # Sessão de request com a RLS ligada ao usuário corrente (ponto único,
-    # fail-closed — W1-A-001). O C06 reusa este mesmo opener para ``provas``.
+    # fail-closed — W1-A-001). Criação de usuário = credencial (auth_credentials via
+    # ``private.auth_criar_credencial``) + linha de domínio na MESMA transação.
     async with abrir_sessao_rls(factory, user.claims) as session:
         yield UsuariosService(
             repo=SqlAlchemyUsuariosRepository(session),
-            identity=identity,
+            auth=SqlAlchemyAuthCredentialsWriter(session),
+            hasher=hasher,
             uow=SqlAlchemyUnitOfWork(session),
         )
 

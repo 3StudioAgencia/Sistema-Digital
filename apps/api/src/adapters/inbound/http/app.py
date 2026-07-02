@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.adapters.inbound.http.auditoria import router as auditoria_router
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.auth import router as auth_router
+from src.adapters.inbound.http.auth_endpoints import router as auth_endpoints_router
 from src.adapters.inbound.http.dashboard import router as dashboard_router
 from src.adapters.inbound.http.errors import install_error_handlers
 from src.adapters.inbound.http.health import DbPing
@@ -28,11 +29,12 @@ from src.adapters.inbound.http.provas import router as provas_router
 from src.adapters.inbound.http.relatorios import router as relatorios_router
 from src.adapters.inbound.http.settings import router as settings_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
+from src.adapters.outbound.auth.argon2_hasher import Argon2PasswordHasher
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
-from src.adapters.outbound.identity.supabase_admin import UnconfiguredIdentityProvider
 from src.application.ports.etiqueta import EtiquetaPort
-from src.application.ports.identity_provider import IdentityProviderPort
+from src.application.ports.password_hasher import PasswordHasherPort
 from src.application.ports.storage import StoragePort
+from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
 
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]] | None
@@ -44,17 +46,23 @@ def create_app(
     db_ping: DbPing,
     jwt_verifier: JwtVerifier | None = None,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-    identity_provider: IdentityProviderPort | None = None,
     etiqueta_generator: EtiquetaPort | None = None,
+    # Autenticação própria (migração Supabase->local). ``system_session_factory``
+    # é a sessão de SISTEMA (sem claims) do caminho pré-auth (login/refresh/logout);
+    # ``token_issuer`` emite o access token. Defaults: hasher concreto (puro, sem
+    # segredo); issuer/sessão None → /auth/login responde 503 (auth não configurada).
+    password_hasher: PasswordHasherPort | None = None,
+    token_issuer: TokenIssuerPort | None = None,
+    system_session_factory: async_sessionmaker[AsyncSession] | None = None,
     lifespan: Lifespan = None,
 ) -> FastAPI:
     """Cria a aplicação FastAPI com middlewares, handlers de erro e routers.
 
     ``jwt_verifier`` é injetado pelo composition root (``main.py``). O default
-    é um verifier *deny-all* (sem JWKS nem segredo): mantém testes que não
-    exercitam auth funcionando sem precisar montá-lo. ``session_factory`` e
-    ``identity_provider`` (W1-C04) seguem o mesmo princípio: defaults seguros
-    (503/erro claro) para testes que não exercitam usuários.
+    é um verifier *deny-all* (sem chave): mantém testes que não exercitam auth
+    funcionando sem precisar montá-lo. ``session_factory``/``token_issuer``/
+    ``system_session_factory`` seguem o mesmo princípio: defaults seguros
+    (503/erro claro) para testes que não exercitam persistência/login.
     """
     app = FastAPI(
         title=APP_NAME,
@@ -74,10 +82,14 @@ def create_app(
     app.state.db_ping = db_ping
     app.state.jwt_verifier = jwt_verifier or JwtVerifier()
     app.state.session_factory = session_factory
-    app.state.identity_provider = identity_provider or UnconfiguredIdentityProvider()
     # Default concreto seguro (mesmo princípio do JwtVerifier deny-all): o
     # gerador é puro/sem segredos — o template padrão serve a app e os testes.
     app.state.etiqueta_generator = etiqueta_generator or FpdfEtiquetaGenerator()
+    # Auth própria: hasher concreto por default (puro); issuer/sessão de sistema
+    # só quando o composition root os fornece (login responde 503 sem eles).
+    app.state.password_hasher = password_hasher or Argon2PasswordHasher()
+    app.state.token_issuer = token_issuer
+    app.state.system_session_factory = system_session_factory
 
     # Ordem dos middlewares: o último adicionado é o mais EXTERNO. De dentro
     # para fora: BodyLimit → ErrorHandling → CORS → RequestId.
@@ -102,6 +114,7 @@ def create_app(
     install_error_handlers(app)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(auth_endpoints_router)
     app.include_router(usuarios_router)
     app.include_router(provas_router)
     app.include_router(settings_router)

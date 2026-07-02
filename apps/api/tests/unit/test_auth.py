@@ -6,12 +6,14 @@ expirado, audience errada, assinatura inválida, malformado, sub ausente,
 algoritmo não suportado e a ausência de configuração (deny-all).
 """
 
+import base64
 import datetime as dt
 from types import SimpleNamespace
 from typing import Any
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from src.adapters.inbound.http.auth import (
@@ -238,32 +240,58 @@ def test_issuer_nao_exigido_quando_nao_configurado(
 
 
 # --- Fábrica a partir do Settings (composition root) ------------------------
-def test_build_verifier_deriva_jwks_e_segredo() -> None:
+ISSUER_PROPRIO = "rastreio-api"
+
+
+def _public_key_b64(private_key: EllipticCurvePrivateKey) -> str:
+    """Chave pública em base64 do PEM — como o ambiente entrega AUTH_JWT_PUBLIC_KEY."""
+    pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return base64.b64encode(pem).decode("ascii")
+
+
+def test_verifier_com_chave_publica_estatica(ec_private_key: EllipticCurvePrivateKey) -> None:
+    # Caminho do JWT próprio: verificação com chave pública EC ESTÁTICA (sem JWKS).
+    verifier = JwtVerifier(public_key=ec_private_key.public_key())
+    assert verifier.verify(_es256(ec_private_key)).sub == SUB
+
+
+def test_build_verifier_com_chave_publica(ec_private_key: EllipticCurvePrivateKey) -> None:
     settings = Settings(
         _env_file=None,
         database_url=_LOCAL_PG,
         migrations_database_url=_LOCAL_PG,
-        supabase_url="https://proj.supabase.co/",
-        supabase_jwt_secret="hs-secret",
+        auth_jwt_public_key=_public_key_b64(ec_private_key),
+        auth_issuer=ISSUER_PROPRIO,
     )
-    assert settings.effective_jwks_url == ("https://proj.supabase.co/auth/v1/.well-known/jwks.json")
-    assert settings.effective_issuer == "https://proj.supabase.co/auth/v1"
     verifier = build_jwt_verifier(settings)
-    assert verifier._jwks_client is not None
-    assert verifier._hs256_secret == "hs-secret"
-    # Derivado da MESMA base do JWKS — sem divergência (W1-A-013).
-    assert verifier._issuer == "https://proj.supabase.co/auth/v1"
+    assert verifier._public_key is not None
+    assert verifier.verify(_es256(ec_private_key, iss=ISSUER_PROPRIO)).sub == SUB
 
 
-def test_build_verifier_sem_supabase_e_denyall() -> None:
+def test_build_verifier_rejeita_issuer_errado(ec_private_key: EllipticCurvePrivateKey) -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=_LOCAL_PG,
+        migrations_database_url=_LOCAL_PG,
+        auth_jwt_public_key=_public_key_b64(ec_private_key),
+        auth_issuer=ISSUER_PROPRIO,
+    )
+    verifier = build_jwt_verifier(settings)
+    with pytest.raises(InvalidToken):
+        verifier.verify(_es256(ec_private_key, iss="emissor-errado"))
+
+
+def test_build_verifier_sem_chave_denyall() -> None:
     settings = Settings(
         _env_file=None,
         database_url=_LOCAL_PG,
         migrations_database_url=_LOCAL_PG,
     )
-    assert settings.effective_jwks_url is None
-    assert settings.effective_issuer is None
     verifier = build_jwt_verifier(settings)
-    assert verifier._jwks_client is None
-    assert verifier._hs256_secret is None
-    assert verifier._issuer is None
+    assert verifier._public_key is None
+    token = jwt.encode(_claims(), HS256_SECRET, algorithm="HS256")
+    with pytest.raises(InvalidToken):
+        verifier.verify(token)

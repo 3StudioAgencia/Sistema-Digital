@@ -23,10 +23,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.application.ports.identity_provider import (
-    IdentityProviderError,
-    IdentityProviderNaoConfigurado,
-)
 from src.application.ports.storage import StorageError
 from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
 from src.domain.movimentacoes import TransicaoIdempotenciaConflitoError
@@ -126,29 +122,6 @@ async def _dominio_exception_handler(request: Request, exc: Exception) -> JSONRe
     )
 
 
-async def _identity_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Falha no provedor de identidade: o adapter já logou os detalhes; ao
-    cliente vai um envelope genérico SEM ecoar a causa (a mensagem interna
-    poderia carregar status/códigos do provedor)."""
-    if isinstance(exc, IdentityProviderNaoConfigurado):
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content=error_envelope(
-                "identidade_nao_configurada",
-                "Gestão de usuários indisponível: provedor de identidade não configurado.",
-                request_id_var.get(),
-            ),
-        )
-    return JSONResponse(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        content=error_envelope(
-            "provedor_identidade",
-            "Falha ao comunicar com o provedor de identidade. Tente novamente.",
-            request_id_var.get(),
-        ),
-    )
-
-
 async def _storage_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Falha de infraestrutura no storage (R2): indisponibilidade clara (503),
     nunca 500 opaco — mesma filosofia do provedor de identidade. O detalhe fica
@@ -171,6 +144,5 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(ErroDeDominio, _dominio_exception_handler)
-    app.add_exception_handler(IdentityProviderError, _identity_exception_handler)
     app.add_exception_handler(StorageError, _storage_exception_handler)
     app.add_exception_handler(Exception, _last_resort_handler)

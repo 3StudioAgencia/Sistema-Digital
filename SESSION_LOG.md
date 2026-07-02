@@ -32,6 +32,65 @@
 
 ---
 
+## Sessão 30 — 2026-07-02 — [Migração / fora do backlog] Supabase → LOCAL (Banco + Autenticação)
+
+**Objetivo:** tirar o projeto do Supabase e rodar tudo local. Pedido do dono, "por partes", com plano aprovado antes de codar e execução por fatias verificáveis. "Supabase" = 3 subsistemas: **Banco**, **Auth (GoTrue)**, **Realtime**.
+
+**Feito:**
+- **Etapa 1 — Banco local (PG18 nativo):** mapeei que as migrations já eram portáveis (roles stand-in/`private.*`/pgcrypto criados por elas; sem FK física p/ `auth.users`). Criei `rastreio`+`rastreio_test`, apliquei `alembic upgrade head`, e **provei equivalência ao Supabase por diff objeto-a-objeto** (tabelas/enums/funções/policies) via MCP. `.env` apontado local (URLs Supabase comentadas). **ADR-108.**
+- **Etapa 2 — Auth própria em FastAPI (backend):**
+  - **Fase 1 (cripto):** migration **`0023`** (`auth_credentials`/`auth_sessions` + 8 funções `private.auth_*` SECURITY DEFINER, RLS deny-all, modelo de acesso em 2 classes — ADR-110) + espelhos `migrations/rls/auth_*.sql` + modelos ORM. `domain/auth.py` (refresh token), portas `PasswordHasher`/`TokenIssuer`, adapters `adapters/outbound/auth/` (argon2id/es256/keys). `JwtVerifier` reescrito (verifica **nossa** chave pública ES256 + lê cookie `access_token`). `config.py` com `AUTH_*` (fail-fast no boot). Par de chaves ES256 gerado no `.env`.
+  - **Fase 2a (login):** `application/auth.py` (`AutenticacaoService` login/refresh/logout, anti-timing/anti-enum), `AuthRepositoryPort`+adapter, endpoints `POST /auth/login|refresh|logout` (cookies httpOnly), sessão de sistema. Teste @db 9 casos (incl. segurança "authenticated não lê credencial").
+  - **Fase 2b (provisionamento atômico):** `UsuariosService` reescrito (credencial+domínio numa transação; **fim da compensação/órfão** — ADR-111); `AuthCredentialsWriterPort`; `bootstrap_admin` com senha (owner). Testes de compensação removidos; endpoints/bootstrap reescritos.
+  - **Fase 2c (limpeza):** removidos `supabase_admin.py`, `IdentityProviderPort`, `FakeIdentityProvider`, `_identity_exception_handler`, campos `supabase_*`/`effective_*`/`identity_admin_configured` do `config.py`, wiring em `main`/`app`/`conftest`; `SUPABASE_*` comentadas no `.env`. **Backend 100% livre de Supabase** (grep em `src/` só acha comentários).
+  - **Login real validado:** `bootstrap_admin` → admin `admin@teste.com`/`teste123` no `rastreio`; `uvicorn` + httpx: login→200+cookies, `/auth/me`+`/usuarios/me`→200 (RLS com o NOSSO JWT), refresh→200, logout→204, senha errada→401.
+- **Etapa 3 (frontend):** `lib/auth/` (jose) no lugar de `lib/supabase/`; rewrite `/api/*` no `next.config`; `proxy.ts` reescrito (verifica cookie + refresh transparente + RBAC preservado); `layout/page/login-page`→`lerSessao()`; `login-panel`→`login()`, inactivity/Sidebar→`logout()`; `api/client.ts`/`server.ts`; Realtime do dashboard **neutralizado** (ADR-113). Deletado `lib/supabase/*`; removidos `@supabase/*`; add `jose`. Testes vitest + e2e reescritos. **Validado ao vivo** (`next start` :3100 + backend :8001): login via `/api`→cookies→RLS; `/dashboard` com/sem cookie e `/`/`/login` logado com os redirects certos. Também **corrigi** 3 testes de nav pré-existentes (item "Informações" removido do `nav-items.ts` pelo dono).
+
+**Decisões (ADRs):** ADR-107 (migração em 3 subsistemas/etapas), ADR-108 (PG18 nativo), ADR-109 (auth própria — **revoga "backend nunca emite JWT"**; ES256/argon2id/refresh rotativo/cookie httpOnly), ADR-110 (tabelas+funções `private.auth_*`, acesso em 2 classes), ADR-111 (provisionamento atômico), ADR-112 (frontend rewrite `/api`+jose), ADR-113 (Realtime→etapa 3). Supersedem ADR-018/019/021/025/084 (partes). Ver `DECISIONS.md`.
+
+**Testes / cobertura:**
+- api: `ruff`/`mypy --strict` limpos; **suíte @db 846 passed/0 failed** (com `REQUIRE_DB_TESTS=1`).
+- web: `pnpm lint` 0 erros (2 warnings pré-existentes não-auth); `pnpm build` ✅; `pnpm test` **192 passed (30 arq.)**.
+- Smoke tests ao vivo (backend + frontend reais): fluxo de login/sessão/RLS/SSR/proxy 100% ✅.
+
+**Pendências / em aberto:**
+- [ ] **Etapa 3 — Realtime do dashboard** (SSE/WS próprio no FastAPI; hoje neutralizado com degradação graciosa).
+- [ ] **Operação:** desligar o Supabase quando confortável; padronizar a porta do backend (instância stale na 8000; web `.env`=`BACKEND_INTERNAL_URL=8001`); rodar `bootstrap_admin` p/ os admins reais; **reiniciar o dev server do frontend** para carregar `next.config`/`.env` novos.
+- [ ] Vestigiais inócuos: dropar a função `custom_access_token_hook` (migration) e aposentar `keep_alive.py` (Postgres local não pausa) — opcional.
+- [ ] 2 warnings de lint pré-existentes no web (`Calendar` em auditoria-view; `useMemo` dep em relatorios-view) — não-auth.
+
+**Próximo passo:** etapa 3 (Realtime) OU auditoria/revisão final de sistema — a critério do dono. (Nada foi commitado ainda — árvore de trabalho com a migração inteira; sugerir commit semântico `feat: migração Supabase → local (DB + auth própria)`.)
+
+**Definition of Done:** ✅ atendida para as etapas 1–2 e o frontend (código limpo, tipado, testado, validado ao vivo; docs de contexto atualizados neste protocolo). ⚠️ Realtime (etapa 3) fora de escopo desta sessão.
+
+---
+
+## Sessão 29 — 2026-07-01 — [Manutenção / frontend] Imagens para `src/assets/` + `<img>`→`<Image>`
+
+**Objetivo:** referenciar as imagens da UI **fora de `public/`** (centralizar numa pasta `assets`) e trocar `<img>` por `<Image>` (`next/image`), **sem quebrar nada** (pedido do dono; commit-âncora `956c2b4` "Enviando para salvar antes de ajuste de imagens").
+
+**Feito:**
+- **Levantamento:** 3 imagens usadas (`logo-3studio.svg` wordmark ×4; `login-bg.jpg` herói; `login-shape.svg` máscara) vs 3 **intencionalmente** deixadas em `public/` (`login-bg.png` gitignorada; `logo-preta.svg`/`Logo-studio-e-arte-preta.svg` = fontes das etiquetas do backend).
+- **Perguntei o ambíguo** (2 escolhas do dono via `AskUserQuestion`): local = **`apps/web/src/assets/`** (alias `@/`); "img→image" = **`<img>`→`<Image>` do `next/image`**.
+- **Movi:** `git mv` de `login-bg.jpg`/`login-shape.svg` para `src/assets/`; `logo-3studio.svg` já existia **idêntica** em `src/assets/` (diff = idênticos) → `git rm` da cópia em `public/`.
+- **Rewire:** 4 usos da wordmark → `<Image src={logo3studio}>` + `import` em `auth-flow`, `login-panel`, `AppShell`, `Sidebar`; 4 `url()` de `login.module.css` → `../../assets/…`. Corrigido o `src` **sem barra** do `Sidebar` (URL relativa quebrava em rotas aninhadas); removidos `import Image` ocioso (Sidebar) e `eslint-disable no-img-element` (AppShell).
+
+**Decisões (ADRs):** ADR-106 (assets usados fora de `public/` via import + `<img>`→`<Image>`). Ver `DECISIONS.md`.
+
+**Testes / verificação:**
+- `next build` (Turbopack) **Compiled successfully** + **TypeScript OK**; `eslint` **0 erros** (3 warnings pré-existentes, alheios); as **3 imagens emitidas** em `.next/static/media/*` (prova de bundle real — CSS `url()` relativo e `import .svg` ambos resolvidos).
+- `pnpm test`: **196 verdes**; **3 falhas PRÉ-EXISTENTES** em `nav-items.test.ts`/`Sidebar.test.tsx` sobre o item **"Informações" ausente** de `nav-items.ts` (arquivo **não tocado** — provado por `git status`; a asserção da wordmark `getByAltText("3Studio")` **passa** com `<Image>`).
+
+**Pendências / itens em aberto:**
+- [ ] **Falhas pré-existentes** `nav-items`/`Sidebar`: os testes esperam **"Informações"** em `NAV_SECUNDARIA`, mas ele foi removido de `nav-items.ts` (ícone `Info` importado e ocioso). Decidir: readicionar o item **ou** atualizar os testes. (Fora do escopo; sinalizado como task à parte.)
+- [ ] Commit ainda **não** feito (aguardando o dono).
+
+**Próximo passo:** commit (`refactor(assets): …`) se o dono aprovar; endereçar "Informações" à parte. (Backlog v1.0 segue COMPLETO; pendente a auditoria de fechamento da Wave 6.)
+
+**Definition of Done:** ✅ para o escopo pedido (build/TS/lint verdes, 3 assets no bundle, `prefers-reduced-motion` intacto — só troca de tag/origem; sem migration/RLS). ⚠️ suíte web com 3 falhas **pré-existentes alheias** (documentadas acima).
+
+---
+
 ## Sessão 28 — 2026-06-22 — [Wave 6 / Componente C20] Interface de Log de Auditoria (fecha o backlog v1.0)
 
 **Objetivo:** W6-C20 — entregar a interface de Auditoria (3Studio-only, read-only) **fiel ao design** (master-detail, filtros, color-coding, painel de detalhe com IP/origem + hash de integridade). Último componente do backlog v1.0.

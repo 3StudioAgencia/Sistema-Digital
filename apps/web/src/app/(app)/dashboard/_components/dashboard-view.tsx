@@ -11,17 +11,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AnimatedCounter } from "@/components/ui/animated-counter/AnimatedCounter";
 import { type Dashboard, fetchDashboard } from "@/lib/api/dashboard";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { fadeRise, staggerContainer } from "@/lib/motion/variants";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import styles from "../dashboard.module.css";
-
-const REFETCH_DEBOUNCE_MS = 800;
 
 function hojeSaoPaulo(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -38,7 +35,6 @@ export function DashboardView({
   const reduced = useReducedMotion();
   const [dados, setDados] = useState<Dashboard | null>(inicial);
   const [erro, setErro] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refetch = useCallback(async (silencioso = true) => {
     try {
@@ -64,21 +60,10 @@ export function DashboardView({
     return () => controller.abort();
   }, [inicial]);
 
-  useEffect(() => {
-    const supabase = getSupabaseBrowserClient();
-    const agendarRefetch = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => void refetch(), REFETCH_DEBOUNCE_MS);
-    };
-    const channel = supabase
-      .channel("dashboard-provas")
-      .on("postgres_changes", { event: "*", schema: "public", table: "provas" }, agendarRefetch)
-      .subscribe();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      void supabase.removeChannel(channel);
-    };
-  }, [refetch]);
+  // Realtime (live-update do dashboard) DESATIVADO na migração Supabase->local:
+  // dependia do WebSocket Realtime do Supabase. A substituição por SSE/WebSocket
+  // do FastAPI é a etapa 3 — por ora o painel usa a carga SSR + refetch manual
+  // (botão "Tentar novamente"). `refetch` segue disponível para essa etapa.
 
   const irPara = useCallback(
     (params: [string, string][]) => {

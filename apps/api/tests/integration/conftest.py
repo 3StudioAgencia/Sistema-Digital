@@ -52,7 +52,7 @@ async def usuarios_engine(usuarios_schema: str) -> AsyncIterator[AsyncEngine]:
         await conn.execute(
             text(
                 "TRUNCATE audit_log, movimentacoes, assinaturas, provas, usuarios, "
-                "system_settings, rate_limit_contadores"
+                "system_settings, rate_limit_contadores, auth_credentials, auth_sessions"
             )
         )
     try:

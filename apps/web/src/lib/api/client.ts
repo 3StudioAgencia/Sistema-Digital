@@ -1,12 +1,11 @@
 /**
- * Cliente HTTP do backend FastAPI (W1-C04) — browser.
+ * Cliente HTTP do backend (browser) — migração Supabase->local.
  *
- * Anexa o Bearer da sessão Supabase corrente e converte o envelope de erro
- * canônico da API ({ error: { code, message, request_id } }) em `ApiError`.
- * Mantém o princípio do mínimo de requisições: nenhuma chamada automática,
- * sem retry agressivo — quem chama decide quando ir à rede (RNF-020/023).
+ * As chamadas vão pela MESMA ORIGEM (`/api/*`, rewrite do next.config): o cookie
+ * httpOnly de sessão flui automaticamente — o browser não manuseia o token
+ * (imune a XSS). Em 401 (access expirado), tenta renovar UMA vez (/api/auth/refresh)
+ * e repete. Converte o envelope de erro canônico da API em `ApiError`.
  */
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -22,18 +21,11 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+// Mesma origem: o rewrite /api/:path* → backend. Sem NEXT_PUBLIC_API_BASE_URL.
+const API_BASE = "/api";
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 type ErrorEnvelope = { error?: { code?: string; message?: string; request_id?: string | null } };
-
-async function accessToken(): Promise<string | null> {
-  const supabase = getSupabaseBrowserClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
-}
 
 type RequestInitLeve = {
   method?: string;
@@ -44,36 +36,37 @@ type RequestInitLeve = {
   timeoutMs?: number;
 };
 
-async function request(path: string, init: RequestInitLeve): Promise<Response> {
-  if (!API_BASE_URL) {
-    throw new ApiError(0, "api_nao_configurada", "API não configurada (NEXT_PUBLIC_API_BASE_URL).");
-  }
-  const token = await accessToken();
+async function enviar(path: string, init: RequestInitLeve): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const multipart = typeof FormData !== "undefined" && init.body instanceof FormData;
   if (init.body !== undefined && !multipart) headers["Content-Type"] = "application/json";
 
-  // O timeout vale SEMPRE — um signal externo (abort de filtro trocado) é
-  // COMBINADO com ele, não o substitui (revisão W1-C04: API pendurada não pode
-  // deixar skeleton infinito).
   const timeout = AbortSignal.timeout(init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
 
+  return fetch(`${API_BASE}${path}`, {
+    method: init.method ?? "GET",
+    headers,
+    body:
+      init.body !== undefined
+        ? multipart
+          ? (init.body as FormData)
+          : JSON.stringify(init.body)
+        : undefined,
+    cache: "no-store",
+    signal,
+  });
+}
+
+async function request(path: string, init: RequestInitLeve): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      method: init.method ?? "GET",
-      headers,
-      body:
-        init.body !== undefined
-          ? multipart
-            ? (init.body as FormData)
-            : JSON.stringify(init.body)
-          : undefined,
-      cache: "no-store",
-      signal,
-    });
+    response = await enviar(path, init);
+    // Access expirado: renova UMA vez e repete (o refresh não passa por aqui).
+    if (response.status === 401 && !path.startsWith("/auth/")) {
+      const renovou = await fetch(`${API_BASE}/auth/refresh`, { method: "POST", cache: "no-store" });
+      if (renovou.ok) response = await enviar(path, init);
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "api_inacessivel", "Não foi possível falar com a API. Tente novamente.");

@@ -27,6 +27,9 @@ dependencies = [
     "fpdf2>=2.8",
     # Parser de multipart/form-data do FastAPI (upload da arte — W2-C06).
     "python-multipart>=0.0.18",
+    # Hashing de senha argon2id da autenticação própria (migração Supabase->local).
+    # A verificação/emissão ES256 do JWT reusa a `cryptography` (já via pyjwt[crypto]).
+    "argon2-cffi>=23.1",
 ]
 
 [dependency-groups]

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { logout } from "@/lib/auth/client";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
@@ -15,12 +15,7 @@ export function InactivityGuard({ timeoutMs = THIRTY_MINUTES_MS }: { timeoutMs?:
 
   useEffect(() => {
     async function expire() {
-      const supabase = getSupabaseBrowserClient();
-      try {
-        const { error } = await supabase.auth.signOut();
-        if (error) await supabase.auth.signOut();
-      } catch {
-      }
+      await logout();
       router.replace("/login?expirado=1");
       router.refresh();
     }

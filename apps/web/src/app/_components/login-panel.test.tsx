@@ -4,19 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOME_PADRAO } from "../../lib/access-matrix";
 
-const mocks = vi.hoisted(() => ({
-  push: vi.fn(),
-  refresh: vi.fn(),
-  replace: vi.fn(),
-  signInWithPassword: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class CredenciaisInvalidasError extends Error {}
+  return {
+    push: vi.fn(),
+    refresh: vi.fn(),
+    replace: vi.fn(),
+    login: vi.fn(),
+    CredenciaisInvalidasError,
+  };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, replace: mocks.replace }),
 }));
 
-vi.mock("@/lib/supabase/client", () => ({
-  getSupabaseBrowserClient: () => ({ auth: { signInWithPassword: mocks.signInWithPassword } }),
+vi.mock("@/lib/auth/client", () => ({
+  login: mocks.login,
+  CredenciaisInvalidasError: mocks.CredenciaisInvalidasError,
 }));
 
 import { LoginPanel } from "./login-panel";
@@ -24,7 +29,7 @@ import { LoginPanel } from "./login-panel";
 beforeEach(() => {
   mocks.push.mockClear();
   mocks.refresh.mockClear();
-  mocks.signInWithPassword.mockReset();
+  mocks.login.mockReset();
 });
 
 describe("LoginPanel", () => {
@@ -44,29 +49,28 @@ describe("LoginPanel", () => {
     expect(screen.getByText(/sess[aã]o expirou por inatividade/i)).toBeInTheDocument();
   });
 
-  it("login válido chama signInWithPassword e redireciona para a home do perfil", async () => {
+  it("login válido chama o backend (login) e redireciona para a home do perfil", async () => {
     const user = userEvent.setup();
-    mocks.signInWithPassword.mockResolvedValue({ error: null });
+    mocks.login.mockResolvedValue({
+      id: "u1",
+      email: "vendedor@3studio.test",
+      setor: "vendedor",
+      administrador: false,
+    });
     render(<LoginPanel expired={false} />);
 
     await user.type(screen.getByLabelText("E-mail:"), "vendedor@3studio.test");
     await user.type(screen.getByLabelText("Senha:"), "minhaSenhaForte");
     await user.click(screen.getByRole("button", { name: "Entrar" }));
 
-    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
-      email: "vendedor@3studio.test",
-      password: "minhaSenhaForte",
-    });
-    // HOME_PADRAO (/dashboard) é universal: um vendedor NÃO é barrado pelo proxy
-    // (corrige o W1-A-003; antes apontava para /usuarios, admin-only).
+    expect(mocks.login).toHaveBeenCalledWith("vendedor@3studio.test", "minhaSenhaForte");
+    // HOME_PADRAO (/dashboard) é universal: um vendedor NÃO é barrado pelo proxy.
     expect(mocks.push).toHaveBeenCalledWith(HOME_PADRAO);
   });
 
-  it("login inválido mostra mensagem GENÉRICA, sem revelar o campo nem o detalhe do provedor", async () => {
+  it("login inválido mostra mensagem GENÉRICA, sem revelar o campo", async () => {
     const user = userEvent.setup();
-    mocks.signInWithPassword.mockResolvedValue({
-      error: { message: "Invalid login credentials" },
-    });
+    mocks.login.mockRejectedValue(new mocks.CredenciaisInvalidasError());
     render(<LoginPanel expired={false} />);
 
     await user.type(screen.getByLabelText("E-mail:"), "vendedor@3studio.test");
@@ -75,7 +79,6 @@ describe("LoginPanel", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/e-mail ou senha inv[aá]lidos/i);
-    expect(alert.textContent ?? "").not.toContain("credentials");
     expect(mocks.push).not.toHaveBeenCalled();
   });
 

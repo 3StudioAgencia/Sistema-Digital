@@ -1,8 +1,9 @@
 """Endpoints de usuários (W1-C04) contra Postgres REAL (@db) — guard, CRUD,
 filtros e regras de negócio expostas via HTTP.
 
-Admin API mockada (FakeIdentityProvider) — a suíte roda offline; o Postgres é o
-local de teste (TEST_DATABASE_URL). JWT assinado com segredo HS256 de teste.
+Auth própria (migração Supabase->local): a criação grava a credencial local
+(auth_credentials) na MESMA transação. O Postgres é o local de teste
+(TEST_DATABASE_URL); JWT assinado com segredo HS256 de teste.
 """
 
 import datetime as dt
@@ -13,13 +14,14 @@ from typing import Any
 import httpx
 import jwt
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.outbound.db.models import UsuarioRow
 from src.domain.usuarios import Localizacao, Setor
 from src.infrastructure.config import Settings
 
-from tests.conftest import FakeIdentityProvider, FakeStorage, make_client, ping_ok
+from tests.conftest import FakeStorage, make_client, ping_ok
 
 pytestmark = pytest.mark.db
 
@@ -59,10 +61,9 @@ def _auth_admin() -> dict[str, str]:
 @pytest.fixture
 async def ctx(
     settings: Settings, fake_storage: FakeStorage, usuarios_engine: AsyncEngine
-) -> AsyncIterator[tuple[httpx.AsyncClient, FakeIdentityProvider, Any]]:
-    """Client ASGI + identidade fake + session factory sobre o PG de teste."""
+) -> AsyncIterator[tuple[httpx.AsyncClient, AsyncEngine, Any]]:
+    """Client ASGI + engine do PG de teste + session factory (auth própria local)."""
     factory = async_sessionmaker(usuarios_engine, expire_on_commit=False)
-    identity = FakeIdentityProvider()
     verifier = JwtVerifier(hs256_secret=HS256_SECRET)
     client = make_client(
         settings,
@@ -70,10 +71,9 @@ async def ctx(
         ping_ok,
         jwt_verifier=verifier,
         session_factory=factory,
-        identity_provider=identity,
     )
     async with client as c:
-        yield c, identity, factory
+        yield c, usuarios_engine, factory
 
 
 async def _seed_usuario(
@@ -200,7 +200,7 @@ async def test_me_sem_provisionamento_404(ctx: Any) -> None:
 # POST /usuarios — criação coordenada
 # ---------------------------------------------------------------------------
 async def test_criar_usuario_caminho_feliz(ctx: Any) -> None:
-    client, identity, factory = ctx
+    client, engine, factory = ctx
     await _seed_admin(factory)
 
     resp = await client.post("/usuarios", json=_payload_criacao(), headers=_auth_admin())
@@ -210,11 +210,16 @@ async def test_criar_usuario_caminho_feliz(ctx: Any) -> None:
     assert body["email"] == "mario@estudio.com.br"
     assert body["ativo"] is True
     assert body["created_at"] is not None
-    # auth user criado com claims corretas
-    auth_user = identity.users[body["id"]]
-    metadata = auth_user["app_metadata"]
-    assert isinstance(metadata, dict)
-    assert metadata["setor"] == "vendedor"
+    # Credencial de login criada JUNTO (mesma transação), com hash argon2id.
+    async with engine.connect() as conn:
+        cred = (
+            await conn.execute(
+                text("SELECT email, senha_hash FROM auth_credentials WHERE user_id = :id"),
+                {"id": body["id"]},
+            )
+        ).one()
+    assert cred.email == "mario@estudio.com.br"
+    assert cred.senha_hash.startswith("$argon2id$")
     # persistido de fato (visível em nova listagem)
     listagem = await client.get("/usuarios", headers=_auth_admin())
     emails = [u["email"] for u in listagem.json()["items"]]
@@ -233,13 +238,12 @@ async def test_criar_usuario_caminho_feliz(ctx: Any) -> None:
     ],
 )
 async def test_criar_payload_invalido_422(ctx: Any, payload_ruim: dict[str, Any]) -> None:
-    client, identity, factory = ctx
+    client, _, factory = ctx
     await _seed_admin(factory)
     resp = await client.post(
         "/usuarios", json=_payload_criacao(**payload_ruim), headers=_auth_admin()
     )
-    assert resp.status_code == 422
-    assert identity.calls == []  # rejeitado na borda, sem tocar o provedor
+    assert resp.status_code == 422  # rejeitado na borda (validação de forma)
 
 
 async def test_criar_vendedor_sem_localizacao_422(ctx: Any) -> None:
@@ -264,32 +268,6 @@ async def test_criar_email_duplicado_409(ctx: Any) -> None:
     )
     assert segundo.status_code == 409
     assert segundo.json()["error"]["code"] == "email_ja_cadastrado"
-
-
-async def test_criar_falha_no_banco_compensa_no_provedor(ctx: Any) -> None:
-    """Falha parcial REAL no Postgres: o id que o provedor emitirá já existe na
-    tabela (colisão de PK passa pela pré-checagem de e-mail). O INSERT falha,
-    a compensação remove o auth user e o 500 sai no envelope padrão sem vazar
-    detalhes internos."""
-    client, identity, factory = ctx
-    await _seed_admin(factory)
-    # FakeIdentityProvider emite ids determinísticos: o primeiro é ...0001.
-    await _seed_usuario(
-        factory,
-        usuario_id="00000000-0000-0000-0000-000000000001",
-        nome="Ocupante",
-        email="outro@x.y",
-    )
-
-    resp = await client.post("/usuarios", json=_payload_criacao(), headers=_auth_admin())
-
-    assert resp.status_code == 500
-    body = resp.json()
-    assert body["error"]["code"] == "internal_error"
-    assert "sb_secret" not in resp.text
-    # compensação: o auth user recém-criado foi removido — sem órfão
-    assert all(u["email"] != "mario@estudio.com.br" for u in identity.users.values())
-    assert any(c[0] == "delete_user" for c in identity.calls)
 
 
 # ---------------------------------------------------------------------------
@@ -405,10 +383,9 @@ async def test_editar_inexistente_404(ctx: Any) -> None:
 
 
 async def test_desativar_e_reativar(ctx: Any) -> None:
-    client, identity, factory = ctx
+    client, _, factory = ctx
     await _seed_listagem(factory)
     alvo = "00000000-0000-0000-0000-000000000002"
-    identity.seed("ana@x.y")  # conta de auth correspondente
 
     desativa = await client.post(f"/usuarios/{alvo}/desativar", headers=_auth_admin())
     assert desativa.status_code == 200
@@ -439,10 +416,9 @@ async def test_auto_desativacao_422(ctx: Any) -> None:
 async def test_desativar_outro_admin_passa_pelo_lock_transacional(ctx: Any) -> None:
     """Com DOIS admins ativos, desativar o outro exercita o caminho completo:
     advisory lock + recheck + UPDATE com lock otimista, contra Postgres real."""
-    client, identity, factory = ctx
+    client, _, factory = ctx
     await _seed_admin(factory)
     outro = "33333333-3333-3333-3333-333333333333"
-    identity.seed("bia@x.y")
     await _seed_usuario(factory, usuario_id=outro, nome="Bia", email="bia@x.y", administrador=True)
 
     resp = await client.post(f"/usuarios/{outro}/desativar", headers=_auth_admin())

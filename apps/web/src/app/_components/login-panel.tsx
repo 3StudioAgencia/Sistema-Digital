@@ -1,13 +1,15 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type Variants, motion } from "framer-motion";
 
 import { HOME_PADRAO } from "@/lib/access-matrix";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { DURATION, EASING, SPRING } from "@/lib/motion/tokens";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { CredenciaisInvalidasError, login } from "@/lib/auth/client";
+import logo3studio from "@/assets/logo-3studio.svg";
 
 import styles from "../login/login.module.css";
 
@@ -52,20 +54,15 @@ export function LoginPanel({ expired }: { expired: boolean }) {
     setHint(false);
     setLoading(true);
     try {
-      const supabase = getSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: senha,
-      });
-      if (signInError) {
-        setError("E-mail ou senha inválidos. Verifique e tente novamente.");
-        setLoading(false);
-        return;
-      }
+      await login(email, senha);
       router.push(HOME_PADRAO);
       router.refresh();
-    } catch {
-      setError("Não foi possível entrar agora. Tente novamente em instantes.");
+    } catch (err) {
+      if (err instanceof CredenciaisInvalidasError) {
+        setError("E-mail ou senha inválidos. Verifique e tente novamente.");
+      } else {
+        setError("Não foi possível entrar agora. Tente novamente em instantes.");
+      }
       setLoading(false);
     }
   }
@@ -73,8 +70,8 @@ export function LoginPanel({ expired }: { expired: boolean }) {
   return (
     <motion.div className={styles.panel} variants={container} initial="hidden" animate="show">
       <motion.div className={styles.wordmarkWrap} variants={item}>
-        <img
-          src="/logo-3studio.svg"
+        <Image
+          src={logo3studio}
           alt="3Studio"
           width={122}
           height={26}

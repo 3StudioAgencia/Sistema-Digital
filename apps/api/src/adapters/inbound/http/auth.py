@@ -1,14 +1,13 @@
-"""Verificação de JWT do Supabase Auth (camada inbound HTTP) — W1-C03.
+"""Verificação do access token (JWT ES256) — camada inbound HTTP.
 
-Princípios (CLAUDE.md §11, DAT §1.3, prompt W1-C03 §3 / DP-2):
-- O backend NUNCA emite tokens — apenas VERIFICA a assinatura dos JWT que o
-  Supabase Auth emite (PyJWT só verifica).
-- Verificação robusta ao esquema real do projeto: o default atual do Supabase é
-  ``ES256`` (assimétrico, chaves publicadas no JWKS do projeto); mantemos
-  ``HS256`` (segredo legado) como *fallback* para resiliência/rotação (ADR-018).
-  O algoritmo é decidido pelo header do token e validado contra uma lista
-  explícita — nunca ``none``, sem confusão de algoritmo (chave pública só é
-  usada para algoritmos assimétricos; o segredo só para HS256).
+Migração Supabase->local: o backend agora VERIFICA o token PRÓPRIO (emitido pelo
+``Es256TokenIssuer``) com a chave pública EC estática (``AUTH_JWT_PUBLIC_KEY``).
+
+Princípios (CLAUDE.md §5.4):
+- Esta camada só VERIFICA; a EMISSÃO do token vive no ``Es256TokenIssuer``.
+- O algoritmo é decidido pelo header do token e validado contra uma lista
+  explícita — nunca ``none``, sem confusão de algoritmo (chave pública só para
+  ES256/RS256; um segredo HS256 segue suportado apenas para dublês de teste).
 - Validamos assinatura, ``aud="authenticated"`` e expiração. Qualquer falha de
   verificação vira **401 genérico**, sem revelar QUAL parte falhou
   (anti-enumeração — CLAUDE.md §11); o motivo fica no log estruturado (apenas o
@@ -29,18 +28,25 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 from pydantic import BaseModel
 
+from src.adapters.outbound.auth.keys import carregar_chave_publica_ec
 from src.infrastructure.config import Settings
 
 logger = logging.getLogger("rastreio.http.auth")
 
-# Supabase emite o access token com aud="authenticated" para sessões logadas.
-SUPABASE_AUDIENCE = "authenticated"
+# O access token traz aud="authenticated" (mantida na migração Supabase->local:
+# a RLS depende do role literal 'authenticated' no SET LOCAL ROLE — trocar
+# exigiria reescrever todas as policies).
+AUTH_AUDIENCE = "authenticated"
 # Algoritmos assimétricos aceitos via JWKS. ES256 é o default atual do Supabase;
 # RS256 entra por robustez (projetos/rotações antigas). NUNCA "none".
 _ASYMMETRIC_ALGORITHMS = ("ES256", "RS256")
 _SYMMETRIC_ALGORITHM = "HS256"
 # Claims exigidas: sem elas o token não é utilizável como prova de identidade.
 _REQUIRED_CLAIMS = ("exp", "aud", "sub")
+
+# Cookie httpOnly que carrega o access token (migração Supabase->local: o token
+# deixa de vir só no header). get_current_user lê o cookie primeiro, Bearer depois.
+ACCESS_COOKIE_NAME = "access_token"
 
 
 class InvalidToken(Exception):
@@ -62,28 +68,32 @@ class AuthenticatedUser(BaseModel):
 
 
 class JwtVerifier:
-    """Verifica JWT do Supabase: ES256/RS256 via JWKS (cache) + HS256 (fallback).
+    """Verifica o access token ES256 com a chave pública EC (estática ou, nos
+    testes, via JWKS dublê); HS256 permanece apenas para dublês de teste.
 
-    Stateless quanto à sessão; o ``PyJWKClient`` mantém apenas um cache de chaves
-    públicas (não há estado de usuário). Sem JWKS e sem segredo configurados, é
-    um *null object* que rejeita qualquer token — default seguro nos testes que
-    não exercitam auth.
+    Stateless quanto à sessão (não há estado de usuário). Sem chave pública, sem
+    JWKS e sem segredo, é um *null object* que rejeita qualquer token — default
+    seguro nos testes que não exercitam auth.
     """
 
     def __init__(
         self,
         *,
+        public_key: Any = None,
         jwks_client: PyJWKClient | None = None,
         hs256_secret: str | None = None,
-        audience: str = SUPABASE_AUDIENCE,
+        audience: str = AUTH_AUDIENCE,
         issuer: str | None = None,
     ) -> None:
+        # Chave pública EC estática (JWT próprio ES256). ``jwks_client`` permanece
+        # para os dublês de teste (verificação por JWKS). Sem chave pública, sem
+        # JWKS e sem segredo, é um null object que rejeita qualquer token.
+        self._public_key = public_key
         self._jwks_client = jwks_client
         self._hs256_secret = hs256_secret
         self._audience = audience
-        # Validação de ``iss`` só quando configurada (derivada de SUPABASE_URL):
-        # protege o fallback HS256 contra um segredo compartilhado entre projetos
-        # (W1-A-013). Mantida opcional para não quebrar verifiers de teste/sem URL.
+        # Validação de ``iss`` só quando configurada: nossos tokens carregam
+        # ``iss=auth_issuer``. Mantida opcional para não quebrar verifiers de teste.
         self._issuer = issuer
 
     def verify(self, token: str) -> AuthenticatedUser:
@@ -113,10 +123,13 @@ class JwtVerifier:
         return self._identity(claims)
 
     def _decode_asymmetric(self, token: str) -> dict[str, Any]:
-        if self._jwks_client is None:
-            raise InvalidToken("asymmetric verification unavailable (no JWKS)")
-        signing_key = self._jwks_client.get_signing_key_from_jwt(token)
-        return self._decode(token, signing_key.key, list(_ASYMMETRIC_ALGORITHMS))
+        if self._public_key is not None:
+            key: Any = self._public_key
+        elif self._jwks_client is not None:
+            key = self._jwks_client.get_signing_key_from_jwt(token).key
+        else:
+            raise InvalidToken("asymmetric verification unavailable (no key)")
+        return self._decode(token, key, list(_ASYMMETRIC_ALGORITHMS))
 
     def _decode_symmetric(self, token: str) -> dict[str, Any]:
         if self._hs256_secret is None:
@@ -167,24 +180,22 @@ class JwtVerifier:
 
 
 def build_jwt_verifier(settings: Settings) -> JwtVerifier:
-    """Constrói o verifier a partir do ambiente (chamado no composition root).
+    """Constrói o verifier do JWT PRÓPRIO (ES256) a partir do ambiente.
 
-    JWKS explícito (``SUPABASE_JWKS_URL``) ou derivado de ``SUPABASE_URL``;
-    ``SUPABASE_JWT_SECRET`` opcional habilita o fallback HS256.
+    Verifica com a chave pública EC (``AUTH_JWT_PUBLIC_KEY``, base64 do PEM). Sem
+    a chave configurada é um verifier *deny-all* (rejeita qualquer token) —
+    default seguro para os testes que não exercitam auth.
     """
-    jwks_url = settings.effective_jwks_url
-    # timeout curto: sob outage do Supabase, a busca do JWKS não pode segurar
-    # threads do pool por 30s (default do urllib) — falha rápido em 401.
-    jwks_client = PyJWKClient(jwks_url, timeout=5) if jwks_url else None
-    secret = (
-        settings.supabase_jwt_secret.get_secret_value()
-        if settings.supabase_jwt_secret is not None
+    public_key = (
+        carregar_chave_publica_ec(settings.auth_jwt_public_key)
+        if settings.auth_jwt_public_key
         else None
     )
     return JwtVerifier(
-        jwks_client=jwks_client,
-        hs256_secret=secret,
-        issuer=settings.effective_issuer,
+        public_key=public_key,
+        audience=AUTH_AUDIENCE,
+        # Nossos tokens carregam iss=auth_issuer; valida só quando há chave.
+        issuer=settings.auth_issuer if public_key is not None else None,
     )
 
 
@@ -208,12 +219,19 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> AuthenticatedUser:
-    """Dependência: exige Bearer JWT válido; devolve a identidade verificada."""
-    if credentials is None or not credentials.credentials:
+    """Dependência: exige um access token válido (cookie httpOnly ou Bearer).
+
+    O token vem do cookie ``access_token`` (padrão do frontend após a migração);
+    o header ``Authorization: Bearer`` segue aceito como fallback (ferramentas,
+    testes, integrações). Ausente/ inválido → 401 genérico (anti-enumeração)."""
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if not token and credentials is not None:
+        token = credentials.credentials
+    if not token:
         raise _unauthorized()
     verifier: JwtVerifier = request.app.state.jwt_verifier
     try:
-        return await run_in_threadpool(verifier.verify, credentials.credentials)
+        return await run_in_threadpool(verifier.verify, token)
     except InvalidToken as exc:
         raise _unauthorized() from exc
 
@@ -240,6 +258,7 @@ async def me(user: AuthenticatedUser = Depends(get_current_user)) -> MeResponse:
 
 
 __all__ = [
+    "ACCESS_COOKIE_NAME",
     "AuthenticatedUser",
     "InvalidToken",
     "JwtVerifier",

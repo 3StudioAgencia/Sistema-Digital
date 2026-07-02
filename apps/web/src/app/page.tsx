@@ -1,14 +1,11 @@
 import { redirect } from "next/navigation";
 
 import { HOME_PADRAO } from "@/lib/access-matrix";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { lerSessao } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  redirect(user ? HOME_PADRAO : "/login");
+  const sessao = await lerSessao();
+  redirect(sessao ? HOME_PADRAO : "/login");
 }

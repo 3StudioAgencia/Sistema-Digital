@@ -1,29 +1,23 @@
-"""Casos de uso de gestão de usuários (W1-C04) — RF-018, RF-020, US-015.
+"""Casos de uso de gestão de usuários (W1-C04; auth própria na migração local).
 
-Orquestra DUAS fontes de verdade que precisam andar juntas (ADR-025):
-1. o usuário de AUTENTICAÇÃO no Supabase Auth (via ``IdentityProviderPort``);
-2. a linha de DOMÍNIO em ``usuarios`` (via ``UsuariosRepositoryPort`` + UoW).
+Orquestra DUAS escritas que agora vivem no MESMO banco (migração Supabase->local):
+1. a linha de DOMÍNIO em ``usuarios`` (via ``UsuariosRepositoryPort``);
+2. a CREDENCIAL de login em ``auth_credentials`` (via ``AuthCredentialsWriterPort``,
+   que chama ``private.auth_criar_credencial``).
 
-Estratégia contra falha parcial (RNF-015/RNF-017):
-- CRIAR: auth primeiro, banco depois; se o banco falhar, a criação no auth é
-  COMPENSADA (delete). Se a própria compensação falhar, fica um órfão MARCADO
-  (``app_metadata.provisionado_por``) que a próxima tentativa ADOTA (remove e
-  recria) — o retry do administrador converge, nunca duplica.
-- DESATIVAR/REATIVAR/EDITAR: provedor primeiro (fail-closed: na dúvida o login
-  fica bloqueado), banco depois; falha no banco reverte o provedor (best-effort
-  com log CRITICAL para alerta — RNF-024).
+Como ambas são locais, a criação é **atômica** (uma transação — RNF-017): acabou a
+máquina de compensação/adoção-de-órfão que o split externo do Supabase exigia. A
+senha vira hash argon2id (``PasswordHasherPort``) e nunca trafega/persiste em claro.
+Desativar ou mudar setor/perfil **revoga as sessões** do usuário (refresh tokens),
+forçando re-login com claims novas — o access token vive no máximo o TTL curto.
 """
 
 import logging
+import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 
-from src.application.ports.identity_provider import (
-    MARCA_PROVISIONAMENTO,
-    EmailJaExisteNoProvedorError,
-    IdentityProviderError,
-    IdentityProviderPort,
-)
+from src.application.ports.auth_credentials_writer import AuthCredentialsWriterPort
+from src.application.ports.password_hasher import PasswordHasherPort
 from src.application.ports.unit_of_work import UnitOfWork
 from src.application.ports.usuarios_repository import (
     FiltrosUsuarios,
@@ -45,16 +39,9 @@ from src.domain.usuarios import (
 
 logger = logging.getLogger("rastreio.usuarios")
 
-# Idade mínima para uma conta de auth marcada ser tratada como ÓRFÃ adotável.
-# Protege contra a corrida de duas criações concorrentes do mesmo e-mail: uma
-# conta recém-criada pode ser uma criação EM ANDAMENTO (INSERT ainda não
-# commitado é invisível ao get()) — adotá-la deletaria um auth user vivo
-# (revisão adversarial W1-C04). Órfãos reais persistem e passam no retry.
-ORFAO_IDADE_MINIMA = timedelta(minutes=15)
-
 
 class EmailJaCadastradoError(ErroDeDominio):
-    """E-mail já pertence a um usuário (domínio ou provedor). Mapeado a 409."""
+    """E-mail já pertence a um usuário. Mapeado a 409."""
 
     codigo = "email_ja_cadastrado"
 
@@ -87,7 +74,7 @@ class CriarUsuario:
 class EditarUsuario:
     """Comando de edição parcial (PATCH). ``localizacao_informada`` distingue
     "limpar localização" (None explícito) de "não mexer" — e-mail e senha NÃO
-    são editáveis nesta wave (identidade do auth; ver docs/usuarios.md)."""
+    são editáveis nesta wave (ver docs/usuarios.md)."""
 
     nome: str | None = None
     setor: Setor | None = None
@@ -96,28 +83,19 @@ class EditarUsuario:
     administrador: bool | None = None
 
 
-def montar_app_metadata(setor: Setor, administrador: bool) -> dict[str, object]:
-    """Claims persistidas no ``app_metadata`` do auth user — consumidas pelo
-    Custom Access Token Hook/RLS no C05 (DP-5). ``provisionado_por`` marca a
-    autoria do provisionamento (adoção de órfãos)."""
-    return {
-        "setor": setor.value,
-        "administrador": administrador,
-        "provisionado_por": MARCA_PROVISIONAMENTO,
-    }
-
-
 class UsuariosService:
     """Fachada dos casos de uso de usuários (uma instância por requisição)."""
 
     def __init__(
         self,
         repo: UsuariosRepositoryPort,
-        identity: IdentityProviderPort,
+        auth: AuthCredentialsWriterPort,
+        hasher: PasswordHasherPort,
         uow: UnitOfWork,
     ) -> None:
         self._repo = repo
-        self._identity = identity
+        self._auth = auth
+        self._hasher = hasher
         self._uow = uow
 
     # ------------------------------------------------------------------ leitura
@@ -132,18 +110,9 @@ class UsuariosService:
         validar_senha(cmd.senha)
         validar_localizacao(cmd.setor, cmd.localizacao)
         email = normalizar_email(cmd.email)
-        if await self._repo.get_by_email(email) is not None:
-            raise EmailJaCadastradoError()
-
-        # Fecha a transação de leitura da pré-checagem ANTES das idas HTTP ao
-        # provedor — a conexão não fica idle-in-transaction atravessando IO
-        # externo (free tier do pooler é pequeno; revisão W1-C04).
-        await self._uow.rollback()
-
-        metadata = montar_app_metadata(cmd.setor, cmd.administrador)
-        auth_id = await self._criar_identidade(email, cmd.senha, metadata)
+        senha_hash = self._hasher.hash(cmd.senha)
         usuario = Usuario(
-            id=auth_id,
+            id=str(uuid.uuid4()),
             nome=cmd.nome.strip(),
             email=email,
             setor=cmd.setor,
@@ -151,13 +120,14 @@ class UsuariosService:
             administrador=cmd.administrador,
             ativo=True,
         )
-        try:
-            async with self._uow:
-                await self._repo.add(usuario)
-                await self._uow.commit()
-        except Exception:
-            await self._compensar_criacao(auth_id)
-            raise
+        # Uma transação (RNF-017): a pré-checagem de e-mail, a linha de domínio e a
+        # credencial nascem/falham JUNTAS — órfão é impossível (fim da compensação).
+        async with self._uow:
+            if await self._repo.get_by_email(email) is not None:
+                raise EmailJaCadastradoError()
+            await self._repo.add(usuario)
+            await self._auth.criar_credencial(usuario.id, email, senha_hash)
+            await self._uow.commit()
         logger.info(
             "usuário criado",
             extra={
@@ -168,61 +138,6 @@ class UsuariosService:
             },
         )
         return usuario
-
-    async def _criar_identidade(self, email: str, senha: str, metadata: dict[str, object]) -> str:
-        try:
-            return await self._identity.create_user(email, senha, metadata)
-        except EmailJaExisteNoProvedorError:
-            if not await self._adotar_orfao(email):
-                raise EmailJaCadastradoError() from None
-            return await self._identity.create_user(email, senha, metadata)
-
-    async def _adotar_orfao(self, email: str) -> bool:
-        """Remove uma conta de auth ÓRFÃ (criada por nós, sem linha de domínio).
-
-        Contas sem a nossa marca (criadas pelo dashboard) NUNCA são tocadas —
-        o conflito vira 409 e a decisão fica com o administrador. Contas
-        JOVENS (< ORFAO_IDADE_MINIMA) também não: podem ser uma criação
-        concorrente em andamento cujo INSERT ainda não é visível.
-        """
-        identidade = await self._identity.find_user_by_email(email)
-        if identidade is None or not identidade.provisionado_por_nos:
-            return False
-        # Guarda de idade: aplica-se só quando a idade é CONHECIDA. ``created_at``
-        # ausente (raro — o GoTrue sempre popula) é "idade desconhecida", NÃO
-        # "jovem demais": tratá-lo como jovem prenderia o retry em 409 para sempre
-        # (W1-A-014). A marca (acima) e a checagem de linha de domínio (abaixo)
-        # seguem protegendo contra sequestrar uma criação concorrente viva.
-        if (
-            identidade.created_at is not None
-            and datetime.now(UTC) - identidade.created_at < ORFAO_IDADE_MINIMA
-        ):
-            return False  # jovem demais — não arriscar sequestrar criação viva
-        if await self._repo.get(identidade.id) is not None:
-            return False  # conta completa e legítima
-        await self._identity.delete_user(identidade.id)
-        logger.warning(
-            "órfão de provisionamento adotado (auth user removido para recriação)",
-            extra={"event": "orfao_adotado", "auth_user_id": identidade.id},
-        )
-        return True
-
-    async def _compensar_criacao(self, auth_id: str) -> None:
-        """Desfaz a criação no auth após falha no banco. Engole a própria falha
-        (com CRITICAL) para o erro ORIGINAL chegar ao chamador; o órfão marcado
-        é recuperado pela adoção na próxima tentativa."""
-        try:
-            await self._identity.delete_user(auth_id)
-            logger.warning(
-                "compensação executada: auth user removido após falha no banco",
-                extra={"event": "compensacao_criacao", "auth_user_id": auth_id},
-            )
-        except Exception:
-            logger.critical(
-                "compensação FALHOU: auth user órfão (marcado p/ adoção em retry)",
-                exc_info=True,
-                extra={"event": "compensacao_falhou", "auth_user_id": auth_id},
-            )
 
     # ------------------------------------------------------------------ editar
     async def editar(self, ator: Usuario, usuario_id: str, edicao: EditarUsuario) -> Usuario:
@@ -242,28 +157,20 @@ class UsuariosService:
             if alvo.ativo and await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
                 raise UltimoAdminError()
 
-        # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
-        await self._uow.rollback()
-
-        precisa_sync = novo.setor is not alvo.setor or novo.administrador != alvo.administrador
-        if precisa_sync:
-            await self._identity.update_app_metadata(
-                alvo.id, montar_app_metadata(novo.setor, novo.administrador)
-            )
-        try:
-            async with self._uow:
-                if rebaixa_admin and alvo.ativo:
-                    # Recheck ATÔMICO da RN-010: serializa com outras demoções/
-                    # desativações e reconta dentro da MESMA transação do UPDATE.
-                    await self._repo.travar_gestao_de_admins()
-                    if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
-                        raise UltimoAdminError()
-                await self._repo.update(novo)
-                await self._uow.commit()
-        except Exception:
-            if precisa_sync:
-                await self._reverter_metadata(alvo)
-            raise
+        # setor/administrador são CLAIMS (RLS/gates); ao mudá-los, revoga as sessões
+        # para forçar re-login com claims frescas (o access token stale expira no TTL).
+        muda_claims = novo.setor is not alvo.setor or novo.administrador != alvo.administrador
+        async with self._uow:
+            if rebaixa_admin and alvo.ativo:
+                # Recheck ATÔMICO da RN-010: serializa com outras demoções/
+                # desativações e reconta dentro da MESMA transação do UPDATE.
+                await self._repo.travar_gestao_de_admins()
+                if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
+                    raise UltimoAdminError()
+            await self._repo.update(novo)
+            if muda_claims:
+                await self._auth.revogar_sessoes(novo.id)
+            await self._uow.commit()
         logger.info(
             "usuário editado",
             extra={"event": "usuario_editado", "usuario_id": novo.id},
@@ -287,28 +194,13 @@ class UsuariosService:
             novo = novo.com(administrador=edicao.administrador)
         return novo
 
-    async def _reverter_metadata(self, original: Usuario) -> None:
-        try:
-            await self._identity.update_app_metadata(
-                original.id, montar_app_metadata(original.setor, original.administrador)
-            )
-        except Exception:
-            logger.critical(
-                "reversão de app_metadata FALHOU — claims do auth divergem do domínio",
-                exc_info=True,
-                extra={"event": "reversao_metadata_falhou", "usuario_id": original.id},
-            )
-
     # ----------------------------------------------------------------- status
     async def alterar_status(self, ator: Usuario, usuario_id: str, ativo: bool) -> Usuario:
         alvo = await self._repo.get(usuario_id)
         if alvo is None:
             raise UsuarioNaoEncontradoError()
         if alvo.ativo == ativo:
-            # Repetição converge (RNF-015) e REPARA divergência auth↔domínio:
-            # re-espelha o ban no provedor (estado canônico = usuarios.ativo).
-            await self._convergir_ban(alvo)
-            return alvo
+            return alvo  # repetição converge (RNF-015): estado idêntico, no-op
 
         if not ativo:
             if ator.id == alvo.id:
@@ -317,66 +209,24 @@ class UsuariosService:
             if alvo.administrador and await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
                 raise UltimoAdminError()
 
-        # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
-        await self._uow.rollback()
-
-        # Provedor PRIMEIRO (fail-closed): se o banco falhar depois, o pior
-        # estado é "parece ativo mas não loga" — nunca o inverso.
-        await self._identity.set_banned(alvo.id, banned=not ativo)
-        if not ativo:
-            await self._revogar_sessoes(alvo.id)
-
         novo = alvo.com(ativo=ativo)
-        try:
-            async with self._uow:
-                if not ativo and alvo.administrador:
-                    # Recheck ATÔMICO da RN-010 (mesma razão do editar).
-                    await self._repo.travar_gestao_de_admins()
-                    if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
-                        raise UltimoAdminError()
-                await self._repo.update(novo)
-                await self._uow.commit()
-        except Exception:
-            await self._reverter_ban(alvo)
-            raise
+        async with self._uow:
+            if not ativo and alvo.administrador:
+                # Recheck ATÔMICO da RN-010 (mesma razão do editar).
+                await self._repo.travar_gestao_de_admins()
+                if await self._repo.count_admins_ativos(excluir_id=alvo.id) == 0:
+                    raise UltimoAdminError()
+            await self._repo.update(novo)
+            if not ativo:
+                # Desativar mata as sessões: o refresh não renova e o gate já barra
+                # por ``ativo`` a cada requisição (o access token stale expira no TTL).
+                await self._auth.revogar_sessoes(novo.id)
+            await self._uow.commit()
         logger.info(
             "status de usuário alterado",
             extra={"event": "usuario_status_alterado", "usuario_id": novo.id, "ativo": ativo},
         )
         return novo
-
-    async def _convergir_ban(self, alvo: Usuario) -> None:
-        """Best-effort: realinha o ban do provedor ao estado de domínio no
-        caminho idempotente — caminho de REPARO caso uma corrida antiga tenha
-        deixado auth e domínio divergentes."""
-        try:
-            await self._identity.set_banned(alvo.id, banned=not alvo.ativo)
-        except IdentityProviderError:
-            logger.warning(
-                "convergência de ban indisponível no provedor",
-                extra={"event": "convergencia_ban_falhou", "usuario_id": alvo.id},
-            )
-
-    async def _revogar_sessoes(self, usuario_id: str) -> None:
-        """Best-effort: o ban já bloqueia novos tokens/refresh; a revogação só
-        encurta a janela do access token corrente (TTL)."""
-        try:
-            await self._identity.revoke_sessions(usuario_id)
-        except IdentityProviderError:
-            logger.warning(
-                "revogação de sessões indisponível — tokens expiram pelo TTL",
-                extra={"event": "revogacao_sessoes_falhou", "usuario_id": usuario_id},
-            )
-
-    async def _reverter_ban(self, original: Usuario) -> None:
-        try:
-            await self._identity.set_banned(original.id, banned=not original.ativo)
-        except Exception:
-            logger.critical(
-                "reversão de ban FALHOU — status do auth diverge do domínio",
-                exc_info=True,
-                extra={"event": "reversao_ban_falhou", "usuario_id": original.id},
-            )
 
 
 __all__ = [
@@ -385,5 +235,4 @@ __all__ = [
     "EmailJaCadastradoError",
     "UsuarioNaoEncontradoError",
     "UsuariosService",
-    "montar_app_metadata",
 ]

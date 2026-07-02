@@ -1,7 +1,6 @@
 import {
   ChartColumn,
   House,
-  Info,
   Laptop,
   Plus,
   QrCode,
