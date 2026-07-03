@@ -51,7 +51,7 @@
 - **Sem migration/RLS** (`LISTEN/NOTIFY` não precisa; head segue `0023`).
 
 **Pendências / em aberto:**
-- [ ] **Smoke test ao vivo no navegador** (o único elo fora dos testes automatizados): backend :8001 + `pnpm dev` → login → abrir `/dashboard` → transicionar prova noutra aba → contadores sobem ao vivo. Roteiro em `docs/realtime.md §7`.
+- [ ] **Smoke test ao vivo no navegador** (o único elo fora dos testes automatizados): backend :8000 + `pnpm dev` → login → abrir `/dashboard` → transicionar prova noutra aba → contadores sobem ao vivo. Roteiro em `docs/realtime.md §7`. (Porta **8000** = a correta, default do `next.config`; o `.env` do web foi corrigido de 8001 → 8000.)
 - [ ] **Operação on-prem:** configurar o reverse proxy conforme `docs/realtime.md §4` (sem buffering/gzip p/ `text/event-stream`; `proxy_read_timeout` > 20 s; conexão direta p/ o `LISTEN`).
 - [ ] Vestigiais inócuos herdados da Sessão 30 (dropar `custom_access_token_hook`, aposentar `keep_alive.py`) — opcionais.
 - [ ] 2 warnings de lint pré-existentes no web (`Calendar` em auditoria-view; `useMemo` dep em relatorios-view) — alheios.

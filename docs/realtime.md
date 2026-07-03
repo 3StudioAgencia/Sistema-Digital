@@ -149,7 +149,7 @@ cd apps/web && pnpm exec vitest run src/lib/api/eventos.test.ts
 
 ## 7. Smoke test ao vivo (o elo que os testes automatizados não cobrem)
 
-Sobe o backend (`uvicorn src.main:app --port 8001`) + `pnpm dev`, loga
+Sobe o backend (`uvicorn src.main:app --port 8000`) + `pnpm dev`, loga
 (`admin@teste.com`/`teste123`), abre `/dashboard` e, noutra aba, cria/transiciona/
 cancela uma prova → os contadores sobem **ao vivo** (count-up), sem reload. Confirma
 o `EventSource` real atravessando o rewrite do Next sem buffering.
