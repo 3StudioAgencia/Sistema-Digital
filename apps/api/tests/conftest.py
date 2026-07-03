@@ -19,9 +19,12 @@ from sqlalchemy.pool import NullPool
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.inbound.http.health import DbPing
+from src.application.ports.arte_fonte import ArteFonteError, ArteFontePort, ArteSelecionada
 from src.application.ports.password_hasher import PasswordHasherPort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.tokens import TokenIssuerPort
+from src.domain.requerimentos import RequerimentoArte
 from src.infrastructure.config import Settings, coerce_asyncpg_url
 
 DEFAULT_TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/rastreio_test"
@@ -53,6 +56,59 @@ class FakeStorage(StoragePort):
         return self.healthy
 
 
+class FakeRequerimentoReader(RequerimentoReaderPort):
+    """RequerimentoReaderPort em memória — resolve por ``COD_REQ_ART`` sem ERP real.
+
+    ``erro`` simula ERP indisponível (503): quando definido, ``buscar`` o levanta."""
+
+    def __init__(
+        self,
+        dados: dict[int, RequerimentoArte] | None = None,
+        healthy: bool = True,
+    ) -> None:
+        self.healthy = healthy
+        self._dados = dados or {}
+        self.erro: Exception | None = None
+
+    def buscar(self, cod_req_art: int) -> RequerimentoArte | None:
+        if self.erro is not None:
+            raise self.erro
+        return self._dados.get(cod_req_art)
+
+    def health(self) -> bool:
+        return self.healthy
+
+
+class FakeArteFonte(ArteFontePort):
+    """ArteFontePort em memória — devolve uma arte fixa, sem tocar disco/share.
+
+    ``erro`` simula share fora do ar / arte indisponível: quando definido,
+    ``obter_arte`` o levanta. ``chamadas`` registra os argumentos recebidos."""
+
+    def __init__(self, arte: ArteSelecionada | None = None, healthy: bool = True) -> None:
+        self.healthy = healthy
+        self._arte = arte
+        self.erro: Exception | None = None
+        self.chamadas: list[tuple[int, int, int, str | None]] = []
+
+    def obter_arte(
+        self,
+        cod_vend_fat: int,
+        cod_cliente: int,
+        cod_req_art: int,
+        anexo_imagem: str | None,
+    ) -> ArteSelecionada:
+        self.chamadas.append((cod_vend_fat, cod_cliente, cod_req_art, anexo_imagem))
+        if self.erro is not None:
+            raise self.erro
+        if self._arte is None:
+            raise ArteFonteError("FakeArteFonte sem arte configurada")
+        return self._arte
+
+    def health(self) -> bool:
+        return self.healthy
+
+
 async def ping_ok() -> bool:
     return True
 
@@ -76,10 +132,14 @@ _SETTINGS_ENV_KEYS = (
     "AUTH_ISSUER",
     "AUTH_ACCESS_TTL_SECONDS",
     "AUTH_REFRESH_TTL_SECONDS",
-    "R2_ENDPOINT_URL",
-    "R2_ACCESS_KEY_ID",
-    "R2_SECRET_ACCESS_KEY",
-    "R2_BUCKET",
+    "STORAGE_DIR",
+    "ARTE_SHARE_BASE",
+    "ARTE_FONTE_TAMANHO_MAXIMO_MB",
+    "FIREBIRD_DATABASE",
+    "FIREBIRD_USER",
+    "FIREBIRD_PASSWORD",
+    "FIREBIRD_CHARSET",
+    "FIREBIRD_CLIENT_LIBRARY",
     "CORS_ALLOWED_ORIGINS",
 )
 
@@ -144,6 +204,8 @@ def make_client(
     token_issuer: TokenIssuerPort | None = None,
     system_session_factory: async_sessionmaker[AsyncSession] | None = None,
     password_hasher: PasswordHasherPort | None = None,
+    requerimento_reader: RequerimentoReaderPort | None = None,
+    arte_fonte: ArteFontePort | None = None,
 ) -> httpx.AsyncClient:
     """Client httpx falando direto com a app via ASGI (sem rede).
 
@@ -158,6 +220,8 @@ def make_client(
         settings=settings,
         storage=storage,
         db_ping=db_ping,
+        requerimento_reader=requerimento_reader,
+        arte_fonte=arte_fonte,
         jwt_verifier=jwt_verifier,
         session_factory=session_factory,
         token_issuer=token_issuer,
@@ -170,8 +234,14 @@ def make_client(
 
 @pytest.fixture
 async def client(settings: Settings, fake_storage: FakeStorage) -> AsyncIterator[httpx.AsyncClient]:
-    """Client padrão: storage ok + banco ok (fakes)."""
-    async with make_client(settings, fake_storage, ping_ok) as c:
+    """Client padrão: storage ok + banco ok + ERP ok + fonte de arte ok (fakes)."""
+    async with make_client(
+        settings,
+        fake_storage,
+        ping_ok,
+        requerimento_reader=FakeRequerimentoReader(),
+        arte_fonte=FakeArteFonte(),
+    ) as c:
         yield c
 
 

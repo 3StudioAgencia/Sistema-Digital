@@ -14,13 +14,14 @@ NÃO há endpoint de update nesta wave (DP-5 do C06): a rota é imutável (RN-00
 as transições de status são do C11 — qualquer PATCH/PUT responde 405 por ausência.
 """
 
+import asyncio
 import base64
 import binascii
 import uuid
 from datetime import date, datetime
 from typing import Annotated, Self
 
-from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 from pydantic import BaseModel, Field
 
 from src.adapters.inbound.http.dependencies import (
@@ -29,6 +30,7 @@ from src.adapters.inbound.http.dependencies import (
     get_provas_consulta_service,
     get_provas_service,
     get_reinicio_service,
+    get_requerimento_reader,
     get_transicao_service,
 )
 from src.application.ports.provas_repository import (
@@ -36,6 +38,7 @@ from src.application.ports.provas_repository import (
     PAGE_SIZE_PADRAO,
     FiltrosProvas,
 )
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.provas import (
     CriarProva,
     MovimentacaoComAtor,
@@ -47,7 +50,8 @@ from src.application.provas import (
 )
 from src.application.transicoes import ProvasTransicaoService
 from src.domain.assinaturas import ASSINATURA_TAMANHO_MAXIMO, AssinaturaInvalidaError
-from src.domain.provas import ARTE_TAMANHO_MAXIMO, EstadoProva, Prova, Rota
+from src.domain.provas import EstadoProva, Prova, Rota
+from src.domain.requerimentos import RequerimentoArte, RequerimentoNaoEncontradoError
 from src.domain.state_machine.enums import Acao
 
 # Teto do campo base64 da assinatura: ~4/3 do PNG (1 MB) + folga do prefixo
@@ -145,6 +149,37 @@ class PaginaProvasOut(BaseModel):
 class VendedorRefOut(BaseModel):
     id: str
     nome: str
+
+
+class RequerimentoOut(BaseModel):
+    """Dados do requerimento lidos do ERP (Firebird) para o PREVIEW da criação.
+
+    Espelha ``RequerimentoArte``. Superfície admin-only (gate ``CRIAR_PROVA``); os
+    códigos internos do ERP (``cod_vend_fat``/``cod_cliente``) alimentam o caminho
+    da arte nas próximas fatias. A resolução autoritativa é refeita no servidor na
+    criação — este preview nunca é fonte de verdade para o que é persistido."""
+
+    cod_req_art: int
+    nome: str | None
+    cod_cliente: int
+    nome_cliente: str | None
+    cod_vendedor: int
+    nome_vendedor: str | None
+    cod_vend_fat: int | None
+    anexo_imagem: str | None
+
+    @classmethod
+    def de_dominio(cls, r: RequerimentoArte) -> Self:
+        return cls(
+            cod_req_art=r.cod_req_art,
+            nome=r.nome,
+            cod_cliente=r.cod_cliente,
+            nome_cliente=r.nome_cliente,
+            cod_vendedor=r.cod_vendedor,
+            nome_vendedor=r.nome_vendedor,
+            cod_vend_fat=r.cod_vend_fat,
+            anexo_imagem=r.anexo_imagem,
+        )
 
 
 class ProvaDetalheOut(BaseModel):
@@ -381,41 +416,70 @@ async def vendedores(
     return [VendedorRefOut(id=v.id, nome=v.nome) for v in await service.vendedores()]
 
 
+@router.get("/requerimento/{cod_req_art}", response_model=RequerimentoOut)
+async def consultar_requerimento(
+    cod_req_art: Annotated[int, Path(ge=1, le=2_147_483_647)],
+    reader: Annotated[RequerimentoReaderPort, Depends(get_requerimento_reader)],
+) -> RequerimentoOut:
+    """Consulta o requerimento no ERP legado (Firebird, SOMENTE leitura) para o
+    preview da criação de prova. Admin-only (gate ``CRIAR_PROVA``, dentro de
+    ``get_requerimento_reader``). Inexistente → 404; ERP fora do ar → 503.
+
+    A porta é síncrona (driver bloqueante) — despachada via ``asyncio.to_thread``,
+    como o proxy da arte, para não prender o event loop."""
+    dados = await asyncio.to_thread(reader.buscar, cod_req_art)
+    if dados is None:
+        raise RequerimentoNaoEncontradoError()
+    return RequerimentoOut.de_dominio(dados)
+
+
+@router.get("/requerimento/{cod_req_art}/arte")
+async def consultar_requerimento_arte(
+    cod_req_art: Annotated[int, Path(ge=1, le=2_147_483_647)],
+    service: Annotated[ProvasService, Depends(get_provas_service)],
+) -> Response:
+    """Imagem oficial do requerimento (ERP + servidor de arquivos), SEM criar a prova
+    — preview da criação (proxy de bytes; o caminho no share nunca é exposto).
+    Admin-only (gate ``CRIAR_PROVA``). Inexistente → 404; sem código de faturamento /
+    imagem indisponível → 422; ERP/share fora → 503."""
+    arte = await service.preview_arte(cod_req_art)
+    return Response(
+        content=arte.conteudo,
+        media_type=arte.content_type,
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+class CriarProvaIn(BaseModel):
+    """Corpo da criação por REQUERIMENTO (Fatia 3): o número do requerimento e a
+    rota (escolha manual, imutável — RN-007). ``prova_id`` é a chave de idempotência
+    gerada pelo cliente (RNF-015). Nome/cliente/vendedor/arte NÃO vêm do cliente —
+    são resolvidos no servidor (ERP Firebird + servidor de arquivos)."""
+
+    # Teto = INTEGER (int32) do ERP (``TB_REQ_ARTE.COD_REQ_ART``): um valor fora da
+    # faixa nunca existe no Firebird e vira 422 claro, em vez de tocar o driver.
+    cod_req_art: int = Field(ge=1, le=2_147_483_647)
+    rota: Rota
+    prova_id: uuid.UUID | None = None
+
+
 @router.post("", response_model=ProvaOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     service: Annotated[ProvasService, Depends(get_provas_service)],
-    # multipart/form-data: campos obrigatórios do RF-001. ``pattern=r"\S"``
-    # exige ao menos um caractere não-branco (Pydantic v2 usa re.search);
-    # requerimento é numérico ancorado (decisão da sessão: texto de dígitos,
-    # preserva zeros à esquerda). Rota ausente → 422 (validation_error).
-    nome: Annotated[str, Form(min_length=1, max_length=200, pattern=r"\S")],
-    requerimento: Annotated[str, Form(min_length=1, max_length=50, pattern=r"^\d{1,50}$")],
-    cliente: Annotated[str, Form(min_length=1, max_length=200, pattern=r"\S")],
-    vendedor_id: Annotated[uuid.UUID, Form()],
-    rota: Annotated[Rota, Form()],
-    arte: UploadFile,
-    # Chave de idempotência gerada pelo cliente (RNF-015): reenvio após
-    # resposta perdida converge para a prova já criada em vez de duplicar.
-    prova_id: Annotated[uuid.UUID | None, Form()] = None,
+    payload: CriarProvaIn,
 ) -> ProvaOut:
-    """Criação ATÔMICA da prova (RNF-017): arte no R2 + INSERT com código único.
-
-    Lê no MÁXIMO 10 MB + 1 byte do upload para a MEMÓRIA do processo; o teto
-    do corpo inteiro da requisição (anti-DoS, inclusive pré-auth) é do
-    ``BodyLimitMiddleware``.
+    """Criação ATÔMICA da prova por requerimento (RNF-017): o backend resolve
+    nome/cliente/vendedor no ERP (Firebird) e a imagem no servidor de arquivos, faz o
+    snapshot da arte no storage e INSERE com código único. Admin-only (gate
+    ``CRIAR_PROVA``). Bloqueios: requerimento inexistente (404)/incompleto (422),
+    vendedor não cadastrado (422), imagem indisponível (422), ERP/share fora (503).
     """
-    conteudo = await arte.read(ARTE_TAMANHO_MAXIMO + 1)
     prova = await service.criar(
         CriarProva(
-            nome=nome,
-            requerimento=requerimento,
-            cliente=cliente,
-            vendedor_id=str(vendedor_id),
-            rota=rota,
-            prova_id=str(prova_id) if prova_id is not None else None,
-        ),
-        arte=conteudo,
-        arte_content_type_declarado=arte.content_type,
+            cod_req_art=payload.cod_req_art,
+            rota=payload.rota,
+            prova_id=str(payload.prova_id) if payload.prova_id is not None else None,
+        )
     )
     return ProvaOut.de_dominio(prova)
 

@@ -1,6 +1,6 @@
 """Composition root (src/main.py): a app sobe a partir de variáveis de ambiente.
 
-Roda offline: sem R2 a app usa o UnconfiguredStorage; o ciclo de vida
+Roda offline: sem STORAGE_DIR a app usa o UnconfiguredStorage; o ciclo de vida
 (startup/shutdown via TestClient) apenas loga e descarta o engine.
 """
 
@@ -10,7 +10,9 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
-from src.adapters.outbound.storage.r2_storage import R2Storage
+from src.adapters.outbound.arte_fonte.filesystem_arte_fonte import SistemaDeArquivosArteFonte
+from src.adapters.outbound.arte_fonte.unconfigured import UnconfiguredArteFonte
+from src.adapters.outbound.storage.filesystem_storage import FilesystemStorage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
 from src.infrastructure.config import get_settings
 
@@ -22,15 +24,12 @@ def _ambiente_minimo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> object:
     """Ambiente limpo e determinístico para cada teste (sem vazar .env local)."""
     get_settings.cache_clear()
     # Settings lê `.env` RELATIVO ao CWD; rodar de um diretório vazio garante
-    # hermeticidade mesmo com um `.env` real preenchido em apps/api (R2/Supabase
-    # configurados na validação do C01). delenv só cobre o ambiente do processo,
-    # não o arquivo — daí o chdir.
+    # hermeticidade mesmo com um `.env` real preenchido em apps/api (storage/share
+    # configurados na validação). O autouse da suíte já limpa o ambiente do processo.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("DATABASE_URL", PG_URL)
     monkeypatch.setenv("MIGRATIONS_DATABASE_URL", PG_URL)
-    for var in ("R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
-        monkeypatch.delenv(var, raising=False)
     yield
     get_settings.cache_clear()
 
@@ -44,12 +43,14 @@ def build_app() -> Callable[[], FastAPI]:
     return factory
 
 
-async def test_app_sobe_sem_r2_com_storage_nao_configurado(
+async def test_app_sobe_sem_storage_configurado(
     build_app: Callable[[], FastAPI],
 ) -> None:
     app = build_app()
 
+    # Sem STORAGE_DIR/ARTE_SHARE_BASE, os stand-ins inertes assumem (readiness 'down')
     assert isinstance(app.state.storage, UnconfiguredStorage)
+    assert isinstance(app.state.arte_fonte, UnconfiguredArteFonte)
     assert app.state.settings.app_env == "test"
 
     # lifespan explícito: exercita startup/shutdown (log + dispose do engine)
@@ -62,19 +63,26 @@ async def test_app_sobe_sem_r2_com_storage_nao_configurado(
     assert response.headers.get("X-Request-ID")
 
 
-def test_app_usa_r2_quando_configurado(
-    build_app: Callable[[], FastAPI], monkeypatch: pytest.MonkeyPatch
+def test_app_usa_filesystem_storage_quando_configurado(
+    build_app: Callable[[], FastAPI], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     get_settings.cache_clear()
-    monkeypatch.setenv("R2_ENDPOINT_URL", "https://conta-exemplo.r2.cloudflarestorage.com")
-    monkeypatch.setenv("R2_ACCESS_KEY_ID", "chave-exemplo")
-    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "segredo-exemplo")
-    monkeypatch.setenv("R2_BUCKET", "artes")
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path / "artes"))
 
     app = build_app()
 
-    # Só a SELEÇÃO do adapter é validada — nenhuma chamada de rede acontece aqui
-    assert isinstance(app.state.storage, R2Storage)
+    assert isinstance(app.state.storage, FilesystemStorage)
+
+
+def test_app_usa_arte_fonte_quando_share_configurado(
+    build_app: Callable[[], FastAPI], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("ARTE_SHARE_BASE", str(tmp_path / "STUDIO_TRANSICAO"))
+
+    app = build_app()
+
+    assert isinstance(app.state.arte_fonte, SistemaDeArquivosArteFonte)
 
 
 async def test_docs_openapi_expostos(build_app: Callable[[], FastAPI]) -> None:

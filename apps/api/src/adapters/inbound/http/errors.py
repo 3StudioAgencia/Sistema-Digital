@@ -23,6 +23,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.application.ports.arte_fonte import ArteFonteError
+from src.application.ports.requerimentos import RequerimentoReaderError
 from src.application.ports.storage import StorageError
 from src.application.usuarios import EmailJaCadastradoError, UsuarioNaoEncontradoError
 from src.domain.movimentacoes import TransicaoIdempotenciaConflitoError
@@ -31,6 +33,7 @@ from src.domain.provas import (
     LimiteDeTentativasError,
     ProvaNaoEncontradaError,
 )
+from src.domain.requerimentos import RequerimentoNaoEncontradoError
 from src.domain.state_machine.machine import TransicaoNaoAutorizadaError
 from src.domain.usuarios import ErroDeDominio
 from src.infrastructure.logging import request_id_var
@@ -99,7 +102,10 @@ async def _last_resort_handler(request: Request, exc: Exception) -> JSONResponse
 def _status_de_dominio(exc: ErroDeDominio) -> int:
     """Violações de regra de negócio → HTTP (W1-C04). 422 é o default; os dois
     casos com semântica própria têm status dedicado."""
-    if isinstance(exc, UsuarioNaoEncontradoError | ProvaNaoEncontradaError):
+    if isinstance(
+        exc,
+        UsuarioNaoEncontradoError | ProvaNaoEncontradaError | RequerimentoNaoEncontradoError,
+    ):
         return status.HTTP_404_NOT_FOUND
     # W3-C11: perfil não autorizado para a transição (rota+estado válidos) → 403,
     # mensagem genérica que não revela qual setor poderia (RN-014/Backlog C11).
@@ -140,9 +146,47 @@ async def _storage_exception_handler(request: Request, exc: Exception) -> JSONRe
     )
 
 
+async def _erp_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Falha de infraestrutura ao ler o ERP legado (Firebird): indisponibilidade
+    clara (503), nunca 500 opaco — mesma filosofia do storage. O detalhe (tipo da
+    exceção) fica só no log; a mensagem ao cliente não vaza a origem legada."""
+    logger.warning(
+        "ERP (Firebird) indisponível durante a requisição",
+        extra={"event": "erp_indisponivel", "error_type": type(exc).__name__},
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=error_envelope(
+            "erp_indisponivel",
+            "Consulta de requerimentos indisponível no momento. Tente novamente.",
+            request_id_var.get(),
+        ),
+    )
+
+
+async def _arte_fonte_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Falha de infraestrutura no servidor de arquivos de artes (share fora do ar):
+    503 claro, nunca 500 opaco — mesma filosofia do storage/ERP. A ``arte
+    indisponível`` (negócio) é ``ArteNaoDisponivelError`` (ErroDeDominio → 422)."""
+    logger.warning(
+        "servidor de arquivos de artes indisponível durante a requisição",
+        extra={"event": "arte_fonte_indisponivel", "error_type": type(exc).__name__},
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=error_envelope(
+            "arte_fonte_indisponivel",
+            "Servidor de arquivos de artes indisponível no momento. Tente novamente.",
+            request_id_var.get(),
+        ),
+    )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(ErroDeDominio, _dominio_exception_handler)
     app.add_exception_handler(StorageError, _storage_exception_handler)
+    app.add_exception_handler(RequerimentoReaderError, _erp_exception_handler)
+    app.add_exception_handler(ArteFonteError, _arte_fonte_exception_handler)
     app.add_exception_handler(Exception, _last_resort_handler)

@@ -1,14 +1,16 @@
-"""``ProvasService`` (W2-C06) — criação atômica, retry de colisão e compensação.
+"""``ProvasService`` (Fatia 3) — criação por REQUERIMENTO: resolução no ERP,
+mapeamento do vendedor, snapshot da imagem, atomicidade e idempotência.
 
-Offline, com dublês: a ordem upload→INSERT→commit e a compensação do R2 são o
-coração da RNF-017 (nunca prova órfã; objeto órfão só se a própria compensação
-falhar — e aí com CRITICAL no log).
+Offline, com dublês: a ordem resolver→arte→upload→INSERT→commit e a compensação do
+snapshot são o coração da RNF-017 (nunca prova órfã; objeto órfão só se a própria
+compensação falhar — e aí com CRITICAL no log).
 """
 
 import datetime as dt
 import logging
 
 import pytest
+from src.application.ports.arte_fonte import ArteSelecionada
 from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.provas_repository import (
     CodigoJaExisteError,
@@ -31,7 +33,6 @@ from src.application.provas import (
 )
 from src.domain.auditoria import EventoAuditoria, NovoEventoAuditoria
 from src.domain.provas import (
-    ArteInvalidaError,
     CriacaoDivergenteError,
     EstadoProva,
     Prova,
@@ -39,14 +40,36 @@ from src.domain.provas import (
     VendedorInvalidoError,
     validar_codigo,
 )
+from src.domain.requerimentos import (
+    ArteNaoDisponivelError,
+    RequerimentoArte,
+    RequerimentoIncompletoError,
+    RequerimentoNaoEncontradoError,
+    VendedorNaoMapeadoError,
+)
 from src.domain.usuarios import Localizacao, Setor, Usuario
 
-from tests.conftest import FakeStorage
+from tests.conftest import FakeArteFonte, FakeRequerimentoReader, FakeStorage
 
-JPEG_MINIMO = b"\xff\xd8\xff\xe0" + b"\x00" * 16
-PNG_MINIMO = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 QUANDO = dt.datetime(2026, 6, 12, tzinfo=dt.UTC)
 VENDEDOR_ID = "22222222-2222-2222-2222-222222222222"
+COD_REQ = 150288
+COD_VENDE = 10
+
+REQ = RequerimentoArte(
+    cod_req_art=COD_REQ,
+    nome="QUEIJO MUSSARELA FLORA MILK",
+    cod_cliente=1058,
+    nome_cliente="LATICINIOS FLORIDA LTDA",
+    cod_vendedor=COD_VENDE,
+    nome_vendedor="REGISLAINE PETRIM",
+    cod_vend_fat=10,
+    anexo_imagem="VERSAO_150288_V3.jpg",
+)
+ARTE_JPEG = ArteSelecionada(conteudo=JPEG, content_type="image/jpeg", nome_arquivo="V3.jpg")
+ARTE_PNG = ArteSelecionada(conteudo=PNG, content_type="image/png", nome_arquivo="V3.png")
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +91,6 @@ class FakeProvasRepository(ProvasRepositoryPort):
     async def get(self, prova_id: str) -> Prova | None:
         return self.provas.get(prova_id)
 
-    # Métodos de leitura do C07/C10: o serviço de CRIAÇÃO não os usa.
     async def obter_para_transicao(self, prova_id: str) -> Prova | None:  # pragma: no cover
         raise NotImplementedError
 
@@ -103,6 +125,12 @@ class FakeUsuariosRepository(UsuariosRepositoryPort):
 
     async def get(self, usuario_id: str) -> Usuario | None:
         return self.usuarios.get(usuario_id)
+
+    async def buscar_por_cod_vendedor_firebird(self, cod: int) -> Usuario | None:
+        for u in self.usuarios.values():
+            if u.cod_vendedor_firebird == cod:
+                return u
+        return None
 
     async def get_by_email(self, email: str) -> Usuario | None:  # pragma: no cover
         raise NotImplementedError
@@ -141,8 +169,6 @@ class StorageComDeleteQuebrado(FakeStorage):
 
 
 class FakeAuditLog(AuditLogPort):
-    """Captura as chamadas de registro (W6-C20) — conta eventos sem banco."""
-
     def __init__(self) -> None:
         self.eventos: list[NovoEventoAuditoria] = []
 
@@ -153,7 +179,9 @@ class FakeAuditLog(AuditLogPort):
 # ---------------------------------------------------------------------------
 # Montagem
 # ---------------------------------------------------------------------------
-def _vendedor(ativo: bool = True, setor: Setor = Setor.VENDEDOR) -> Usuario:
+def _vendedor(
+    ativo: bool = True, setor: Setor = Setor.VENDEDOR, cod: int | None = COD_VENDE
+) -> Usuario:
     return Usuario(
         id=VENDEDOR_ID,
         nome="Renan Petrim",
@@ -161,37 +189,61 @@ def _vendedor(ativo: bool = True, setor: Setor = Setor.VENDEDOR) -> Usuario:
         setor=setor,
         localizacao=Localizacao.MATRIZ if setor is Setor.VENDEDOR else None,
         ativo=ativo,
+        cod_vendedor_firebird=cod if setor is Setor.VENDEDOR else None,
     )
+
+
+class _Ctx:
+    def __init__(
+        self,
+        service: ProvasService,
+        repo: FakeProvasRepository,
+        storage: FakeStorage,
+        uow: FakeUow,
+        firebird: FakeRequerimentoReader,
+        arte_fonte: FakeArteFonte,
+        audit: FakeAuditLog,
+    ) -> None:
+        self.service = service
+        self.repo = repo
+        self.storage = storage
+        self.uow = uow
+        self.firebird = firebird
+        self.arte_fonte = arte_fonte
+        self.audit = audit
 
 
 def _montar(
     vendedor: Usuario | None = None,
+    *,
+    req: RequerimentoArte | None = REQ,
+    arte: ArteSelecionada = ARTE_JPEG,
     storage: FakeStorage | None = None,
-) -> tuple[ProvasService, FakeProvasRepository, FakeUsuariosRepository, FakeStorage, FakeUow]:
+) -> _Ctx:
     repo = FakeProvasRepository()
     usuarios = FakeUsuariosRepository()
     if vendedor is not None:
         usuarios.usuarios[vendedor.id] = vendedor
     storage = storage or FakeStorage()
+    firebird = FakeRequerimentoReader({req.cod_req_art: req} if req is not None else {})
+    arte_fonte = FakeArteFonte(arte)
+    audit = FakeAuditLog()
     uow = FakeUow()
     service = ProvasService(
         repo=repo,
         usuarios_repo=usuarios,
         storage=storage,
+        firebird=firebird,
+        arte_fonte=arte_fonte,
         uow=uow,
         relogio=lambda: QUANDO,
+        audit=audit,
     )
-    return service, repo, usuarios, storage, uow
+    return _Ctx(service, repo, storage, uow, firebird, arte_fonte, audit)
 
 
 def _cmd(**overrides: object) -> CriarProva:
-    base: dict[str, object] = {
-        "nome": "Etiq Cafe Caproni Classico",
-        "requerimento": "155295",
-        "cliente": "Cafe Caproni",
-        "vendedor_id": VENDEDOR_ID,
-        "rota": Rota.MATRIZ,
-    }
+    base: dict[str, object] = {"cod_req_art": COD_REQ, "rota": Rota.MATRIZ}
     base.update(overrides)
     return CriarProva(**base)  # type: ignore[arg-type]
 
@@ -199,191 +251,180 @@ def _cmd(**overrides: object) -> CriarProva:
 # ---------------------------------------------------------------------------
 # Caminho feliz
 # ---------------------------------------------------------------------------
-async def test_criar_persiste_prova_criada_na_rota_com_arte_no_storage() -> None:
-    service, repo, _, storage, uow = _montar(_vendedor())
+async def test_criar_resolve_no_erp_e_persiste_com_snapshot_da_arte() -> None:
+    ctx = _montar(_vendedor())
 
-    prova = await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+    prova = await ctx.service.criar(_cmd())
 
-    assert prova.status is EstadoProva.CRIADA  # US-001: nasce "Criada"
-    assert prova.rota is Rota.MATRIZ  # na rota selecionada
+    assert prova.status is EstadoProva.CRIADA  # US-001
+    assert prova.rota is Rota.MATRIZ
     assert validar_codigo(prova.codigo)
-    assert prova.codigo.startswith("PRV-2026-06-")  # relógio injetado
-    assert repo.provas[prova.id] is prova
+    assert prova.nome == "QUEIJO MUSSARELA FLORA MILK"  # PRODART do ERP
+    assert prova.cliente == "LATICINIOS FLORIDA LTDA"  # TB_CLIENTES.CLIENTE
+    assert prova.requerimento == str(COD_REQ)
+    assert prova.vendedor_id == VENDEDOR_ID  # COD_VENDE -> usuário do app
     assert prova.arte_key == f"provas/{prova.id}/arte.jpg"
-    assert storage.download(prova.arte_key) == JPEG_MINIMO
+    assert ctx.storage.download(prova.arte_key) == JPEG  # snapshot da fonte
     assert prova.arte_content_type == "image/jpeg"
-    assert uow.commits == 1
+    assert ctx.uow.commits == 1
+    # o snapshot leu do share com os códigos do requerimento
+    assert ctx.arte_fonte.chamadas == [(10, 1058, COD_REQ, "VERSAO_150288_V3.jpg")]
 
 
-async def test_criar_detecta_png_e_normaliza_strings() -> None:
-    service, _, _, storage, _ = _montar(_vendedor())
-
-    prova = await service.criar(
-        _cmd(nome="  Prova X  ", cliente=" C ", requerimento=" 01 ".strip()),
-        PNG_MINIMO,
-        None,  # sem content-type declarado: vale o magic byte
-    )
-
+async def test_criar_detecta_png_pela_fonte() -> None:
+    ctx = _montar(_vendedor(), arte=ARTE_PNG)
+    prova = await ctx.service.criar(_cmd())
     assert prova.arte_key.endswith("/arte.png")
     assert prova.arte_content_type == "image/png"
-    assert prova.nome == "Prova X"
-    assert prova.cliente == "C"
-    assert storage.download(prova.arte_key) == PNG_MINIMO
+    assert ctx.storage.download(prova.arte_key) == PNG
 
 
 # ---------------------------------------------------------------------------
-# Validações de negócio (nada sobe ao storage)
+# Bloqueios de resolução (nada sobe ao storage nem ao banco)
 # ---------------------------------------------------------------------------
-async def test_arte_invalida_nao_toca_storage_nem_banco() -> None:
-    service, repo, _, storage, _ = _montar(_vendedor())
-    with pytest.raises(ArteInvalidaError):
-        await service.criar(_cmd(), b"GIF89a" + b"\x00" * 16, "image/gif")
-    assert repo.provas == {} and storage._objects == {}
+async def test_requerimento_inexistente_bloqueia() -> None:
+    ctx = _montar(_vendedor(), req=None)  # firebird não conhece o requerimento
+    with pytest.raises(RequerimentoNaoEncontradoError):
+        await ctx.service.criar(_cmd())
+    assert ctx.repo.provas == {} and ctx.storage._objects == {}
 
 
-@pytest.mark.parametrize(
-    "vendedor",
-    [None, _vendedor(ativo=False), _vendedor(setor=Setor.MOTORISTA)],
-)
-async def test_vendedor_invalido_e_rejeitado_antes_do_upload(vendedor: Usuario | None) -> None:
-    service, repo, _, storage, _ = _montar(vendedor)
+_SEM_NOME = RequerimentoArte(COD_REQ, None, 1058, "Cli", COD_VENDE, "Vend", 10, "a.jpg")
+_SEM_CLIENTE = RequerimentoArte(COD_REQ, "Prod", 1058, None, COD_VENDE, "Vend", 10, "a.jpg")
+_SEM_FAT = RequerimentoArte(COD_REQ, "Prod", 1058, "Cli", COD_VENDE, "Vend", None, "a.jpg")
+
+
+@pytest.mark.parametrize("req", [_SEM_NOME, _SEM_CLIENTE, _SEM_FAT])
+async def test_requerimento_incompleto_bloqueia(req: RequerimentoArte) -> None:
+    ctx = _montar(_vendedor(), req=req)
+    with pytest.raises(RequerimentoIncompletoError):
+        await ctx.service.criar(_cmd())
+    assert ctx.repo.provas == {} and ctx.storage._objects == {}
+
+
+async def test_vendedor_nao_mapeado_bloqueia() -> None:
+    ctx = _montar(_vendedor(cod=999))  # nenhum usuário com COD_VENDE=10
+    with pytest.raises(VendedorNaoMapeadoError):
+        await ctx.service.criar(_cmd())
+    assert ctx.repo.provas == {} and ctx.storage._objects == {}
+
+
+async def test_vendedor_mapeado_mas_inativo_bloqueia() -> None:
+    # tem o código (COD_VENDE=10) e é encontrado, mas está inativo → inválido.
+    ctx = _montar(_vendedor(ativo=False))
     with pytest.raises(VendedorInvalidoError):
-        await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
-    assert repo.provas == {} and storage._objects == {}
+        await ctx.service.criar(_cmd())
+    assert ctx.repo.provas == {} and ctx.storage._objects == {}
+
+
+async def test_arte_indisponivel_no_share_bloqueia_sem_snapshot() -> None:
+    ctx = _montar(_vendedor())
+    ctx.arte_fonte.erro = ArteNaoDisponivelError()
+    with pytest.raises(ArteNaoDisponivelError):
+        await ctx.service.criar(_cmd())
+    assert ctx.repo.provas == {} and ctx.storage._objects == {}  # nem chegou ao upload
 
 
 # ---------------------------------------------------------------------------
 # Colisão de código (DP-3) e atomicidade (RNF-017)
 # ---------------------------------------------------------------------------
 async def test_colisao_de_codigo_regenera_e_converge() -> None:
-    service, repo, _, storage, uow = _montar(_vendedor())
-    repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")]
+    ctx = _montar(_vendedor())
+    ctx.repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")]
 
-    prova = await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+    prova = await ctx.service.criar(_cmd())
 
-    assert len(repo.codigos_tentados) == 2
-    assert repo.codigos_tentados[0] != repo.codigos_tentados[1]  # regenerou
-    assert prova.codigo == repo.codigos_tentados[1]
-    # a arte NÃO é re-enviada nem apagada (key derivada do id, estável)
-    assert storage.download(prova.arte_key) == JPEG_MINIMO
-    assert uow.commits == 1
+    assert len(ctx.repo.codigos_tentados) == 2
+    assert ctx.repo.codigos_tentados[0] != ctx.repo.codigos_tentados[1]
+    assert ctx.storage.download(prova.arte_key) == JPEG  # snapshot não re-enviado
+    assert ctx.uow.commits == 1
 
 
-async def test_colisao_de_codigo_loga_criou_prova_uma_unica_vez() -> None:
-    """W6-C20: a colisão de código é detectada no ``add`` (flush) ANTES do
-    ``audit.registrar`` (a captura fica no MESMO bloco transacional, depois do
-    add). Logo, a tentativa que falha NÃO loga; a retentativa loga UMA vez —
-    exactly-once na criação, mesmo com retry (guarda contra double-count)."""
-    repo = FakeProvasRepository()
-    usuarios = FakeUsuariosRepository()
-    usuarios.usuarios[VENDEDOR_ID] = _vendedor()
-    audit = FakeAuditLog()
-    service = ProvasService(
-        repo=repo,
-        usuarios_repo=usuarios,
-        storage=FakeStorage(),
-        uow=FakeUow(),
-        relogio=lambda: QUANDO,
-        audit=audit,
-    )
-    repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")]  # colisão na 1ª tentativa
+async def test_colisao_loga_criou_prova_uma_vez() -> None:
+    ctx = _montar(_vendedor())
+    ctx.repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")]
 
-    prova = await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+    prova = await ctx.service.criar(_cmd())
 
-    assert len(repo.codigos_tentados) == 2  # regenerou (retry)
-    assert len(audit.eventos) == 1  # a tentativa que falhou não logou
-    assert audit.eventos[0].evento is EventoAuditoria.CRIOU_PROVA
-    assert audit.eventos[0].prova_id == prova.id
+    assert len(ctx.audit.eventos) == 1  # a tentativa que falhou não logou
+    assert ctx.audit.eventos[0].evento is EventoAuditoria.CRIOU_PROVA
+    assert ctx.audit.eventos[0].prova_id == prova.id
 
 
-async def test_colisoes_esgotadas_viram_erro_interno_e_compensam_a_arte() -> None:
-    service, repo, _, storage, _ = _montar(_vendedor())
-    repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")] * MAX_TENTATIVAS_CODIGO
+async def test_colisoes_esgotadas_viram_erro_interno_e_compensam() -> None:
+    ctx = _montar(_vendedor())
+    ctx.repo.falhas_pendentes = [CodigoJaExisteError("PRV-X")] * MAX_TENTATIVAS_CODIGO
 
     with pytest.raises(GeracaoDeCodigoEsgotadaError):
-        await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+        await ctx.service.criar(_cmd())
 
-    assert len(repo.codigos_tentados) == MAX_TENTATIVAS_CODIGO
-    assert storage._objects == {}  # compensação removeu a arte
-    assert repo.provas == {}  # nenhuma prova órfã
+    assert len(ctx.repo.codigos_tentados) == MAX_TENTATIVAS_CODIGO
+    assert ctx.storage._objects == {}  # compensação removeu o snapshot
+    assert ctx.repo.provas == {}
 
 
-async def test_falha_no_insert_compensa_a_arte_e_propaga_o_erro_original() -> None:
-    service, repo, _, storage, uow = _montar(_vendedor())
-    repo.falhas_pendentes = [RuntimeError("banco caiu")]
+async def test_falha_no_insert_compensa_e_propaga() -> None:
+    ctx = _montar(_vendedor())
+    ctx.repo.falhas_pendentes = [RuntimeError("banco caiu")]
 
     with pytest.raises(RuntimeError, match="banco caiu"):
-        await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+        await ctx.service.criar(_cmd())
 
-    assert storage._objects == {}  # sem objeto órfão
-    assert repo.provas == {}  # sem prova órfã
-    assert uow.rollbacks >= 1  # transação desfeita
+    assert ctx.storage._objects == {}
+    assert ctx.repo.provas == {}
+    assert ctx.uow.rollbacks >= 1
 
 
-async def test_compensacao_que_falha_loga_critical_e_preserva_o_erro_original(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    service, repo, _, _storage, _ = _montar(_vendedor(), storage=StorageComDeleteQuebrado())
-    repo.falhas_pendentes = [RuntimeError("banco caiu")]
+async def test_compensacao_que_falha_loga_critical(caplog: pytest.LogCaptureFixture) -> None:
+    ctx = _montar(_vendedor(), storage=StorageComDeleteQuebrado())
+    ctx.repo.falhas_pendentes = [RuntimeError("banco caiu")]
 
     with (
         caplog.at_level(logging.CRITICAL, logger="rastreio.provas"),
-        pytest.raises(RuntimeError, match="banco caiu"),  # erro ORIGINAL, não o do delete
+        pytest.raises(RuntimeError, match="banco caiu"),
     ):
-        await service.criar(_cmd(), JPEG_MINIMO, "image/jpeg")
+        await ctx.service.criar(_cmd())
 
-    assert any(
-        getattr(r, "event", "") == "compensacao_arte_falhou" for r in caplog.records
-    )  # objeto órfão fica MARCADO para limpeza (RNF-024)
+    assert any(getattr(r, "event", "") == "compensacao_arte_falhou" for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
-# Idempotência por prova_id (RNF-015 — revisão adversarial W2-C06)
+# Idempotência por prova_id (RNF-015)
 # ---------------------------------------------------------------------------
-async def test_reenvio_com_a_mesma_chave_converge_sem_novo_upload() -> None:
-    """Resposta perdida (timeout pós-commit) + retry: devolve a prova existente."""
-    service, repo, _, storage, uow = _montar(_vendedor())
-    primeira = await service.criar(
-        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
-    )
-    uploads_antes = dict(storage._objects)
+async def test_reenvio_converge_sem_reresolver_nem_reupload() -> None:
+    ctx = _montar(_vendedor())
+    chave = "33333333-3333-3333-3333-333333333333"
+    primeira = await ctx.service.criar(_cmd(prova_id=chave))
+    uploads_antes = dict(ctx.storage._objects)
+    chamadas_antes = list(ctx.arte_fonte.chamadas)
 
-    segunda = await service.criar(
-        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
-    )
+    segunda = await ctx.service.criar(_cmd(prova_id=chave))
 
-    assert segunda is primeira or segunda.id == primeira.id
-    assert segunda.codigo == primeira.codigo  # NENHUMA prova nova
-    assert len(repo.provas) == 1
-    assert storage._objects == uploads_antes  # pré-check converge ANTES do upload
-    assert uow.commits == 1  # só a primeira criação commitou
+    assert segunda.id == primeira.id and segunda.codigo == primeira.codigo
+    assert len(ctx.repo.provas) == 1
+    assert ctx.storage._objects == uploads_antes  # convergiu ANTES do upload
+    assert ctx.arte_fonte.chamadas == chamadas_antes  # não releu o share
+    assert ctx.uow.commits == 1
 
 
-async def test_mesma_chave_com_dados_diferentes_e_409() -> None:
-    service, repo, _, _, _ = _montar(_vendedor())
-    await service.criar(
-        _cmd(prova_id="33333333-3333-3333-3333-333333333333"), JPEG_MINIMO, "image/jpeg"
-    )
+async def test_mesma_chave_com_rota_diferente_e_409() -> None:
+    ctx = _montar(_vendedor())
+    chave = "33333333-3333-3333-3333-333333333333"
+    await ctx.service.criar(_cmd(prova_id=chave, rota=Rota.MATRIZ))
     with pytest.raises(CriacaoDivergenteError):
-        await service.criar(
-            _cmd(prova_id="33333333-3333-3333-3333-333333333333", nome="OUTRO NOME"),
-            JPEG_MINIMO,
-            "image/jpeg",
-        )
-    assert len(repo.provas) == 1  # nada duplicado nem sobrescrito
+        await ctx.service.criar(_cmd(prova_id=chave, rota=Rota.FILIAL))
+    assert len(ctx.repo.provas) == 1
 
 
-async def test_corrida_de_idempotencia_no_insert_converge_sem_compensar_a_arte() -> None:
-    """Requisição idêntica venceu entre o pré-check e o INSERT (PK violada):
-    converge para a existente e NÃO deleta a arte — a key pertence a ela."""
-    service, repo, _, storage, _ = _montar(_vendedor())
+async def test_corrida_de_idempotencia_no_insert_converge_sem_compensar() -> None:
+    ctx = _montar(_vendedor())
     chave = "44444444-4444-4444-4444-444444444444"
     existente = Prova(
         id=chave,
         codigo="PRV-2026-06-K3T9XB",
-        nome="Etiq Cafe Caproni Classico",
-        requerimento="155295",
-        cliente="Cafe Caproni",
+        nome="QUEIJO MUSSARELA FLORA MILK",
+        requerimento=str(COD_REQ),
+        cliente="LATICINIOS FLORIDA LTDA",
         vendedor_id=VENDEDOR_ID,
         rota=Rota.MATRIZ,
         arte_key=f"provas/{chave}/arte.jpg",
@@ -391,15 +432,14 @@ async def test_corrida_de_idempotencia_no_insert_converge_sem_compensar_a_arte()
         created_at=QUANDO,
         updated_at=QUANDO,
     )
-    repo.falhas_pendentes = [ProvaJaExisteError(chave)]
+    ctx.repo.falhas_pendentes = [ProvaJaExisteError(chave)]
 
     async def get_pos_colisao(prova_id: str) -> Prova | None:
-        # pré-check vê vazio; após a "colisão", a linha da concorrente aparece
-        return existente if repo.codigos_tentados else None
+        return existente if ctx.repo.codigos_tentados else None
 
-    repo.get = get_pos_colisao  # type: ignore[method-assign]
+    ctx.repo.get = get_pos_colisao  # type: ignore[method-assign]
 
-    prova = await service.criar(_cmd(prova_id=chave), JPEG_MINIMO, "image/jpeg")
+    prova = await ctx.service.criar(_cmd(prova_id=chave))
 
     assert prova is existente
-    assert existente.arte_key in storage._objects  # compensação NÃO rodou
+    assert existente.arte_key in ctx.storage._objects  # compensação NÃO rodou

@@ -20,6 +20,8 @@ from fastapi import APIRouter, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
+from src.application.ports.arte_fonte import ArteFontePort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.storage import StoragePort
 from src.infrastructure.config import APP_VERSION, Settings
 
@@ -61,12 +63,36 @@ async def _check_database(ping: DbPing) -> CheckResult:
 
 async def _check_storage(storage: StoragePort) -> CheckResult:
     try:
-        # StoragePort é síncrona (boto3) — threadpool mantém o event loop livre
+        # StoragePort é síncrona (IO de disco) — threadpool mantém o event loop livre
         ok = await asyncio.wait_for(
             run_in_threadpool(storage.health), timeout=_CHECK_TIMEOUT_SECONDS
         )
     except Exception as exc:
         _log_check_failure("storage", exc)
+        return "down"
+    return "ok" if ok else "down"
+
+
+async def _check_erp(reader: RequerimentoReaderPort) -> CheckResult:
+    try:
+        # Porta síncrona (driver Firebird bloqueante) — threadpool, como o storage.
+        ok = await asyncio.wait_for(
+            run_in_threadpool(reader.health), timeout=_CHECK_TIMEOUT_SECONDS
+        )
+    except Exception as exc:
+        _log_check_failure("erp", exc)
+        return "down"
+    return "ok" if ok else "down"
+
+
+async def _check_arte_fonte(arte_fonte: ArteFontePort) -> CheckResult:
+    try:
+        # Porta síncrona (IO de disco/SMB) — threadpool, como o storage.
+        ok = await asyncio.wait_for(
+            run_in_threadpool(arte_fonte.health), timeout=_CHECK_TIMEOUT_SECONDS
+        )
+    except Exception as exc:
+        _log_check_failure("arte_fonte", exc)
         return "down"
     return "ok" if ok else "down"
 
@@ -82,19 +108,34 @@ async def readiness(request: Request) -> JSONResponse:
     """Readiness — status individual de cada dependência essencial."""
     settings: Settings = request.app.state.settings
     storage: StoragePort = request.app.state.storage
+    reader: RequerimentoReaderPort = request.app.state.requerimento_reader
+    arte_fonte: ArteFontePort = request.app.state.arte_fonte
     db_ping: DbPing = request.app.state.db_ping
 
     # Verificações em paralelo: o tempo total é o da mais lenta, não a soma
-    database_result, storage_result = await asyncio.gather(
-        _check_database(db_ping), _check_storage(storage)
+    database_result, storage_result, erp_result, arte_fonte_result = await asyncio.gather(
+        _check_database(db_ping),
+        _check_storage(storage),
+        _check_erp(reader),
+        _check_arte_fonte(arte_fonte),
     )
 
+    # O ERP (Firebird) e o servidor de arquivos de artes são reportados, mas NÃO
+    # bloqueiam o readiness: são dependências só da CRIAÇÃO de provas por
+    # requerimento; sua queda não pode derrubar a API inteira (auth, leitura de
+    # provas, dashboard seguem). Um orquestrador inspeciona ``checks.erp`` /
+    # ``checks.arte_fonte`` se quiser agir sobre elas.
     all_ok = database_result == "ok" and storage_result == "ok"
     return JSONResponse(
         status_code=status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
         content={
             "status": "ok" if all_ok else "degraded",
-            "checks": {"database": database_result, "storage": storage_result},
+            "checks": {
+                "database": database_result,
+                "storage": storage_result,
+                "erp": erp_result,
+                "arte_fonte": arte_fonte_result,
+            },
             "version": APP_VERSION,
             "env": settings.app_env,
         },

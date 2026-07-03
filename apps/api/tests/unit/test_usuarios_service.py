@@ -56,6 +56,9 @@ class FakeUsuariosRepository(UsuariosRepositoryPort):
         alvo = email.lower()
         return next((u for u in self.por_id.values() if u.email.lower() == alvo), None)
 
+    async def buscar_por_cod_vendedor_firebird(self, cod: int) -> Usuario | None:
+        return next((u for u in self.por_id.values() if u.cod_vendedor_firebird == cod), None)
+
     async def add(self, usuario: Usuario) -> None:
         if self.fail_add is not None:
             raise self.fail_add

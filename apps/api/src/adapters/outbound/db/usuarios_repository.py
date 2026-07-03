@@ -27,6 +27,7 @@ def _para_dominio(row: UsuarioRow) -> Usuario:
         localizacao=row.localizacao,
         administrador=row.administrador,
         ativo=row.ativo,
+        cod_vendedor_firebird=row.cod_vendedor_firebird,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -50,6 +51,13 @@ class SqlAlchemyUsuariosRepository(UsuariosRepositoryPort):
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return _para_dominio(row) if row is not None else None
 
+    async def buscar_por_cod_vendedor_firebird(self, cod: int) -> Usuario | None:
+        # UNIQUE parcial (migration 0024) → no máximo uma linha. Escopo pela RLS
+        # da sessão (a criação roda sob o admin, que enxerga todos os usuários).
+        stmt = select(UsuarioRow).where(UsuarioRow.cod_vendedor_firebird == cod)
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _para_dominio(row) if row is not None else None
+
     async def add(self, usuario: Usuario) -> None:
         row = UsuarioRow(
             id=usuario.id,
@@ -59,6 +67,7 @@ class SqlAlchemyUsuariosRepository(UsuariosRepositoryPort):
             localizacao=usuario.localizacao,
             administrador=usuario.administrador,
             ativo=usuario.ativo,
+            cod_vendedor_firebird=usuario.cod_vendedor_firebird,
         )
         self._session.add(row)
         # eager_defaults do mapper traz created_at/updated_at no RETURNING do
@@ -91,6 +100,7 @@ class SqlAlchemyUsuariosRepository(UsuariosRepositoryPort):
                 localizacao=usuario.localizacao,
                 administrador=usuario.administrador,
                 ativo=usuario.ativo,
+                cod_vendedor_firebird=usuario.cod_vendedor_firebird,
                 updated_at=text("clock_timestamp()"),
             )
             .returning(UsuarioRow.updated_at)

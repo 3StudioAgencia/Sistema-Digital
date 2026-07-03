@@ -33,6 +33,7 @@ from src.domain.usuarios import (
     UltimoAdminError,
     Usuario,
     normalizar_email,
+    validar_cod_vendedor_firebird,
     validar_localizacao,
     validar_senha,
 )
@@ -68,19 +69,23 @@ class CriarUsuario:
     setor: Setor
     localizacao: Localizacao | None = None
     administrador: bool = False
+    # Código do vendedor no ERP (Firebird) — só p/ setor Vendedor (Fatia 4).
+    cod_vendedor_firebird: int | None = None
 
 
 @dataclass(frozen=True)
 class EditarUsuario:
-    """Comando de edição parcial (PATCH). ``localizacao_informada`` distingue
-    "limpar localização" (None explícito) de "não mexer" — e-mail e senha NÃO
-    são editáveis nesta wave (ver docs/usuarios.md)."""
+    """Comando de edição parcial (PATCH). ``localizacao_informada``/
+    ``cod_vendedor_firebird_informado`` distinguem "limpar" (None explícito) de
+    "não mexer" — e-mail e senha NÃO são editáveis nesta wave (ver docs/usuarios.md)."""
 
     nome: str | None = None
     setor: Setor | None = None
     localizacao: Localizacao | None = None
     localizacao_informada: bool = False
     administrador: bool | None = None
+    cod_vendedor_firebird: int | None = None
+    cod_vendedor_firebird_informado: bool = False
 
 
 class UsuariosService:
@@ -109,6 +114,7 @@ class UsuariosService:
     async def criar(self, cmd: CriarUsuario) -> Usuario:
         validar_senha(cmd.senha)
         validar_localizacao(cmd.setor, cmd.localizacao)
+        validar_cod_vendedor_firebird(cmd.setor, cmd.cod_vendedor_firebird)
         email = normalizar_email(cmd.email)
         senha_hash = self._hasher.hash(cmd.senha)
         usuario = Usuario(
@@ -119,6 +125,7 @@ class UsuariosService:
             localizacao=cmd.localizacao,
             administrador=cmd.administrador,
             ativo=True,
+            cod_vendedor_firebird=cmd.cod_vendedor_firebird,
         )
         # Uma transação (RNF-017): a pré-checagem de e-mail, a linha de domínio e a
         # credencial nascem/falham JUNTAS — órfão é impossível (fim da compensação).
@@ -149,6 +156,7 @@ class UsuariosService:
         if novo == alvo:
             return alvo  # nada a fazer — idempotente (RNF-015)
         validar_localizacao(novo.setor, novo.localizacao)
+        validar_cod_vendedor_firebird(novo.setor, novo.cod_vendedor_firebird)
         rebaixa_admin = alvo.administrador and not novo.administrador
         if rebaixa_admin:
             if ator.id == alvo.id:
@@ -190,6 +198,12 @@ class UsuariosService:
             # setor deixou de ser Vendedor sem localização explícita: limpa o
             # campo em vez de falhar por um resíduo invisível ao operador
             novo = novo.com(localizacao=None)
+        if edicao.cod_vendedor_firebird_informado:
+            novo = novo.com(cod_vendedor_firebird=edicao.cod_vendedor_firebird)
+        elif novo.setor is not Setor.VENDEDOR:
+            # trocou de Vendedor para outro setor sem código explícito: zera o
+            # código do ERP (o CHECK do banco rejeitaria o UPDATE — Fatia 3, nota).
+            novo = novo.com(cod_vendedor_firebird=None)
         if edicao.administrador is not None:
             novo = novo.com(administrador=edicao.administrador)
         return novo

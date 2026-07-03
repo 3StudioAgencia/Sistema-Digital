@@ -53,9 +53,9 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
 
     command.upgrade(alembic_cfg, "head")
     assert _pgcrypto_instalada(database_url), "baseline deve habilitar pgcrypto"
-    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0023", (
-        "head deve registrar a revisão 0023 (auth_local: credenciais + sessões da "
-        "autenticação própria — migração Supabase->local)"
+    assert _scalar(database_url, "SELECT version_num FROM alembic_version") == "0024", (
+        "head deve registrar a revisão 0024 (usuarios.cod_vendedor_firebird — "
+        "mapeamento do vendedor do app ao COD_VENDE do ERP, Fatia 3)"
     )
     assert _scalar(database_url, "SELECT count(*) FROM pg_class WHERE relname = 'usuarios'") == 1, (
         "0002 deve criar a tabela usuarios"
@@ -309,6 +309,32 @@ def test_upgrade_e_downgrade_em_ambiente_limpo(alembic_cfg: Config, database_url
         )
         == 8
     ), "0023 deve criar as 8 funções private.auth_* (autenticação própria)"
+    # Fatia 3 (0024): coluna usuarios.cod_vendedor_firebird + UNIQUE parcial + CHECK.
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.columns WHERE table_name = 'usuarios' "
+            "AND column_name = 'cod_vendedor_firebird'",
+        )
+        == 1
+    ), "0024 deve adicionar usuarios.cod_vendedor_firebird (mapeamento do vendedor)"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM pg_indexes WHERE tablename = 'usuarios' "
+            "AND indexname = 'uq_usuarios_cod_vendedor_firebird'",
+        )
+        == 1
+    ), "0024 deve criar o índice único parcial de cod_vendedor_firebird"
+    assert (
+        _scalar(
+            database_url,
+            "SELECT count(*) FROM information_schema.table_constraints "
+            "WHERE table_name = 'usuarios' AND constraint_type = 'CHECK' "
+            "AND constraint_name = 'ck_usuarios_cod_vendedor_firebird_setor'",
+        )
+        == 1
+    ), "0024 deve criar o CHECK (só vendedor tem código do Firebird)"
 
     command.downgrade(alembic_cfg, "base")
     assert not _pgcrypto_instalada(database_url), "downgrade deve remover a extensão"

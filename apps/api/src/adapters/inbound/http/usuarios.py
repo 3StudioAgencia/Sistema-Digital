@@ -36,6 +36,7 @@ class UsuarioOut(BaseModel):
     localizacao: Localizacao | None
     administrador: bool
     ativo: bool
+    cod_vendedor_firebird: int | None
     created_at: datetime | None
     updated_at: datetime | None
 
@@ -49,6 +50,7 @@ class UsuarioOut(BaseModel):
             localizacao=u.localizacao,
             administrador=u.administrador,
             ativo=u.ativo,
+            cod_vendedor_firebird=u.cod_vendedor_firebird,
             created_at=u.created_at,
             updated_at=u.updated_at,
         )
@@ -61,6 +63,8 @@ class CriarUsuarioIn(BaseModel):
     setor: Setor
     localizacao: Localizacao | None = None
     administrador: bool = False
+    # Código do vendedor no ERP (Firebird) — só p/ Vendedor. Teto = INTEGER (int32).
+    cod_vendedor_firebird: int | None = Field(default=None, ge=1, le=2_147_483_647)
 
     @field_validator("nome")
     @classmethod
@@ -84,6 +88,7 @@ class EditarUsuarioIn(BaseModel):
     setor: Setor | None = None
     localizacao: Localizacao | None = None
     administrador: bool | None = None
+    cod_vendedor_firebird: int | None = Field(default=None, ge=1, le=2_147_483_647)
 
     @field_validator("nome")
     @classmethod
@@ -161,6 +166,7 @@ async def criar(
             setor=payload.setor,
             localizacao=payload.localizacao,
             administrador=payload.administrador,
+            cod_vendedor_firebird=payload.cod_vendedor_firebird,
         )
     )
     return UsuarioOut.de_dominio(usuario)
@@ -183,6 +189,8 @@ async def editar(
             localizacao=payload.localizacao,
             localizacao_informada="localizacao" in payload.model_fields_set,
             administrador=payload.administrador,
+            cod_vendedor_firebird=payload.cod_vendedor_firebird,
+            cod_vendedor_firebird_informado="cod_vendedor_firebird" in payload.model_fields_set,
         ),
     )
     return UsuarioOut.de_dominio(usuario)

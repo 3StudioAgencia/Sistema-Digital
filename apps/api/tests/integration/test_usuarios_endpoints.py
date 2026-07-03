@@ -472,3 +472,64 @@ async def test_insert_email_duplicado_no_banco_vira_regra_de_negocio(ctx: Any) -
         )
         with pytest.raises(EmailJaCadastradoError):
             await repo.add(duplicado)
+
+
+# ---------------------------------------------------------------------------
+# Código do vendedor no ERP (Firebird) — Fatia 4
+# ---------------------------------------------------------------------------
+async def test_criar_vendedor_com_cod_firebird(ctx: tuple[Any, ...]) -> None:
+    client, _, factory = ctx
+    await _seed_admin(factory)
+    resp = await client.post(
+        "/usuarios", json=_payload_criacao(cod_vendedor_firebird=42), headers=_auth_admin()
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["cod_vendedor_firebird"] == 42
+
+
+async def test_criar_nao_vendedor_com_cod_firebird_e_422(ctx: tuple[Any, ...]) -> None:
+    client, _, factory = ctx
+    await _seed_admin(factory)
+    resp = await client.post(
+        "/usuarios",
+        json=_payload_criacao(setor="studio", localizacao=None, cod_vendedor_firebird=42),
+        headers=_auth_admin(),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "cod_vendedor_firebird_invalido"
+
+
+async def test_editar_define_cod_firebird(ctx: tuple[Any, ...]) -> None:
+    client, _, factory = ctx
+    await _seed_admin(factory)
+    criado = await client.post(
+        "/usuarios", json=_payload_criacao(email="v@x.z"), headers=_auth_admin()
+    )
+    uid = criado.json()["id"]
+    resp = await client.patch(
+        f"/usuarios/{uid}", json={"cod_vendedor_firebird": 77}, headers=_auth_admin()
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["cod_vendedor_firebird"] == 77
+
+
+async def test_editar_trocar_setor_zera_cod_firebird(ctx: tuple[Any, ...]) -> None:
+    """Fatia 3 (nota): mudar o setor para fora de Vendedor DEVE zerar o código —
+    senão o CHECK do banco rejeitaria o UPDATE (500)."""
+    client, _, factory = ctx
+    await _seed_admin(factory)
+    criado = await client.post(
+        "/usuarios",
+        json=_payload_criacao(email="v2@x.z", cod_vendedor_firebird=99),
+        headers=_auth_admin(),
+    )
+    uid = criado.json()["id"]
+    assert criado.json()["cod_vendedor_firebird"] == 99
+    resp = await client.patch(
+        f"/usuarios/{uid}",
+        json={"setor": "clicheria", "localizacao": None},
+        headers=_auth_admin(),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["setor"] == "clicheria"
+    assert resp.json()["cod_vendedor_firebird"] is None

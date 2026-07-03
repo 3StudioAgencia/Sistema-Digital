@@ -1,19 +1,19 @@
 """Casos de uso de provas digitais (W2-C06) — RF-001/002/003, RN-007, US-001.
 
-Criação ATÔMICA (RNF-017) com a arte no R2 (porta do C01), na ordem que não
+Criação ATÔMICA (RNF-017) com a arte no storage (porta do C01), na ordem que não
 deixa órfãos nem segura conexão de banco atravessando IO externo:
 
 1. valida arte (magic bytes) e vendedor (setor Vendedor ativo) — leituras;
 2. fecha a transação de leitura (a conexão não fica idle-in-transaction
    durante o upload — mesmo princípio do ``UsuariosService``);
-3. faz o upload da arte no R2 sob chave derivada do ``id`` da prova (gerado
+3. faz o upload da arte no storage sob chave derivada do ``id`` da prova (gerado
    pela aplicação — estável entre retries de colisão de código);
 4. INSERT + COMMIT com retry de colisão do código (DP-3); qualquer falha após
-   o upload COMPENSA o objeto no R2 (delete idempotente, CRITICAL se a própria
+   o upload COMPENSA o objeto no storage (delete idempotente, CRITICAL se a própria
    compensação falhar — RNF-024).
 
-Resultado: prova órfã nunca existe (o commit só acontece com a arte já no R2);
-o pior caso é um objeto órfão no R2, marcado em log para limpeza.
+Resultado: prova órfã nunca existe (o commit só acontece com a arte já no storage);
+o pior caso é um objeto órfão no storage, marcado em log para limpeza.
 
 Idempotência (RNF-015): o cliente envia o ``prova_id`` (UUID gerado no form)
 como CHAVE DE IDEMPOTÊNCIA. Reenvio após resposta perdida (timeout/abort com o
@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from src.application.ports.arte_fonte import ArteFontePort, ArteSelecionada
 from src.application.ports.audit_log import AuditLogPort
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.event_bus import EventBusPort
@@ -42,6 +43,7 @@ from src.application.ports.provas_repository import (
     ProvasRepositoryPort,
 )
 from src.application.ports.rate_limiter import RateLimiterPort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.settings_repository import SettingsRepositoryPort
 from src.application.ports.storage import StorageObjectNotFound, StoragePort
 from src.application.ports.unit_of_work import UnitOfWork
@@ -58,9 +60,13 @@ from src.domain.provas import (
     Rota,
     gerar_codigo,
     normalizar_codigo,
-    validar_arte,
     validar_codigo,
     validar_vendedor,
+)
+from src.domain.requerimentos import (
+    RequerimentoIncompletoError,
+    RequerimentoNaoEncontradoError,
+    VendedorNaoMapeadoError,
 )
 from src.domain.settings import CHAVE_ETIQUETA, ConfiguracaoEtiqueta, efetivar_config_etiqueta
 from src.domain.state_machine.machine import sequencia_canonica
@@ -79,19 +85,37 @@ class GeracaoDeCodigoEsgotadaError(Exception):
 
 @dataclass(frozen=True)
 class CriarProva:
-    """Comando de criação — payload já validado em FORMA pela borda HTTP.
+    """Comando de criação por REQUERIMENTO (Fatia 3) — payload validado na borda.
 
-    ``prova_id`` é a chave de idempotência gerada pelo CLIENTE (RNF-015): o
-    mesmo form reenviado carrega o mesmo UUID e converge. Opcional — sem ela,
-    o serviço gera o id e cada POST cria uma prova nova.
+    A criação passou a nascer do NÚMERO DE REQUERIMENTO (``cod_req_art``): o serviço
+    resolve nome/cliente/vendedor no ERP (Firebird) e a imagem no servidor de
+    arquivos; só a ``rota`` é escolha manual do admin (imutável — RN-007).
+
+    ``prova_id`` é a chave de idempotência gerada pelo CLIENTE (RNF-015): o mesmo
+    envio reusa o UUID e converge. Opcional — sem ele, cada POST cria uma prova nova.
     """
 
-    nome: str
-    requerimento: str
-    cliente: str
-    vendedor_id: str
+    cod_req_art: int
     rota: Rota
     prova_id: str | None = None
+
+
+@dataclass(frozen=True)
+class _ProvaResolvida:
+    """Dados JÁ validados do requerimento (ERP) + vendedor mapeado (app).
+
+    Tipos não-opcionais: a validação de ``_resolver`` garante que nome/cliente/
+    ``cod_vend_fat`` estão presentes — carregá-los aqui evita reespalhar checagens de
+    ``None`` pelo INSERT e pela leitura da imagem."""
+
+    nome: str
+    cliente: str
+    requerimento: str
+    vendedor_id: str
+    cod_vend_fat: int
+    cod_cliente: int
+    cod_req_art: int
+    anexo_imagem: str | None
 
 
 class ProvasService:
@@ -107,6 +131,8 @@ class ProvasService:
         repo: ProvasRepositoryPort,
         usuarios_repo: UsuariosRepositoryPort,
         storage: StoragePort,
+        firebird: RequerimentoReaderPort,
+        arte_fonte: ArteFontePort,
         uow: UnitOfWork,
         relogio: Callable[[], datetime] | None = None,
         audit: AuditLogPort | None = None,
@@ -115,6 +141,11 @@ class ProvasService:
         self._repo = repo
         self._usuarios_repo = usuarios_repo
         self._storage = storage
+        # Fonte de VERDADE dos dados da prova: o ERP (Firebird, read-only) resolve
+        # nome/cliente/vendedor a partir do requerimento; o servidor de arquivos
+        # (read-only) fornece a imagem oficial. Ambos síncronos → via to_thread.
+        self._firebird = firebird
+        self._arte_fonte = arte_fonte
         self._uow = uow
         self._relogio = relogio or (lambda: datetime.now(UTC))
         # W6-C20: captura "criou_prova" no log de auditoria, na MESMA transação do
@@ -127,31 +158,45 @@ class ProvasService:
         self._eventos = eventos
 
     # ------------------------------------------------------------------- criar
-    async def criar(
-        self, cmd: CriarProva, arte: bytes, arte_content_type_declarado: str | None
-    ) -> Prova:
-        """Cria a prova no estado ``CRIADA`` na rota selecionada (US-001)."""
-        tipo = validar_arte(arte, arte_content_type_declarado)
-        vendedor = await self._usuarios_repo.get(cmd.vendedor_id)
-        validar_vendedor(vendedor)
+    async def criar(self, cmd: CriarProva) -> Prova:
+        """Cria a prova ``CRIADA`` a partir do requerimento (Fatia 3 — US-001).
 
+        Resolve nome/cliente/vendedor no ERP (Firebird) e a imagem no servidor de
+        arquivos, faz o SNAPSHOT da arte no storage e INSERE — atômico (RNF-017) e
+        idempotente (RNF-015). Bloqueios claros: requerimento inexistente (404)/
+        incompleto (422), vendedor não cadastrado (422), imagem indisponível (422).
+        """
         prova_id = cmd.prova_id or str(uuid.uuid4())
-        # Idempotência (RNF-015): reenvio após resposta perdida converge ANTES
-        # de qualquer upload — não regrava a arte nem toca o banco de novo.
+        # Idempotência (RNF-015): reenvio converge ANTES de tocar ERP/share/storage —
+        # não relê o requerimento, não regrava a arte nem toca o banco de novo.
         if cmd.prova_id is not None:
             existente = await self._repo.get(prova_id)
             if existente is not None:
                 return self._convergir(existente, cmd)
 
-        # Libera a conexão da leitura antes do IO externo (idle-in-transaction).
+        resolvida = await self._resolver(cmd.cod_req_art)
+
+        # Libera a conexão de leitura antes do IO externo (share + upload).
         await self._uow.rollback()
 
-        arte_key = f"provas/{prova_id}/arte{EXTENSAO_POR_TIPO[tipo]}"
-        # Porta síncrona (boto3) fora do event loop — mesmo padrão do readiness.
-        await asyncio.to_thread(self._storage.upload, arte_key, arte, tipo)
+        # Lê a imagem oficial no servidor de arquivos (read-only) — porta síncrona.
+        arte = await asyncio.to_thread(
+            self._arte_fonte.obter_arte,
+            resolvida.cod_vend_fat,
+            resolvida.cod_cliente,
+            resolvida.cod_req_art,
+            resolvida.anexo_imagem,
+        )
+        arte_key = f"provas/{prova_id}/arte{EXTENSAO_POR_TIPO[arte.content_type]}"
+        # Snapshot no nosso storage (porta síncrona fora do event loop).
+        await asyncio.to_thread(
+            self._storage.upload, arte_key, arte.conteudo, arte.content_type
+        )
 
         try:
-            prova = await self._inserir_com_retry(cmd, prova_id, arte_key, tipo)
+            prova = await self._inserir_com_retry(
+                cmd, prova_id, resolvida, arte_key, arte.content_type
+            )
         except ProvaJaExisteError:
             # Corrida da idempotência: uma requisição idêntica venceu entre o
             # pré-check e o INSERT. SEM compensação — a arte_key pertence à
@@ -171,26 +216,66 @@ class ProvasService:
                 "prova_id": prova.id,
                 "codigo": prova.codigo,
                 "rota": prova.rota.value,
+                "requerimento": prova.requerimento,
                 "vendedor_id": prova.vendedor_id,
             },
         )
         return prova
 
+    async def preview_arte(self, cod_req_art: int) -> ArteSelecionada:
+        """Imagem oficial do requerimento (ERP + servidor de arquivos) SEM criar a
+        prova — preview da tela de criação. Só leitura; mesmos bloqueios do fluxo de
+        criação: inexistente (404), sem código de faturamento (422), imagem ausente
+        (422 via ``ArteNaoDisponivelError``), ERP/share fora do ar (503)."""
+        req = await asyncio.to_thread(self._firebird.buscar, cod_req_art)
+        if req is None:
+            raise RequerimentoNaoEncontradoError()
+        if req.cod_vend_fat is None:
+            raise RequerimentoIncompletoError()
+        return await asyncio.to_thread(
+            self._arte_fonte.obter_arte,
+            req.cod_vend_fat,
+            req.cod_cliente,
+            req.cod_req_art,
+            req.anexo_imagem,
+        )
+
+    async def _resolver(self, cod_req_art: int) -> _ProvaResolvida:
+        """Resolve o requerimento no ERP e mapeia o vendedor do app (Fatia 3).
+
+        Só LEITURA (Firebird + Postgres): não toca storage/share. Bloqueia com erro
+        claro — inexistente (404), incompleto (422), vendedor não cadastrado (422)
+        ou inválido/inativo (422). O ``vendedor_id`` resolvido mantém a RLS intacta.
+        """
+        req = await asyncio.to_thread(self._firebird.buscar, cod_req_art)
+        if req is None:
+            raise RequerimentoNaoEncontradoError()
+        if not req.nome or not req.nome_cliente or req.cod_vend_fat is None:
+            raise RequerimentoIncompletoError()
+        vendedor = await self._usuarios_repo.buscar_por_cod_vendedor_firebird(req.cod_vendedor)
+        if vendedor is None:
+            raise VendedorNaoMapeadoError()
+        validar_vendedor(vendedor)  # ativo + setor Vendedor
+        return _ProvaResolvida(
+            nome=req.nome,
+            cliente=req.nome_cliente,
+            requerimento=str(cod_req_art),
+            vendedor_id=vendedor.id,
+            cod_vend_fat=req.cod_vend_fat,
+            cod_cliente=req.cod_cliente,
+            cod_req_art=req.cod_req_art,
+            anexo_imagem=req.anexo_imagem,
+        )
+
     @staticmethod
     def _convergir(existente: Prova, cmd: CriarProva) -> Prova:
         """Resolução da chave de idempotência repetida (RNF-015).
 
-        Mesmos dados → devolve a prova já criada (reenvio legítimo). Dados
-        diferentes sob a mesma chave → 409: o cliente renova a chave quando o
-        form muda; divergência aqui é bug/abuso, nunca sobrescrita.
+        Como os dados vêm do ERP (determinísticos para um requerimento), a
+        convergência compara o requerimento e a rota do reenvio: iguais → devolve a
+        prova já criada; divergentes → 409 (o cliente renova a chave ao mudar).
         """
-        coincide = (
-            existente.nome == cmd.nome.strip()
-            and existente.requerimento == cmd.requerimento.strip()
-            and existente.cliente == cmd.cliente.strip()
-            and existente.vendedor_id == cmd.vendedor_id
-            and existente.rota is cmd.rota
-        )
+        coincide = existente.requerimento == str(cmd.cod_req_art) and existente.rota is cmd.rota
         if not coincide:
             raise CriacaoDivergenteError()
         logger.info(
@@ -200,7 +285,7 @@ class ProvasService:
         return existente
 
     async def _inserir_com_retry(
-        self, cmd: CriarProva, prova_id: str, arte_key: str, tipo: str
+        self, cmd: CriarProva, prova_id: str, resolvida: _ProvaResolvida, arte_key: str, tipo: str
     ) -> Prova:
         """INSERT atômico com retry de colisão do código único (DP-3).
 
@@ -211,10 +296,10 @@ class ProvasService:
             prova = Prova(
                 id=prova_id,
                 codigo=gerar_codigo(self._relogio()),
-                nome=cmd.nome.strip(),
-                requerimento=cmd.requerimento.strip(),
-                cliente=cmd.cliente.strip(),
-                vendedor_id=cmd.vendedor_id,
+                nome=resolvida.nome,
+                requerimento=resolvida.requerimento,
+                cliente=resolvida.cliente,
+                vendedor_id=resolvida.vendedor_id,
                 rota=cmd.rota,
                 arte_key=arte_key,
                 arte_content_type=tipo,
@@ -253,12 +338,12 @@ class ProvasService:
         try:
             await asyncio.to_thread(self._storage.delete, arte_key)
             logger.warning(
-                "compensação executada: arte removida do R2 após falha no banco",
+                "compensação executada: arte removida do storage após falha no banco",
                 extra={"event": "compensacao_arte", "arte_key": arte_key},
             )
         except Exception:
             logger.critical(
-                "compensação FALHOU: arte órfã no R2 (limpeza manual)",
+                "compensação FALHOU: arte órfã no storage (limpeza manual)",
                 exc_info=True,
                 extra={"event": "compensacao_arte_falhou", "arte_key": arte_key},
             )
@@ -401,8 +486,8 @@ class ProvasConsultaService:
         """Bytes da arte + content-type, para o PROXY de imagem do C08 (DP-5).
 
         A prova é resolvida (e escopada pela RLS) ANTES de tocar o storage — fora
-        do escopo / inexistente → 404 genérico, sem revelar a key do R2. O objeto
-        nunca é exposto por URL pública: o backend lê do R2 e streama."""
+        do escopo / inexistente → 404 genérico, sem revelar a key do storage. O
+        objeto nunca é exposto por URL pública: o backend lê do storage e streama."""
         prova = await self._repo.get(prova_id)
         if prova is None:
             raise ProvaNaoEncontradaError()
@@ -410,13 +495,13 @@ class ProvasConsultaService:
         try:
             dados = await asyncio.to_thread(storage.download, prova.arte_key)
         except StorageObjectNotFound as exc:
-            # Prova VISÍVEL pela RLS mas objeto ausente no R2 = inconsistência de
-            # dado (arte órfã/perdida — a criação é atômica, RNF-017). Vira 404
+            # Prova VISÍVEL pela RLS mas objeto ausente no storage = inconsistência
+            # de dado (arte órfã/perdida — a criação é atômica, RNF-017). Vira 404
             # (anti-enumeração: mesmo 404 do inexistente), NUNCA o 503
             # "storage_indisponivel" — que faria o cliente retentar em loop um
             # arquivo que não voltará. Logado para limpeza manual (RNF-024).
             logger.error(
-                "arte ausente no R2 para prova visível",
+                "arte ausente no storage para prova visível",
                 extra={"event": "arte_ausente", "prova_id": prova.id, "arte_key": prova.arte_key},
             )
             raise ProvaNaoEncontradaError() from exc

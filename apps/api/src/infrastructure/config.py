@@ -86,14 +86,33 @@ class Settings(BaseSettings):
     auth_access_ttl_seconds: int = 1800  # 30 min
     auth_refresh_ttl_seconds: int = 604800  # 7 dias
 
-    # --- Cloudflare R2 (S3-compatível) -----------------------------------
-    # Opcionais por design: o ambiente pode não ter credenciais reais
-    # (prompt §3.6). Sem R2 configurado a app sobe e o readiness reporta
-    # storage "down" — degradação clara, sem derrubar o processo.
-    r2_endpoint_url: str | None = None
-    r2_access_key_id: str | None = None
-    r2_secret_access_key: SecretStr | None = None
-    r2_bucket: str | None = None
+    # --- Storage de artes (destino: snapshot no servidor local) ----------
+    # Substitui o R2 (migração on-prem): diretório onde a app GRAVA a cópia da arte
+    # de cada prova. Opcional no boot — sem ele a app sobe e o readiness reporta
+    # storage "down" (degradação clara, sem crash). Ex.: C:\rastreio\artes ou /var/rastreio/artes
+    storage_dir: str | None = None
+
+    # --- Servidor de arquivos de artes (FONTE read-only do estúdio) ------
+    # Base do share onde as artes vivem, até o STUDIO_TRANSICAO (a app compõe
+    # /<COD_VEND_FAT>/<COD_CLIEN>/<COD_REQ_ART>/VERSAO/). SOMENTE LEITURA. Opcional no
+    # boot (readiness reporta "down"). Ex.: \\172.16.0.6\Artes\STUDIO_TRANSICAO
+    arte_share_base: str | None = None
+    # Teto de tamanho da imagem lida do share (guarda anti-OOM; o share é confiável,
+    # então é generoso). Acima disso a criação bloqueia com "arte indisponível".
+    arte_fonte_tamanho_maximo_mb: int = 50
+
+    # --- ERP legado (Firebird) — SOMENTE LEITURA -------------------------
+    # Lê o requerimento de arte (nome/cliente/vendedor + caminho da imagem) para
+    # originar a prova. NUNCA escreve (regra do projeto). Opcional no boot (como o
+    # R2): sem ele a app sobe e o readiness reporta o ERP "down". ``database`` é a
+    # string de conexão do driver (ex.: ``localhost:C:\bancos\STUDIOEART_2010.FDB``);
+    # ``client_library`` aponta a ``fbclient.dll`` do servidor instalado (opcional —
+    # o driver autolocaliza quando ausente).
+    firebird_database: str | None = None
+    firebird_user: str | None = None
+    firebird_password: SecretStr | None = None
+    firebird_charset: str = "WIN1252"
+    firebird_client_library: str | None = None
 
     # --- HTTP -------------------------------------------------------------
     cors_allowed_origins: str = "http://localhost:3000"
@@ -138,27 +157,43 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return value
 
+    @field_validator("arte_fonte_tamanho_maximo_mb")
+    @classmethod
+    def _validate_arte_fonte_teto(cls, value: int) -> int:
+        if value <= 0:
+            msg = "ARTE_FONTE_TAMANHO_MAXIMO_MB deve ser um inteiro positivo (MB)."
+            raise ValueError(msg)
+        return value
+
     @model_validator(mode="after")
-    def _validate_r2_all_or_nothing(self) -> Self:
-        """R2 parcialmente configurado é quase sempre erro de operação — falhe rápido."""
-        provided = [
-            self.r2_endpoint_url,
-            self.r2_access_key_id,
-            self.r2_secret_access_key,
-            self.r2_bucket,
-        ]
+    def _validate_firebird_all_or_nothing(self) -> Self:
+        """Firebird parcialmente configurado é erro de operação — falhe rápido
+        (mesmo princípio do R2). ``charset``/``client_library`` têm default/são
+        opcionais; o trio conexão é tudo-ou-nada."""
+        provided = [self.firebird_database, self.firebird_user, self.firebird_password]
         if any(v is not None for v in provided) and not all(v is not None for v in provided):
             msg = (
-                "Configuração parcial do R2: defina TODAS as variáveis "
-                "R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY e R2_BUCKET "
-                "ou nenhuma delas."
+                "Configuração parcial do Firebird: defina FIREBIRD_DATABASE, "
+                "FIREBIRD_USER e FIREBIRD_PASSWORD juntos, ou nenhum deles."
             )
             raise ValueError(msg)
         return self
 
     @property
-    def r2_configured(self) -> bool:
-        return self.r2_bucket is not None
+    def storage_configured(self) -> bool:
+        return self.storage_dir is not None
+
+    @property
+    def arte_fonte_configured(self) -> bool:
+        return self.arte_share_base is not None
+
+    @property
+    def arte_fonte_tamanho_maximo_bytes(self) -> int:
+        return self.arte_fonte_tamanho_maximo_mb * 1024 * 1024
+
+    @property
+    def firebird_configured(self) -> bool:
+        return self.firebird_database is not None
 
     @property
     def auth_configured(self) -> bool:

@@ -1,4 +1,4 @@
-"""UnconfiguredStorage: a app sobe sem R2, mas falha com mensagem acionável no uso."""
+"""UnconfiguredStorage: a app sobe sem storage, mas falha com mensagem acionável no uso."""
 
 import pytest
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
@@ -25,5 +25,5 @@ def test_health_sempre_false(storage: UnconfiguredStorage) -> None:
 def test_uso_real_falha_com_instrucao_de_configuracao(
     storage: UnconfiguredStorage, operacao: object
 ) -> None:
-    with pytest.raises(StorageError, match="R2_ENDPOINT_URL"):
+    with pytest.raises(StorageError, match="STORAGE_DIR"):
         operacao(storage)  # type: ignore[operator]

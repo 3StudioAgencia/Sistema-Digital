@@ -86,6 +86,10 @@ class UsuarioRow(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # Código do vendedor no ERP legado (Firebird, TB_VENDEDOR.COD_VENDE) — mapeia o
+    # usuário do app ao vendedor do requerimento na criação por requerimento (Fatia 3).
+    # Nullable (só vendedor tem; UNIQUE parcial + CHECK na migration 0024).
+    cod_vendedor_firebird: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         postgresql.TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )

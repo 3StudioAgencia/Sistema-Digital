@@ -29,8 +29,10 @@ from src.adapters.outbound.db.unit_of_work import SqlAlchemyUnitOfWork
 from src.adapters.outbound.db.usuarios_repository import SqlAlchemyUsuariosRepository
 from src.application.auditoria import AuditoriaService
 from src.application.dashboard import DashboardService
+from src.application.ports.arte_fonte import ArteFontePort
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.password_hasher import PasswordHasherPort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.storage import StoragePort
 from src.application.provas import (
     ProvasConsultaService,
@@ -130,6 +132,10 @@ async def get_provas_service(
             detail="Persistência não configurada.",
         )
     storage: StoragePort = request.app.state.storage
+    # Fatia 3: a criação nasce do requerimento — o ERP (Firebird) resolve os dados e
+    # o servidor de arquivos fornece a imagem (ambos singletons read-only do state).
+    firebird: RequerimentoReaderPort = request.app.state.requerimento_reader
+    arte_fonte: ArteFontePort = request.app.state.arte_fonte
     async with abrir_sessao_rls(factory, user.claims) as session:
         usuarios_repo = SqlAlchemyUsuariosRepository(session)
         ator = await usuarios_repo.get(user.sub)
@@ -142,6 +148,8 @@ async def get_provas_service(
             repo=SqlAlchemyProvasRepository(session),
             usuarios_repo=usuarios_repo,
             storage=storage,
+            firebird=firebird,
+            arte_fonte=arte_fonte,
             uow=SqlAlchemyUnitOfWork(session),
             # W6-C20: "criou_prova" no log de auditoria, na mesma sessão/transação.
             audit=SqlAlchemyAuditLogRepository(session),
@@ -149,6 +157,34 @@ async def get_provas_service(
             # MESMA transação (NOTIFY entregue só no commit).
             eventos=PgNotifyEventBus(session),
         )
+
+
+async def get_requerimento_reader(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AsyncIterator[RequerimentoReaderPort]:
+    """Leitor read-only do ERP (Firebird) por requisição, JÁ gateado por ``CRIAR_PROVA``.
+
+    A consulta ao requerimento é parte da CRIAÇÃO (exclusiva do admin — Matriz §7),
+    então reusa o MESMO gate de ``get_provas_service``. O leitor em si é um singleton
+    (``app.state``, sem sessão); a sessão RLS existe só para autorizar o ator (a
+    linha do próprio ator é legível por ``usuarios_select_self``). Negação ÚNICA
+    (anti-enumeração — CLAUDE.md §11)."""
+    factory: async_sessionmaker[AsyncSession] | None = request.app.state.session_factory
+    if factory is None:  # boot sem banco (testes offline sem override explícito)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Persistência não configurada.",
+        )
+    reader: RequerimentoReaderPort = request.app.state.requerimento_reader
+    async with abrir_sessao_rls(factory, user.claims) as session:
+        ator = await SqlAlchemyUsuariosRepository(session).get(user.sub)
+        if ator is None or not autorizar(ator, Recurso.CRIAR_PROVA):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado.",
+            )
+        yield reader
 
 
 async def get_provas_consulta_service(
@@ -504,6 +540,7 @@ __all__ = [
     "get_provas_consulta_service",
     "get_provas_service",
     "get_relatorios_service",
+    "get_requerimento_reader",
     "get_settings_service",
     "get_transicao_service",
     "get_usuarios_service",

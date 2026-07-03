@@ -34,9 +34,29 @@ class TestReadiness:
         body = response.json()
         assert body == {
             "status": "ok",
-            "checks": {"database": "ok", "storage": "ok"},
+            "checks": {"database": "ok", "storage": "ok", "erp": "ok", "arte_fonte": "ok"},
             "version": APP_VERSION,
             "env": settings.app_env,
+        }
+
+    async def test_deps_de_criacao_down_nao_bloqueiam_readiness(
+        self, settings: Settings, fake_storage: FakeStorage
+    ) -> None:
+        """ERP (Firebird) e servidor de arquivos de artes são dependências só da
+        CRIAÇÃO de provas por requerimento: a queda é REPORTADA (``down``) mas NÃO
+        derruba a API (200, status 'ok') — reads/dashboard/auth seguem. Sem
+        ``requerimento_reader``/``arte_fonte``, os stand-ins inertes reportam False."""
+        async with make_client(settings, fake_storage, ping_ok) as client:
+            response = await client.get("/health/ready")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["checks"] == {
+            "database": "ok",
+            "storage": "ok",
+            "erp": "down",
+            "arte_fonte": "down",
         }
 
     async def test_storage_down_retorna_503_reportando_so_o_storage(

@@ -20,11 +20,19 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from src.adapters.inbound.http.auth import JwtVerifier
 from src.adapters.outbound.db.models import UsuarioRow
+from src.application.ports.arte_fonte import ArteSelecionada
+from src.domain.requerimentos import RequerimentoArte
 from src.domain.usuarios import Localizacao, Setor
 from src.infrastructure.config import Settings
 from src.infrastructure.database import create_request_session_factory
 
-from tests.conftest import FakeStorage, make_client, ping_ok
+from tests.conftest import (
+    FakeArteFonte,
+    FakeRequerimentoReader,
+    FakeStorage,
+    make_client,
+    ping_ok,
+)
 
 pytestmark = pytest.mark.db
 
@@ -32,7 +40,21 @@ HS256_SECRET = "segredo-integracao-nunca-em-producao"
 ADMIN_ID = "11111111-1111-1111-1111-111111111111"
 VENDEDOR_ID = "22222222-2222-2222-2222-222222222222"
 JPEG_MINIMO = b"\xff\xd8\xff\xe0" + b"\x00" * 32
+COD_REQ = 155295
+COD_VENDE = 10
 MM_PARA_PT = 72 / 25.4
+
+_REQ = RequerimentoArte(
+    cod_req_art=COD_REQ,
+    nome="Etiq Cafe Caproni",
+    cod_cliente=1058,
+    nome_cliente="Cafe Caproni",
+    cod_vendedor=COD_VENDE,
+    nome_vendedor="Renan Petrim",
+    cod_vend_fat=10,
+    anexo_imagem="VERSAO_155295_V1.jpg",
+)
+_ARTE = ArteSelecionada(conteudo=JPEG_MINIMO, content_type="image/jpeg", nome_arquivo="V1.jpg")
 
 
 def _token(sub: str, **overrides: Any) -> str:
@@ -68,6 +90,8 @@ async def ctx(
         ping_ok,
         jwt_verifier=JwtVerifier(hs256_secret=HS256_SECRET),
         session_factory=create_request_session_factory(usuarios_engine),
+        requerimento_reader=FakeRequerimentoReader({COD_REQ: _REQ}),
+        arte_fonte=FakeArteFonte(_ARTE),
     )
     await _seed_usuarios(usuarios_engine)
     async with client as c:
@@ -93,21 +117,16 @@ async def _seed_usuarios(engine: AsyncEngine) -> None:
                 email="renan@3studio.test",
                 setor=Setor.VENDEDOR,
                 localizacao=Localizacao.MATRIZ,
+                cod_vendedor_firebird=COD_VENDE,
             )
         )
         await session.commit()
 
 
 async def _criar_prova(client: httpx.AsyncClient) -> dict[str, Any]:
-    form = {
-        "nome": "Etiq Cafe Caproni",
-        "requerimento": "155295",
-        "cliente": "Cafe Caproni",
-        "vendedor_id": VENDEDOR_ID,
-        "rota": "matriz",
-    }
-    files = {"arte": ("arte.jpg", JPEG_MINIMO, "image/jpeg")}
-    resp = await client.post("/provas", data=form, files=files, headers=_auth_admin())
+    resp = await client.post(
+        "/provas", json={"cod_req_art": COD_REQ, "rota": "matriz"}, headers=_auth_admin()
+    )
     assert resp.status_code == 201, resp.text
     return resp.json()
 

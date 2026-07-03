@@ -59,6 +59,18 @@ class LocalizacaoInvalidaError(ErroDeDominio):
     codigo = "localizacao_invalida"
 
 
+class CodVendedorFirebirdInvalidoError(ErroDeDominio):
+    """O código do vendedor no ERP (Firebird) foi informado para um setor que não é
+    Vendedor. Espelha o CHECK da migration 0024. Mapeada a 422."""
+
+    codigo = "cod_vendedor_firebird_invalido"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "O código do vendedor (Firebird) só se aplica ao setor Vendedor."
+        )
+
+
 class AutoDesativacaoError(ErroDeDominio):
     """RN-010: um administrador não pode desativar a si mesmo."""
 
@@ -113,6 +125,9 @@ class Usuario:
     localizacao: Localizacao | None = None
     administrador: bool = False
     ativo: bool = True
+    # Código do vendedor no ERP legado (Firebird) — só faz sentido para setor
+    # Vendedor; liga o usuário ao ``COD_VENDE`` do requerimento na criação (Fatia 3).
+    cod_vendedor_firebird: int | None = None
     created_at: datetime | None = field(default=None, compare=False)
     updated_at: datetime | None = field(default=None, compare=False)
 
@@ -152,10 +167,22 @@ def validar_localizacao(setor: Setor, localizacao: Localizacao | None) -> None:
         raise LocalizacaoInvalidaError("Localização só se aplica ao setor Vendedor (RN-009).")
 
 
+def validar_cod_vendedor_firebird(setor: Setor, cod: int | None) -> None:
+    """O código do vendedor no ERP (Firebird) só se aplica ao setor Vendedor.
+
+    Espelha o CHECK da migration 0024: é OPCIONAL para o Vendedor (nem todo vendedor
+    mapeia ao ERP) e INDEVIDO para os demais setores. A tela zera o campo ao trocar o
+    setor; esta validação é a defesa em profundidade (evita o resíduo chegar ao banco).
+    """
+    if setor is not Setor.VENDEDOR and cod is not None:
+        raise CodVendedorFirebirdInvalidoError()
+
+
 __all__ = [
     "SENHA_TAMANHO_MINIMO",
     "AutoDesativacaoError",
     "AutoRemocaoDeAdminError",
+    "CodVendedorFirebirdInvalidoError",
     "ConflitoDeConcorrenciaError",
     "ErroDeDominio",
     "Localizacao",
@@ -165,6 +192,7 @@ __all__ = [
     "UltimoAdminError",
     "Usuario",
     "normalizar_email",
+    "validar_cod_vendedor_firebird",
     "validar_localizacao",
     "validar_senha",
 ]

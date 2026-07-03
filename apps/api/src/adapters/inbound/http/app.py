@@ -29,10 +29,14 @@ from src.adapters.inbound.http.provas import router as provas_router
 from src.adapters.inbound.http.relatorios import router as relatorios_router
 from src.adapters.inbound.http.settings import router as settings_router
 from src.adapters.inbound.http.usuarios import router as usuarios_router
+from src.adapters.outbound.arte_fonte.unconfigured import UnconfiguredArteFonte
 from src.adapters.outbound.auth.argon2_hasher import Argon2PasswordHasher
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
+from src.adapters.outbound.firebird.unconfigured import UnconfiguredRequerimentoReader
+from src.application.ports.arte_fonte import ArteFontePort
 from src.application.ports.etiqueta import EtiquetaPort
 from src.application.ports.password_hasher import PasswordHasherPort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.storage import StoragePort
 from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure.config import APP_NAME, APP_VERSION, Settings
@@ -45,6 +49,8 @@ def create_app(
     settings: Settings,
     storage: StoragePort,
     db_ping: DbPing,
+    arte_fonte: ArteFontePort | None = None,
+    requerimento_reader: RequerimentoReaderPort | None = None,
     jwt_verifier: JwtVerifier | None = None,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     etiqueta_generator: EtiquetaPort | None = None,
@@ -82,6 +88,11 @@ def create_app(
     # Dependências consumidas pelos routers (substituíveis nos testes)
     app.state.settings = settings
     app.state.storage = storage
+    # Leitor read-only do ERP (Firebird). Default seguro (stand-in inerte, como o
+    # UnconfiguredStorage): testes/offline sobem sem o ERP; o readiness o reporta.
+    app.state.requerimento_reader = requerimento_reader or UnconfiguredRequerimentoReader()
+    # Fonte read-only da arte (servidor de arquivos do estúdio). Mesmo default inerte.
+    app.state.arte_fonte = arte_fonte or UnconfiguredArteFonte()
     app.state.db_ping = db_ping
     app.state.jwt_verifier = jwt_verifier or JwtVerifier()
     app.state.session_factory = session_factory

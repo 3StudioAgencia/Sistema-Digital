@@ -1,30 +1,22 @@
 """StoragePort: roundtrip upload/download comprovado via porta (critério §5.2).
 
-O adapter real (R2Storage/boto3) é exercitado contra o S3 do `moto` — mesma
-API S3-compatível do R2, sem rede. O FakeStorage (dublê da suíte) é validado
-junto para garantir que se comporta como a porta promete.
+O adapter real (``FilesystemStorage``) é exercitado contra um diretório temporário;
+o ``FakeStorage`` (dublê da suíte) é validado junto para garantir o mesmo contrato.
 """
 
-from collections.abc import Iterator
+import shutil
+from pathlib import Path
 
-import boto3
 import pytest
-from moto import mock_aws
-from src.adapters.outbound.storage.r2_storage import R2Storage
+from src.adapters.outbound.storage.filesystem_storage import FilesystemStorage
 from src.application.ports.storage import StorageError, StorageObjectNotFound, StoragePort
-from src.infrastructure.config import Settings
 
 from tests.conftest import FakeStorage
 
-BUCKET = "rastreio-artes-test"
-
 
 @pytest.fixture
-def r2_storage() -> Iterator[R2Storage]:
-    with mock_aws():
-        client = boto3.client("s3", region_name="us-east-1")
-        client.create_bucket(Bucket=BUCKET)
-        yield R2Storage(client=client, bucket=BUCKET)
+def filesystem(tmp_path: Path) -> FilesystemStorage:
+    return FilesystemStorage(str(tmp_path / "artes"))
 
 
 @pytest.fixture
@@ -32,9 +24,9 @@ def fake() -> FakeStorage:
     return FakeStorage()
 
 
-@pytest.mark.parametrize("impl", ["r2_storage", "fake"])
+@pytest.mark.parametrize("impl", ["filesystem", "fake"])
 class TestContratoDaPorta:
-    """Mesmo contrato para o adapter real (moto) e para o dublê da suíte."""
+    """Mesmo contrato para o adapter real (disco) e para o dublê da suíte."""
 
     @pytest.fixture
     def storage(self, impl: str, request: pytest.FixtureRequest) -> StoragePort:
@@ -68,40 +60,20 @@ class TestContratoDaPorta:
         assert storage.health() is True
 
 
-class TestR2Especifico:
-    def test_health_false_para_bucket_inexistente(self) -> None:
-        with mock_aws():
-            client = boto3.client("s3", region_name="us-east-1")
-            storage = R2Storage(client=client, bucket="bucket-que-nao-existe")
-            assert storage.health() is False
+class TestFilesystemEspecifico:
+    def test_grava_arquivo_no_disco_sob_a_base(self, tmp_path: Path) -> None:
+        base = tmp_path / "artes"
+        storage = FilesystemStorage(str(base))
+        storage.upload("provas/abc/arte.jpg", b"conteudo", "image/jpeg")
+        assert (base / "provas" / "abc" / "arte.jpg").read_bytes() == b"conteudo"
 
-    def test_from_settings_sem_r2_configurado_falha_com_mensagem_acionavel(self) -> None:
-        s = Settings(
-            _env_file=None,  # type: ignore[call-arg]
-            database_url="postgresql+asyncpg://u:p@h/db",
-            migrations_database_url="postgresql+asyncpg://u:p@h/db",
-        )
-        with pytest.raises(StorageError, match="R2 não configurado"):
-            R2Storage.from_settings(s)
+    def test_health_false_quando_base_some(self, tmp_path: Path) -> None:
+        base = tmp_path / "artes"
+        storage = FilesystemStorage(str(base))
+        shutil.rmtree(base)  # base removida após criada → readiness reporta down
+        assert storage.health() is False
 
-    def test_from_settings_define_timeouts_explicitos(self) -> None:
-        """Calibração W2-C06: connect curto (falha rápido) + read longo (upload
-        de arte de até 10 MB) + retries idempotentes. O orçamento de 5s do
-        readiness (W0-A-004) é imposto pelo CALLER — asyncio.wait_for no health
-        check — e não depende mais do timeout do cliente."""
-        s = Settings(
-            _env_file=None,  # type: ignore[call-arg]
-            database_url="postgresql+asyncpg://u:p@h/db",
-            migrations_database_url="postgresql+asyncpg://u:p@h/db",
-            r2_endpoint_url="https://acc.r2.cloudflarestorage.com",
-            r2_access_key_id="key",
-            r2_secret_access_key="secret",
-            r2_bucket="artes",
-        )
-        storage = R2Storage.from_settings(s)
-        config = storage._client.meta.config
-        assert config.connect_timeout == 5
-        assert config.read_timeout == 60
-        # botocore normaliza max_attempts=3 (retries) em total_max_attempts=4
-        # (1 tentativa inicial + 3 retentativas)
-        assert config.retries == {"mode": "standard", "total_max_attempts": 4}
+    def test_key_com_traversal_e_rejeitada(self, tmp_path: Path) -> None:
+        storage = FilesystemStorage(str(tmp_path / "artes"))
+        with pytest.raises(StorageError):
+            storage.upload("../fora-da-base.txt", b"x", "application/octet-stream")

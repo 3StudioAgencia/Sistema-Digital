@@ -2,7 +2,7 @@
 
 Aqui, e somente aqui:
 - o ambiente é lido e validado (``Settings`` — falha rápido se mal configurado);
-- adapters concretos são instanciados (R2Storage/UnconfiguredStorage, engine);
+- adapters concretos são instanciados (FilesystemStorage/UnconfiguredStorage, engine);
 - as dependências são injetadas na app factory.
 
 Execução: ``uv run uvicorn src.main:app --reload``
@@ -18,12 +18,18 @@ from fastapi import FastAPI
 
 from src.adapters.inbound.http.app import create_app
 from src.adapters.inbound.http.auth import build_jwt_verifier
+from src.adapters.outbound.arte_fonte.filesystem_arte_fonte import SistemaDeArquivosArteFonte
+from src.adapters.outbound.arte_fonte.unconfigured import UnconfiguredArteFonte
 from src.adapters.outbound.auth.argon2_hasher import Argon2PasswordHasher
 from src.adapters.outbound.auth.es256_issuer import Es256TokenIssuer
 from src.adapters.outbound.auth.keys import carregar_chave_privada_ec
 from src.adapters.outbound.etiqueta.fpdf_etiqueta import FpdfEtiquetaGenerator
-from src.adapters.outbound.storage.r2_storage import R2Storage
+from src.adapters.outbound.firebird.requerimento_reader import FirebirdRequerimentoReader
+from src.adapters.outbound.firebird.unconfigured import UnconfiguredRequerimentoReader
+from src.adapters.outbound.storage.filesystem_storage import FilesystemStorage
 from src.adapters.outbound.storage.unconfigured import UnconfiguredStorage
+from src.application.ports.arte_fonte import ArteFontePort
+from src.application.ports.requerimentos import RequerimentoReaderPort
 from src.application.ports.storage import StoragePort
 from src.application.ports.tokens import TokenIssuerPort
 from src.infrastructure import database
@@ -35,20 +41,51 @@ logger = logging.getLogger("rastreio.main")
 
 
 def _build_storage(settings: Settings) -> StoragePort:
-    """R2 real quando configurado; caso contrário, stand-in explícito.
+    """Storage de arquivos local quando configurado; stand-in inerte caso contrário.
 
-    A app SOBE sem credenciais (dev/CI sem R2) e o readiness reporta storage
-    "down" — degradação clara em vez de crash no boot (prompt W0-C01 §3.6).
+    A app SOBE sem STORAGE_DIR (dev/CI) e o readiness reporta storage "down" —
+    degradação clara em vez de crash no boot. Substitui o R2 (migração on-prem).
     """
-    if settings.r2_configured:
-        return R2Storage.from_settings(settings)
-    logger.warning("R2 não configurado — storage indisponível (readiness reportará 'down')")
+    if settings.storage_dir is not None:
+        return FilesystemStorage(settings.storage_dir)
+    logger.warning(
+        "STORAGE_DIR não configurado — storage de artes indisponível (readiness 'down')"
+    )
     return UnconfiguredStorage()
+
+
+def _build_arte_fonte(settings: Settings) -> ArteFontePort:
+    """Fonte read-only da arte (servidor de arquivos do estúdio) quando configurada;
+    stand-in inerte caso contrário — a app sobe sem o share e o readiness o reporta.
+    Só a criação de provas por requerimento depende dela."""
+    if settings.arte_share_base is not None:
+        return SistemaDeArquivosArteFonte(
+            base=settings.arte_share_base,
+            tamanho_maximo_bytes=settings.arte_fonte_tamanho_maximo_bytes,
+        )
+    logger.warning(
+        "ARTE_SHARE_BASE não configurado — servidor de arquivos de artes "
+        "indisponível (readiness 'down')"
+    )
+    return UnconfiguredArteFonte()
+
+
+def _build_requerimento_reader(settings: Settings) -> RequerimentoReaderPort:
+    """Leitor read-only do ERP (Firebird) quando configurado; stand-in inerte caso
+    contrário — a app SOBE sem o ERP (dev/CI) e o readiness reporta 'down' (mesma
+    filosofia do storage). Só a criação de provas por requerimento depende dele."""
+    if settings.firebird_configured:
+        return FirebirdRequerimentoReader.from_settings(settings)
+    logger.warning(
+        "Firebird não configurado — leitura de requerimentos indisponível "
+        "(readiness reportará 'down')"
+    )
+    return UnconfiguredRequerimentoReader()
 
 
 def _build_token_issuer(settings: Settings) -> TokenIssuerPort | None:
     """Emissor ES256 quando o par de chaves está configurado; ``None`` caso
-    contrário (o endpoint de login responde 503 — mesma filosofia do R2)."""
+    contrário (o endpoint de login responde 503 — mesma filosofia do storage)."""
     if settings.auth_jwt_private_key is None:
         return None
     private_key = carregar_chave_privada_ec(settings.auth_jwt_private_key.get_secret_value())
@@ -85,6 +122,8 @@ def build_app() -> FastAPI:
     # (login/refresh/logout), que roda antes de existir qualquer claim.
     system_session_factory = database.create_session_factory(engine)
     storage = _build_storage(settings)
+    arte_fonte = _build_arte_fonte(settings)
+    requerimento_reader = _build_requerimento_reader(settings)
     jwt_verifier = build_jwt_verifier(settings)
     password_hasher = Argon2PasswordHasher()
     token_issuer = _build_token_issuer(settings)
@@ -105,7 +144,12 @@ def build_app() -> FastAPI:
         listener_task = asyncio.create_task(dashboard_listener.run())
         logger.info(
             "api iniciada",
-            extra={"env": settings.app_env, "r2_configured": settings.r2_configured},
+            extra={
+                "env": settings.app_env,
+                "storage_configured": settings.storage_configured,
+                "arte_fonte_configured": settings.arte_fonte_configured,
+                "firebird_configured": settings.firebird_configured,
+            },
         )
         try:
             yield
@@ -121,6 +165,8 @@ def build_app() -> FastAPI:
     return create_app(
         settings=settings,
         storage=storage,
+        arte_fonte=arte_fonte,
+        requerimento_reader=requerimento_reader,
         db_ping=partial(database.ping, engine),
         jwt_verifier=jwt_verifier,
         session_factory=session_factory,

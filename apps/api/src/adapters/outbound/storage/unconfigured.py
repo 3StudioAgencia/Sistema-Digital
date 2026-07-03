@@ -1,15 +1,15 @@
-"""Adapter nulo usado quando o R2 não está configurado no ambiente.
+"""Adapter nulo usado quando o storage de artes não está configurado no ambiente.
 
-Permite que a aplicação SUBA sem credenciais reais (prompt W0-C01 §3.6):
-o readiness check reporta storage "down" com clareza, e qualquer tentativa de
-uso real falha com mensagem acionável — em vez de um stack trace do boto3.
+Permite que a aplicação SUBA sem storage (dev/CI/offline): o readiness reporta o
+storage "down" com clareza, e qualquer tentativa de uso real falha com mensagem
+acionável — em vez de um stack trace de IO.
 """
 
 from src.application.ports.storage import StorageError, StoragePort
 
 _MSG = (
-    "Storage não configurado: defina R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, "
-    "R2_SECRET_ACCESS_KEY e R2_BUCKET no ambiente (ver docs/setup-infra.md)."
+    "Storage de artes não configurado: defina STORAGE_DIR no ambiente "
+    "(ver docs/setup-infra.md)."
 )
 
 

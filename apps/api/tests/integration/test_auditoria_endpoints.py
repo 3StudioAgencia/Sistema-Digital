@@ -25,15 +25,36 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from src.adapters.inbound.http.auth import JwtVerifier
+from src.application.ports.arte_fonte import ArteSelecionada
+from src.domain.requerimentos import RequerimentoArte
 from src.infrastructure.config import Settings
 from src.infrastructure.database import create_request_session_factory
 
-from tests.conftest import FakeStorage, make_client, ping_ok
+from tests.conftest import (
+    FakeArteFonte,
+    FakeRequerimentoReader,
+    FakeStorage,
+    make_client,
+    ping_ok,
+)
 
 pytestmark = pytest.mark.db
 
 HS256_SECRET = "segredo-integracao-nunca-em-producao"
 JPEG_MINIMO = b"\xff\xd8\xff\xe0" + b"\x00" * 32
+COD_REQ = 155295
+COD_VENDE = 10
+_REQ = RequerimentoArte(
+    cod_req_art=COD_REQ,
+    nome="Etiqueta Cafe",
+    cod_cliente=1058,
+    nome_cliente="Cafe Caproni",
+    cod_vendedor=COD_VENDE,
+    nome_vendedor="V",
+    cod_vend_fat=10,
+    anexo_imagem="V1.jpg",
+)
+_ARTE = ArteSelecionada(JPEG_MINIMO, "image/jpeg", "V1.jpg")
 # UA de Chrome + IP via X-Forwarded-For: torna IP/origem DETERMINÍSTICOS na captura.
 UA_CHROME = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537 (KHTML) Chrome/120 Safari/537"
 IP_CLIENTE = "203.0.113.7"
@@ -65,14 +86,21 @@ def _auth(sub: str, setor: str, admin: bool = False, *, origem: bool = False) ->
     return h
 
 
-async def _seed_usuario(engine: AsyncEngine, *, setor: str, nome: str, admin: bool = False) -> str:
+async def _seed_usuario(
+    engine: AsyncEngine,
+    *,
+    setor: str,
+    nome: str,
+    admin: bool = False,
+    cod_firebird: int | None = None,
+) -> str:
     uid = str(uuid.uuid4())
     loc = "matriz" if setor == "vendedor" else None
     async with engine.begin() as conn:
         await conn.execute(
             text(
-                "INSERT INTO usuarios (id, nome, email, setor, localizacao, administrador) "
-                "VALUES (:id, :nome, :email, :setor, :loc, :adm)"
+                "INSERT INTO usuarios (id, nome, email, setor, localizacao, administrador, "
+                "cod_vendedor_firebird) VALUES (:id, :nome, :email, :setor, :loc, :adm, :cod)"
             ),
             {
                 "id": uid,
@@ -81,6 +109,7 @@ async def _seed_usuario(engine: AsyncEngine, *, setor: str, nome: str, admin: bo
                 "setor": setor,
                 "loc": loc,
                 "adm": admin,
+                "cod": cod_firebird,
             },
         )
     return uid
@@ -93,7 +122,9 @@ async def ctx(
     engine = usuarios_engine
     ids = {
         "admin": await _seed_usuario(engine, setor="studio", nome="Monica", admin=True),
-        "vendedor": await _seed_usuario(engine, setor="vendedor", nome="Renan Petrim"),
+        "vendedor": await _seed_usuario(
+            engine, setor="vendedor", nome="Renan Petrim", cod_firebird=COD_VENDE
+        ),
     }
     client = make_client(
         settings,
@@ -101,6 +132,8 @@ async def ctx(
         ping_ok,
         jwt_verifier=JwtVerifier(hs256_secret=HS256_SECRET),
         session_factory=create_request_session_factory(engine),
+        requerimento_reader=FakeRequerimentoReader({COD_REQ: _REQ}),
+        arte_fonte=FakeArteFonte(_ARTE),
     )
     async with client as c:
         yield c, engine, ids
@@ -111,17 +144,9 @@ async def _gerar_eventos(client: httpx.AsyncClient, ids: dict[str, str]) -> str:
 
     criou_prova (admin) → escaneou_qr (vendedor) → mudou_status (vendedor), todos
     com IP/UA determinísticos (origem=True)."""
-    form = {
-        "nome": "Etiqueta Cafe",
-        "requerimento": "155295",
-        "cliente": "Cafe Caproni",
-        "vendedor_id": ids["vendedor"],
-        "rota": "matriz",
-    }
     criada = await client.post(
         "/provas",
-        data=form,
-        files={"arte": ("arte.jpg", JPEG_MINIMO, "image/jpeg")},
+        json={"cod_req_art": COD_REQ, "rota": "matriz"},
         headers=_auth(ids["admin"], "studio", True, origem=True),
     )
     assert criada.status_code == 201, criada.text

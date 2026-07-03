@@ -56,6 +56,13 @@ class UsuariosRepositoryPort(ABC):
     async def get_by_email(self, email: str) -> Usuario | None: ...
 
     @abstractmethod
+    async def buscar_por_cod_vendedor_firebird(self, cod: int) -> Usuario | None:
+        """Vendedor do app cujo ``cod_vendedor_firebird`` = ``cod`` (ou ``None``).
+
+        Usado na criação por requerimento (Fatia 3): mapeia o ``COD_VENDE`` do ERP
+        ao usuário do app. UNIQUE parcial garante no máximo um match."""
+
+    @abstractmethod
     async def add(self, usuario: Usuario) -> None: ...
 
     @abstractmethod

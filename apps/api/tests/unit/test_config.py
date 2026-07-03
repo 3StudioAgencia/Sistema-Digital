@@ -70,22 +70,26 @@ class TestValidacaoDeUrls:
         assert senha not in str(exc_info.value)
 
 
-class TestR2TudoOuNada:
-    def test_sem_r2_e_valido_e_nao_configurado(self) -> None:
-        assert _settings().r2_configured is False
+class TestStorageEArteFonte:
+    def test_sem_storage_nem_share_e_valido_e_nao_configurado(self) -> None:
+        s = _settings()
+        assert s.storage_configured is False
+        assert s.arte_fonte_configured is False
 
-    def test_r2_completo_e_configurado(self) -> None:
+    def test_storage_e_share_configurados(self) -> None:
         s = _settings(
-            r2_endpoint_url="https://acc.r2.cloudflarestorage.com",
-            r2_access_key_id="key",
-            r2_secret_access_key="secret",
-            r2_bucket="artes",
+            storage_dir="/var/rastreio/artes",
+            arte_share_base=r"\\host\Artes\STUDIO_TRANSICAO",
         )
-        assert s.r2_configured is True
+        assert s.storage_configured is True
+        assert s.arte_fonte_configured is True
 
-    def test_r2_parcial_falha_rapido(self) -> None:
-        with pytest.raises(ValidationError, match="Configuração parcial do R2"):
-            _settings(r2_bucket="artes")
+    def test_teto_da_fonte_padrao_50mb(self) -> None:
+        assert _settings().arte_fonte_tamanho_maximo_bytes == 50 * 1024 * 1024
+
+    def test_teto_da_fonte_nao_positivo_falha_rapido(self) -> None:
+        with pytest.raises(ValidationError, match="ARTE_FONTE_TAMANHO_MAXIMO_MB"):
+            _settings(arte_fonte_tamanho_maximo_mb=0)
 
 
 class TestCors:
