@@ -59,6 +59,8 @@ type Campos = {
   setor: "" | Setor;
   localizacao: "" | Localizacao;
   administrador: boolean;
+  // Código do vendedor no ERP (Firebird) — string no input; só p/ Vendedor.
+  codVendedorFirebird: string;
 };
 
 function camposIniciais(estado: EstadoForm): Campos {
@@ -71,9 +73,18 @@ function camposIniciais(estado: EstadoForm): Campos {
       setor: u.setor,
       localizacao: u.localizacao ?? "",
       administrador: u.administrador,
+      codVendedorFirebird: u.cod_vendedor_firebird != null ? String(u.cod_vendedor_firebird) : "",
     };
   }
-  return { nome: "", email: "", senha: "", setor: "", localizacao: "", administrador: false };
+  return {
+    nome: "",
+    email: "",
+    senha: "",
+    setor: "",
+    localizacao: "",
+    administrador: false,
+    codVendedorFirebird: "",
+  };
 }
 
 function FormInterno({
@@ -114,6 +125,13 @@ function FormInterno({
       campos.setor !== "vendedor" || campos.localizacao
         ? null
         : "Vendedor exige localização (RN-009).",
+    // Opcional; se preenchido, deve ser um inteiro positivo (COD_VENDE do ERP).
+    codVendedorFirebird:
+      campos.setor !== "vendedor" ||
+      !campos.codVendedorFirebird.trim() ||
+      /^\d{1,10}$/.test(campos.codVendedorFirebird.trim())
+        ? null
+        : "O código do vendedor deve ser um número.",
   };
   const valido = Object.values(erros).every((erro) => erro === null);
 
@@ -124,6 +142,12 @@ function FormInterno({
     setErroServidor(null);
     try {
       const localizacao = campos.setor === "vendedor" ? (campos.localizacao as Localizacao) : null;
+      // Só o Vendedor carrega o código; para os demais setores vai null (o backend
+      // rejeitaria um resíduo pelo CHECK, e a edição zera ao trocar de setor).
+      const codVendedorFirebird =
+        campos.setor === "vendedor" && campos.codVendedorFirebird.trim()
+          ? Number(campos.codVendedorFirebird.trim())
+          : null;
       const salvo =
         estado.modo === "criar"
           ? await criarUsuario({
@@ -133,12 +157,14 @@ function FormInterno({
               setor: campos.setor as Setor,
               localizacao,
               administrador: campos.administrador,
+              cod_vendedor_firebird: codVendedorFirebird,
             })
           : await editarUsuario(estado.usuario.id, {
               nome: campos.nome.trim(),
               setor: campos.setor as Setor,
               localizacao,
               administrador: campos.administrador,
+              cod_vendedor_firebird: codVendedorFirebird,
             });
       onSalvo(salvo, estado.modo);
     } catch (error) {
@@ -243,6 +269,7 @@ function FormInterno({
                   ...atual,
                   setor,
                   localizacao: setor === "vendedor" ? atual.localizacao : "",
+                  codVendedorFirebird: setor === "vendedor" ? atual.codVendedorFirebird : "",
                 }));
                 setErroServidor(null);
                 marcarTocado("setor");
@@ -281,6 +308,34 @@ function FormInterno({
             </div>
             {mostrarErro("localizacao") && (
               <p className={styles.modalErro}>{mostrarErro("localizacao")}</p>
+            )}
+          </div>
+        )}
+
+        {campos.setor === "vendedor" && (
+          <div className={styles.modalCampo}>
+            <label htmlFor={`${tituloId}-cod-firebird`} className={styles.modalLabel}>
+              Código do vendedor (Firebird) — opcional:
+            </label>
+            <input
+              id={`${tituloId}-cod-firebird`}
+              type="text"
+              inputMode="numeric"
+              value={campos.codVendedorFirebird}
+              onChange={(event) =>
+                atualizar("codVendedorFirebird", event.target.value.replace(/\D/g, ""))
+              }
+              onBlur={() => marcarTocado("codVendedorFirebird")}
+              className={styles.modalInput}
+              autoComplete="off"
+              maxLength={10}
+            />
+            <p id={`${tituloId}-cod-firebird-nota`} className={styles.modalNota}>
+              Liga este vendedor ao código do ERP (COD_VENDE) — usado na criação de
+              prova por requerimento.
+            </p>
+            {mostrarErro("codVendedorFirebird") && (
+              <p className={styles.modalErro}>{mostrarErro("codVendedorFirebird")}</p>
             )}
           </div>
         )}

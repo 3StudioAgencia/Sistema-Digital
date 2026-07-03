@@ -3,8 +3,9 @@
  *
  * Espelho 1:1 dos schemas do backend (apps/api .../http/provas.py). Os VALORES
  * dos enums são os canônicos do glossário (CLAUDE.md §6 — lowercase); rótulos
- * de UI em ROTA_LABELS. A criação é multipart (arte JPG/PNG ≤ 10 MB — RF-001)
- * e a etiqueta chega como PDF binário gerado sob demanda (RF-003).
+ * de UI em ROTA_LABELS. A criação nasce do NÚMERO DE REQUERIMENTO (Fatia 4): o
+ * servidor resolve nome/cliente/vendedor no ERP (Firebird) e a imagem no servidor
+ * de arquivos; a etiqueta chega como PDF binário gerado sob demanda (RF-003).
  */
 import type { EstadoProva } from "@/lib/provas/status-labels";
 
@@ -18,10 +19,6 @@ export { ROTA_LABELS, ROTAS_ORDEM_UI, rotuloRota } from "@/lib/provas/rota-label
 
 import type { Rota } from "@/lib/provas/rota-labels";
 
-/** Contrato da arte (RF-001) — validado no client E no server. */
-export const ARTE_TIPOS = ["image/jpeg", "image/png"] as const;
-export const ARTE_TAMANHO_MAXIMO = 10 * 1024 * 1024; // 10 MB
-
 export type Prova = {
   id: string;
   codigo: string;
@@ -34,29 +31,53 @@ export type Prova = {
   created_at: string | null;
 };
 
+/** Dados do requerimento resolvidos no ERP (Firebird) — preview da criação (Fatia 4). */
+export type RequerimentoResolvido = {
+  cod_req_art: number;
+  nome: string | null;
+  cod_cliente: number;
+  nome_cliente: string | null;
+  cod_vendedor: number;
+  nome_vendedor: string | null;
+  cod_vend_fat: number | null;
+  anexo_imagem: string | null;
+};
+
+/** Consulta o requerimento no ERP (admin-only): 404 se inexistente, 503 se ERP fora. */
+export function consultarRequerimento(
+  codReqArt: number,
+  signal?: AbortSignal,
+): Promise<RequerimentoResolvido> {
+  return apiFetch<RequerimentoResolvido>(`/provas/requerimento/${codReqArt}`, { signal });
+}
+
+/** Imagem oficial do requerimento (proxy do share, sem criar a prova) — preview da
+ * criação. Blob → objectURL num <img>, como o proxy da arte no detalhe (DP-5). */
+export function baixarArteRequerimento(codReqArt: number, signal?: AbortSignal): Promise<Blob> {
+  return apiFetchBlob(`/provas/requerimento/${codReqArt}/arte`, { signal, timeoutMs: 30_000 });
+}
+
 export type CriarProvaPayload = {
-  nome: string;
-  requerimento: string;
-  cliente: string;
-  vendedorId: string;
+  codReqArt: number;
   rota: Rota;
-  arte: File;
   /** Chave de idempotência (RNF-015): reenvio após timeout converge no backend
    * em vez de duplicar. Gerada uma vez pela tela e reusada nas retentativas. */
   provaId?: string;
 };
 
+/** Criação por REQUERIMENTO (Fatia 4): o backend resolve nome/cliente/vendedor no
+ * ERP e a imagem no servidor de arquivos. Só o número e a rota vêm do cliente. */
 export function criarProva(payload: CriarProvaPayload): Promise<Prova> {
-  const form = new FormData();
-  form.set("nome", payload.nome);
-  form.set("requerimento", payload.requerimento);
-  form.set("cliente", payload.cliente);
-  form.set("vendedor_id", payload.vendedorId);
-  form.set("rota", payload.rota);
-  form.set("arte", payload.arte);
-  if (payload.provaId) form.set("prova_id", payload.provaId);
-  // Upload de até 10 MB: timeout maior que o padrão de 10s do client.
-  return apiFetch<Prova>("/provas", { method: "POST", body: form, timeoutMs: 60_000 });
+  return apiFetch<Prova>("/provas", {
+    method: "POST",
+    body: {
+      cod_req_art: payload.codReqArt,
+      rota: payload.rota,
+      ...(payload.provaId ? { prova_id: payload.provaId } : {}),
+    },
+    // Resolução ERP + leitura no share podem passar dos 10s padrão do client.
+    timeoutMs: 60_000,
+  });
 }
 
 export function baixarEtiqueta(provaId: string): Promise<Blob> {

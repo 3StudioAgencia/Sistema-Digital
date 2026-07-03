@@ -158,10 +158,24 @@
 }
 
 /* Requerimento · Nome · Cliente · Vendedor · Status · Rota · Criada em · Ver */
+/* minmax(0, …) permite a coluna encolher abaixo do conteúdo — sem isso o texto
+   longo de Nome/Cliente expande a faixa e vaza em vez de truncar com "…". */
 .grade {
   display: grid;
-  grid-template-columns: 150fr 232fr 150fr 150fr 168fr 110fr 162fr 132fr;
+  grid-template-columns:
+    minmax(0, 150fr) minmax(0, 232fr) minmax(0, 150fr) minmax(0, 150fr)
+    minmax(0, 168fr) minmax(0, 110fr) minmax(0, 162fr) minmax(0, 132fr);
   align-items: center;
+}
+
+/* Texto longo de célula (Nome/Cliente/Vendedor) truncado com "…". Precisa de
+   elemento próprio: text-overflow não se aplica ao texto direto de um flex. */
+.trunca {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cabecalhoTabela {

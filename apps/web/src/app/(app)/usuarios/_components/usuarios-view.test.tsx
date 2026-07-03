@@ -177,6 +177,7 @@ describe("UsuariosView (W1-C04)", () => {
         setor: "vendedor",
         localizacao: "matriz",
         administrador: false,
+        cod_vendedor_firebird: null,
       }),
     );
     expect(await screen.findByText("Usuário cadastrado.")).toBeInTheDocument(); // toast

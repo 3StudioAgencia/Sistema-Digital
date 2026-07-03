@@ -30,6 +30,8 @@ export type Usuario = {
   localizacao: Localizacao | null;
   administrador: boolean;
   ativo: boolean;
+  /** Código do vendedor no ERP (Firebird) — só p/ setor Vendedor (Fatia 4). */
+  cod_vendedor_firebird: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -56,6 +58,7 @@ export type CriarUsuarioPayload = {
   setor: Setor;
   localizacao: Localizacao | null;
   administrador: boolean;
+  cod_vendedor_firebird?: number | null;
 };
 
 export type EditarUsuarioPayload = {
@@ -63,6 +66,7 @@ export type EditarUsuarioPayload = {
   setor?: Setor;
   localizacao?: Localizacao | null;
   administrador?: boolean;
+  cod_vendedor_firebird?: number | null;
 };
 
 export function listarUsuarios(

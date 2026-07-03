@@ -1,71 +1,60 @@
 "use client";
 
 /**
- * Criação de Prova Digital (W2-C06) — tela fiel ao design + reconciliação DP-1.
+ * Criação de Prova Digital por REQUERIMENTO (Fatia 4).
  *
- * - Campos obrigatórios do RF-001 com validação em tempo real (erro limpa ao
- *   corrigir); rota SEM pré-seleção: a escolha é manual e consciente (RN-007) e
- *   "criar sem rota" produz erro claro (critério §6.1).
- * - Vendedores carregados em UMA consulta (setor=vendedor & ativos — sem N+1).
- * - Dropzone valida tipo (JPG/PNG) e tamanho (≤ 10 MB) no client; o server
- *   revalida por magic bytes (defesa em profundidade).
- * - Pós-criação (DP-7): toast de sucesso + download automático da etiqueta +
- *   navegação para /provas; se o download falhar, painel com retry (degradação
- *   graciosa — nada se perde, a etiqueta é gerada sob demanda).
+ * - O NÚMERO DO REQUERIMENTO é o campo principal: ao digitá-lo (debounce), o
+ *   backend resolve no ERP (Firebird) nome/cliente/vendedor, exibidos TRAVADOS
+ *   (auto-preenchidos, somente leitura). Não há mais upload de arte — a imagem
+ *   oficial vem do servidor de arquivos na criação.
+ * - Rota SEM pré-seleção: escolha manual e consciente (RN-007 / critério §6.1).
+ * - Bloqueios do servidor (requerimento inexistente/incompleto, vendedor não
+ *   cadastrado, imagem indisponível) chegam como toast/erro claro na criação.
+ * - Pós-criação (DP-7): toast + download automático da etiqueta + navegação;
+ *   se o download falhar, painel com retry (degradação graciosa).
  * - Animações por tokens, transform/opacity apenas, zeradas sob reduced-motion.
  */
 import { motion } from "framer-motion";
-import { ArrowUp, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import {
-  ARTE_TAMANHO_MAXIMO,
-  ARTE_TIPOS,
   ROTA_LABELS,
   ROTAS_ORDEM_UI,
+  baixarArteRequerimento,
   baixarEtiqueta,
+  consultarRequerimento,
   criarProva,
   salvarArquivo,
   type Prova,
+  type RequerimentoResolvido,
   type Rota,
 } from "@/lib/api/provas";
-import { listarUsuarios } from "@/lib/api/usuarios";
 import { DURATION, EASING } from "@/lib/motion/tokens";
 import { useReducedMotion } from "@/lib/motion/hooks";
 import { fadeRise, staggerContainer } from "@/lib/motion/variants";
-import { Dropdown, type OpcaoDropdown } from "@/components/ui/select/Dropdown";
 import { useToast } from "@/components/ui/toast/ToastProvider";
 
 import styles from "../nova-prova.module.css";
 
-type Erros = Partial<
-  Record<"nome" | "requerimento" | "cliente" | "vendedor" | "rota" | "arte", string>
->;
+type Erros = Partial<Record<"requerimento" | "rota", string>>;
 
-type Vendedores =
+// Estado da resolução do requerimento no ERP (preview auto-preenchido).
+type Resolucao =
+  | { estado: "idle" }
   | { estado: "carregando" }
-  | { estado: "erro" }
-  | { estado: "ok"; opcoes: OpcaoDropdown<string>[] };
+  | { estado: "ok"; dados: RequerimentoResolvido }
+  | { estado: "nao_encontrado" }
+  | { estado: "erro"; mensagem: string };
 
-function formatarTamanho(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
+// COD_REQ_ART é INTEGER (int32) no ERP — o backend rejeita fora da faixa.
+const COD_REQ_MAX = 2_147_483_647;
 
 function gerarChaveIdempotencia(): string {
-  // crypto.randomUUID em contexto seguro (browser/jsdom); fallback defensivo.
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function validarArte(file: File): string | null {
-  const tipoOk =
-    (ARTE_TIPOS as readonly string[]).includes(file.type) || /\.(jpe?g|png)$/i.test(file.name);
-  if (!tipoOk) return "Apenas arquivos JPG ou PNG.";
-  if (file.size > ARTE_TAMANHO_MAXIMO) return "O arquivo excede o tamanho máximo de 10 MB.";
-  return null;
 }
 
 export function NovaProvaView() {
@@ -74,58 +63,85 @@ export function NovaProvaView() {
   const reduced = useReducedMotion();
   const idBase = useId();
 
-  const [nome, setNome] = useState("");
   const [requerimento, setRequerimento] = useState("");
-  const [cliente, setCliente] = useState("");
-  const [vendedorId, setVendedorId] = useState("");
+  const [resolucao, setResolucao] = useState<Resolucao>({ estado: "idle" });
+  // Preview da imagem do requerimento (blob → objectURL), atrelado ao cod resolvido
+  // para nunca exibir a arte de um requerimento anterior enquanto a nova carrega.
+  const [arte, setArte] = useState<{ cod: number; url: string | null; erro: boolean } | null>(
+    null,
+  );
   // Rota SEM default: escolha manual obrigatória (RN-007 / critério §6.1).
   const [rota, setRota] = useState<Rota | null>(null);
-  const [arte, setArte] = useState<File | null>(null);
 
   const [erros, setErros] = useState<Erros>({});
   const [enviando, setEnviando] = useState(false);
-  const [dragAtivo, setDragAtivo] = useState(false);
-  const [vendedores, setVendedores] = useState<Vendedores>({ estado: "carregando" });
-  const [recarregarVendedores, setRecarregarVendedores] = useState(0);
-  // Criada mas com download da etiqueta pendente (falha de rede no download).
   const [pendenteEtiqueta, setPendenteEtiqueta] = useState<Prova | null>(null);
   const [baixandoEtiqueta, setBaixandoEtiqueta] = useState(false);
 
-  const inputArquivoRef = useRef<HTMLInputElement | null>(null);
   const rotaRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // Chave de idempotência (RNF-015): uma por preenchimento da tela, reusada nas
   // retentativas — reenvio após timeout converge no backend em vez de duplicar.
   const [chaveIdempotencia] = useState(gerarChaveIdempotencia);
 
-  // Vendedores ativos em UMA consulta (RNF-020/022) — o select é pequeno por
-  // natureza (equipe de vendas), 100 cobre com folga.
+  // Resolve o requerimento no ERP com DEBOUNCE (evita uma consulta por tecla). Todo
+  // setState fica DENTRO do timer (assíncrono) — nunca no corpo do efeito.
   useEffect(() => {
+    const num = requerimento.trim();
     const controller = new AbortController();
-    listarUsuarios(
-      { setor: "vendedor", status: "ativo", page: 1, pageSize: 100 },
-      controller.signal,
-    )
-      .then((pagina) => {
-        // 100 é o teto rígido da API; se houver mais vendedores ativos, os
-        // excedentes não apareceriam no select — alerta em vez de truncar mudo
-        // (o paginador chega com o C07). Improvável no porte da 3Studio.
-        if (pagina.total > pagina.items.length) {
-          console.warn(
-            `Nova prova: ${pagina.total} vendedores ativos, exibindo ${pagina.items.length} ` +
-              "(teto da API). Vendedores além do limite não aparecem no select.",
-          );
-        }
-        setVendedores({
-          estado: "ok",
-          opcoes: pagina.items.map((u) => ({ value: u.id, label: u.nome })),
+    const timer = setTimeout(() => {
+      if (!/^\d+$/.test(num)) {
+        setResolucao({ estado: "idle" });
+        return;
+      }
+      if (Number(num) > COD_REQ_MAX) {
+        setResolucao({ estado: "nao_encontrado" });
+        return;
+      }
+      setResolucao({ estado: "carregando" });
+      consultarRequerimento(Number(num), controller.signal)
+        .then((dados) => setResolucao({ estado: "ok", dados }))
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (error instanceof ApiError && error.status === 404) {
+            setResolucao({ estado: "nao_encontrado" });
+          } else {
+            setResolucao({
+              estado: "erro",
+              mensagem:
+                error instanceof ApiError
+                  ? error.message
+                  : "Falha ao consultar o requerimento. Tente novamente.",
+            });
+          }
         });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [requerimento]);
+
+  // Busca a imagem do requerimento resolvido (proxy do share → blob → objectURL).
+  // Só faz fetch; o setState fica nos callbacks (nunca no corpo do efeito).
+  useEffect(() => {
+    if (resolucao.estado !== "ok") return;
+    const cod = resolucao.dados.cod_req_art;
+    const controller = new AbortController();
+    let url: string | null = null;
+    baixarArteRequerimento(cod, controller.signal)
+      .then((blob) => {
+        url = URL.createObjectURL(blob);
+        setArte({ cod, url, erro: false });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setVendedores({ estado: "erro" });
+        setArte({ cod, url: null, erro: true });
       });
-    return () => controller.abort();
-  }, [recarregarVendedores]);
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [resolucao]);
 
   function limparErro(campo: keyof Erros) {
     setErros((atual) => {
@@ -134,31 +150,6 @@ export function NovaProvaView() {
       delete resto[campo];
       return resto;
     });
-  }
-
-  function selecionarArte(file: File | null) {
-    if (!file) return;
-    const problema = validarArte(file);
-    if (problema) {
-      setArte(null);
-      setErros((atual) => ({ ...atual, arte: problema }));
-      return;
-    }
-    setArte(file);
-    limparErro("arte");
-  }
-
-  function validarTudo(): Erros {
-    const problemas: Erros = {};
-    if (!nome.trim()) problemas.nome = "Informe o nome da prova.";
-    if (!requerimento.trim()) problemas.requerimento = "Informe o número do requerimento.";
-    else if (!/^\d+$/.test(requerimento.trim()))
-      problemas.requerimento = "O requerimento aceita apenas números.";
-    if (!cliente.trim()) problemas.cliente = "Informe o cliente.";
-    if (!vendedorId) problemas.vendedor = "Selecione o vendedor responsável.";
-    if (!rota) problemas.rota = "Selecione a rota de encaminhamento.";
-    if (!arte) problemas.arte = "Anexe a arte da prova (JPG ou PNG, até 10 MB).";
-    return problemas;
   }
 
   async function baixarEtiquetaDe(prova: Prova): Promise<boolean> {
@@ -177,28 +168,26 @@ export function NovaProvaView() {
   async function aoEnviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (enviando || pendenteEtiqueta) return; // duplo submit nunca duplica prova
-    const problemas = validarTudo();
+    const problemas: Erros = {};
+    if (resolucao.estado !== "ok")
+      problemas.requerimento = "Informe um número de requerimento válido e encontrado.";
+    if (!rota) problemas.rota = "Selecione a rota de encaminhamento.";
     setErros(problemas);
-    if (Object.keys(problemas).length > 0 || !rota || !arte) return;
+    if (Object.keys(problemas).length > 0 || resolucao.estado !== "ok" || !rota) return;
 
     setEnviando(true);
     try {
       const prova = await criarProva({
-        nome: nome.trim(),
-        requerimento: requerimento.trim(),
-        cliente: cliente.trim(),
-        vendedorId,
+        codReqArt: resolucao.dados.cod_req_art,
         rota,
-        arte,
         provaId: chaveIdempotencia, // RNF-015: retry após timeout converge
       });
       toast.success(`Prova ${prova.codigo} criada.`);
       const baixou = await baixarEtiquetaDe(prova);
       if (baixou) {
         // NÃO reabilita o botão: a navegação RSC ainda está em voo e um segundo
-        // clique nesse intervalo criaria duplicata. `enviando` fica true até o
-        // unmount (revisão adversarial W2-C06).
-        router.push("/provas"); // placeholder do C07 (DP-7)
+        // clique nesse intervalo criaria duplicata. `enviando` fica true até o unmount.
+        router.push("/provas");
         return;
       }
       setPendenteEtiqueta(prova); // degradação graciosa: retry sem perder nada
@@ -217,11 +206,12 @@ export function NovaProvaView() {
     ? { duration: DURATION.instant }
     : { duration: DURATION.medium, ease: EASING.emphasized };
 
-  // Cascata dos campos do formulário (W6-C19): a grade orquestra; cada campo
-  // surge em sequência. Técnica A nos nós existentes (preserva o grid). O reveal
-  // em bloco do cartão (acima) é WIP e fica intacto.
+  // Cascata dos campos do formulário (W6-C19): a grade orquestra; cada campo surge
+  // em sequência. Técnica A nos nós existentes (preserva o grid).
   const gradeVar = staggerContainer(reduced);
   const campoVar = fadeRise(reduced);
+
+  const dados = resolucao.estado === "ok" ? resolucao.dados : null;
 
   // ------------------------------------------------------------ pós-criação
   if (pendenteEtiqueta) {
@@ -290,29 +280,6 @@ export function NovaProvaView() {
         >
           <motion.div className={styles.grade} variants={gradeVar} initial="hidden" animate="show">
             <motion.div className={styles.campo} variants={campoVar}>
-              <label className={styles.rotulo} htmlFor={`${idBase}-nome`}>
-                Nome:
-              </label>
-              <input
-                id={`${idBase}-nome`}
-                className={styles.entrada}
-                value={nome}
-                maxLength={200}
-                onChange={(e) => {
-                  setNome(e.target.value);
-                  limparErro("nome");
-                }}
-                aria-invalid={!!erros.nome}
-                aria-describedby={erros.nome ? `${idBase}-nome-erro` : undefined}
-              />
-              {erros.nome && (
-                <p id={`${idBase}-nome-erro`} className={styles.erro} role="alert">
-                  {erros.nome}
-                </p>
-              )}
-            </motion.div>
-
-            <motion.div className={styles.campo} variants={campoVar}>
               <label className={styles.rotulo} htmlFor={`${idBase}-requerimento`}>
                 Requerimento:
               </label>
@@ -321,81 +288,75 @@ export function NovaProvaView() {
                 className={styles.entrada}
                 value={requerimento}
                 inputMode="numeric"
-                maxLength={50}
+                maxLength={10}
+                autoFocus
                 onChange={(e) => {
-                  setRequerimento(e.target.value);
+                  setRequerimento(e.target.value.replace(/\D/g, ""));
                   limparErro("requerimento");
                 }}
                 aria-invalid={!!erros.requerimento}
-                aria-describedby={erros.requerimento ? `${idBase}-req-erro` : undefined}
+                aria-describedby={`${idBase}-req-status`}
               />
-              {erros.requerimento && (
-                <p id={`${idBase}-req-erro`} className={styles.erro} role="alert">
-                  {erros.requerimento}
-                </p>
-              )}
+              <p id={`${idBase}-req-status`} className={styles.campoStatus} role="status">
+                {resolucao.estado === "carregando" && "Buscando requerimento…"}
+                {resolucao.estado === "nao_encontrado" && (
+                  <span className={styles.erro}>Requerimento não encontrado no ERP.</span>
+                )}
+                {resolucao.estado === "erro" && (
+                  <span className={styles.erro}>{resolucao.mensagem}</span>
+                )}
+                {resolucao.estado === "ok" && (
+                  <span className={styles.campoOk}>✓ Requerimento encontrado.</span>
+                )}
+                {erros.requerimento && resolucao.estado === "idle" && (
+                  <span className={styles.erro}>{erros.requerimento}</span>
+                )}
+              </p>
             </motion.div>
 
             <motion.div className={styles.campo} variants={campoVar}>
-              <label className={styles.rotulo} htmlFor={`${idBase}-cliente`}>
-                Cliente:
-              </label>
+              <span className={styles.rotulo} id={`${idBase}-nome-rotulo`}>
+                Nome:
+              </span>
               <input
-                id={`${idBase}-cliente`}
                 className={styles.entrada}
-                value={cliente}
-                maxLength={200}
-                onChange={(e) => {
-                  setCliente(e.target.value);
-                  limparErro("cliente");
-                }}
-                aria-invalid={!!erros.cliente}
-                aria-describedby={erros.cliente ? `${idBase}-cliente-erro` : undefined}
+                value={dados?.nome ?? ""}
+                readOnly
+                aria-readonly
+                aria-labelledby={`${idBase}-nome-rotulo`}
+                placeholder="—"
+                tabIndex={-1}
               />
-              {erros.cliente && (
-                <p id={`${idBase}-cliente-erro`} className={styles.erro} role="alert">
-                  {erros.cliente}
-                </p>
-              )}
+            </motion.div>
+
+            <motion.div className={styles.campo} variants={campoVar}>
+              <span className={styles.rotulo} id={`${idBase}-cliente-rotulo`}>
+                Cliente:
+              </span>
+              <input
+                className={styles.entrada}
+                value={dados?.nome_cliente ?? ""}
+                readOnly
+                aria-readonly
+                aria-labelledby={`${idBase}-cliente-rotulo`}
+                placeholder="—"
+                tabIndex={-1}
+              />
             </motion.div>
 
             <motion.div className={styles.campo} variants={campoVar}>
               <span className={styles.rotulo} id={`${idBase}-vendedor-rotulo`}>
                 Vendedor:
               </span>
-              {vendedores.estado === "erro" ? (
-                <button
-                  type="button"
-                  className={styles.recarregar}
-                  onClick={() => setRecarregarVendedores((n) => n + 1)}
-                >
-                  Falha ao carregar vendedores — tentar novamente
-                </button>
-              ) : (
-                <div className={styles.slotSelect}>
-                  <Dropdown
-                    value={vendedorId}
-                    opcoes={vendedores.estado === "ok" ? vendedores.opcoes : []}
-                    onChange={(valor) => {
-                      setVendedorId(valor);
-                      limparErro("vendedor");
-                    }}
-                    labelledBy={`${idBase}-vendedor-rotulo`}
-                    describedBy={`${idBase}-vendedor-erro`}
-                    invalido={!!erros.vendedor}
-                    disabled={vendedores.estado === "carregando"}
-                    placeholder={
-                      vendedores.estado === "carregando" ? "Carregando…" : "Selecione o vendedor"
-                    }
-                    variante="claro"
-                  />
-                </div>
-              )}
-              {erros.vendedor && (
-                <p id={`${idBase}-vendedor-erro`} className={styles.erro} role="alert">
-                  {erros.vendedor}
-                </p>
-              )}
+              <input
+                className={styles.entrada}
+                value={dados?.nome_vendedor ?? ""}
+                readOnly
+                aria-readonly
+                aria-labelledby={`${idBase}-vendedor-rotulo`}
+                placeholder="—"
+                tabIndex={-1}
+              />
             </motion.div>
           </motion.div>
 
@@ -410,10 +371,6 @@ export function NovaProvaView() {
               aria-invalid={erros.rota ? true : undefined}
               className={styles.segmento}
               onKeyDown={(event) => {
-                // Padrão WAI-ARIA de radiogroup: setas movem E selecionam (com
-                // wrap); Home/End vão aos extremos. O movimento parte do item
-                // FOCADO (roving tabindex), caindo na seleção/1º item quando o
-                // foco ainda não está num radio.
                 const teclas = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
                 if (!teclas.includes(event.key)) return;
                 event.preventDefault();
@@ -433,8 +390,6 @@ export function NovaProvaView() {
             >
               {ROTAS_ORDEM_UI.map((opcao, indice) => {
                 const ativa = rota === opcao;
-                // Roving tabindex: um único tab stop. Sem seleção, o 1º item é o
-                // ponto de entrada; com seleção, é a opção ativa.
                 const tabStop = rota ? ativa : indice === 0;
                 return (
                   <button
@@ -478,61 +433,31 @@ export function NovaProvaView() {
           </div>
 
           <div className={`${styles.campo} ${styles.campoArte}`}>
-            <motion.div
-              className={styles.dropzone}
-              data-arrastando={dragAtivo || undefined}
-              data-erro={erros.arte ? true : undefined}
-              animate={reduced ? undefined : { scale: dragAtivo ? 1.01 : 1 }}
-              transition={{ duration: DURATION.micro, ease: EASING.standard }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragAtivo(true);
-              }}
-              onDragLeave={() => setDragAtivo(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragAtivo(false);
-                selecionarArte(e.dataTransfer.files?.[0] ?? null);
-              }}
-            >
-              <input
-                ref={inputArquivoRef}
-                id={`${idBase}-arte`}
-                type="file"
-                accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-                className={styles.inputArquivo}
-                onChange={(e) => {
-                  selecionarArte(e.target.files?.[0] ?? null);
-                  e.target.value = ""; // re-selecionar o mesmo arquivo dispara de novo
-                }}
-              />
-              <button
-                type="button"
-                className={styles.dropzoneAlvo}
-                onClick={() => inputArquivoRef.current?.click()}
-                aria-describedby={erros.arte ? `${idBase}-arte-erro` : undefined}
-              >
-                {arte ? (
-                  <>
-                    <span className={styles.dropzoneTitulo}>{arte.name}</span>
-                    <span className={styles.dropzoneDica}>
-                      {formatarTamanho(arte.size)} — clique para trocar
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp className={styles.dropzoneIcone} aria-hidden />
-                    <span className={styles.dropzoneTitulo}>Solte ou clique</span>
-                    <span className={styles.dropzoneDica}>JPG • PNG</span>
-                  </>
-                )}
-              </button>
-            </motion.div>
-            {erros.arte && (
-              <p id={`${idBase}-arte-erro`} className={styles.erro} role="alert">
-                {erros.arte}
-              </p>
-            )}
+            <span className={styles.rotulo}>Imagem da prova:</span>
+            <div className={styles.arteBox}>
+              {resolucao.estado !== "ok" ? (
+                <span className={styles.arteVazio}>
+                  A imagem aparece aqui após informar o requerimento.
+                </span>
+              ) : arte && arte.cod === resolucao.dados.cod_req_art ? (
+                arte.erro ? (
+                  <span className={styles.arteIndisponivel}>
+                    Imagem indisponível para este requerimento.
+                  </span>
+                ) : arte.url ? (
+                  <motion.img
+                    className={styles.arteImg}
+                    src={arte.url}
+                    alt={`Arte do requerimento ${resolucao.dados.cod_req_art}`}
+                    initial={reduced ? undefined : { opacity: 0 }}
+                    animate={reduced ? undefined : { opacity: 1 }}
+                    transition={{ duration: DURATION.short, ease: EASING.standard }}
+                  />
+                ) : null
+              ) : (
+                <span className={styles.arteCarregando}>Carregando imagem…</span>
+              )}
+            </div>
           </div>
         </motion.div>
       </form>

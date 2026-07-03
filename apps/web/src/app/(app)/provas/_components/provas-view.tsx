@@ -212,13 +212,13 @@ export function ProvasView({ escopo }: { escopo: EscopoProvas }) {
           {prova.requerimento}
         </span>
         <span role="cell" className={styles.celula}>
-          {prova.nome}
+          <span className={styles.trunca}>{prova.nome}</span>
         </span>
         <span role="cell" className={styles.celula}>
-          {prova.cliente}
+          <span className={styles.trunca}>{prova.cliente}</span>
         </span>
         <span role="cell" className={styles.celula}>
-          {prova.vendedor_nome ?? "—"}
+          <span className={styles.trunca}>{prova.vendedor_nome ?? "—"}</span>
         </span>
         <span role="cell" className={styles.celula}>
           {rotuloStatus(prova.status)}

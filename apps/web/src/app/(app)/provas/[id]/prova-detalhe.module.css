@@ -108,7 +108,7 @@
 
 .nome {
   margin-top: calc(6 * var(--u));
-  font-size: calc(54 * var(--u));
+  font-size: calc(32 * var(--u));
   line-height: 1.1;
   font-weight: 400;
   color: var(--app-ink);

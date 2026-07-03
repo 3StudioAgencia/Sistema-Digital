@@ -1,10 +1,10 @@
-/* Nova prova Digital (W2-C06) — fiel ao design: título 64px + botão amarelo
-   pill no topo, cartão branco raio 30 com o formulário (2 colunas), campos
-   pill cinza-claro, segmented control de Rota (pílula preta no item ativo) e
-   dropzone ampla. Mesma régua fluida das demais páginas (--u). */
+/* Nova prova Digital — criação por REQUERIMENTO (Fatia 4): título 64px + botão
+   amarelo pill no topo, cartão branco raio 30 com o formulário (requerimento +
+   campos travados auto-preenchidos), segmented control de Rota e um BOX com a
+   imagem trazida do servidor de arquivos. Régua fluida (--u). */
 
-/* Sem scroll no desktop: o cartão preenche a altura disponível (flex) e a
-   dropzone absorve o espaço restante. A folga INFERIOR do cartão = a lateral
+/* Sem scroll no desktop: o cartão preenche a altura disponível (flex) e o box da
+   imagem absorve o espaço restante. A folga INFERIOR do cartão = a lateral
    (28px). O overflow-y fica só como rede de segurança p/ janelas minúsculas. */
 .pagina {
   flex: 1;
@@ -128,23 +128,17 @@
   color: var(--app-danger);
 }
 
-/* Slot do Dropdown de vendedor — mesma altura dos inputs. */
-.slotSelect {
-  position: relative;
-  height: calc(56 * var(--u));
+/* Status da resolução do requerimento no ERP (auto-preenchimento — Fatia 4).
+   min-height reserva a linha para não "pular" ao alternar entre estados. */
+.campoStatus {
+  margin-top: calc(8 * var(--u));
+  font-size: calc(14 * var(--u));
+  color: var(--app-text-gray);
+  min-height: calc(20 * var(--u));
 }
 
-.recarregar {
-  height: calc(56 * var(--u));
-  border: 0;
-  border-radius: var(--app-radius-pill);
-  background: var(--app-shell-bg);
-  color: var(--app-danger);
-  font: inherit;
-  font-size: calc(16 * var(--u));
-  cursor: pointer;
-  padding: 0 24px;
-  text-align: left;
+.campoOk {
+  color: #1a7f37;
 }
 
 /* -------------------------------------------------- segmented control (Rota) */
@@ -195,64 +189,37 @@
   color: #ffffff;
 }
 
-/* -------------------------------------------------- dropzone (arte) */
-.dropzone {
+/* -------------------------------------------------- box da imagem (preview) */
+.arteBox {
   border-radius: var(--app-card-radius);
   background: var(--app-shell-bg);
   flex: 1;
   min-height: calc(120 * var(--u));
   display: flex;
-}
-
-.dropzone[data-arrastando] {
-  background: var(--app-field-hover);
-}
-
-.dropzone[data-erro] {
-  outline: 2px solid var(--app-danger);
-}
-
-.inputArquivo {
-  display: none;
-}
-
-.dropzoneAlvo {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: calc(8 * var(--u));
-  border: 0;
-  background: none;
-  border-radius: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: calc(24 * var(--u));
-  min-width: 0;
+  overflow: hidden;
+  padding: calc(12 * var(--u));
 }
 
-.dropzoneAlvo:focus-visible {
-  outline: 2px solid var(--app-ink);
-  outline-offset: 2px;
+.arteImg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: calc(16 * var(--u));
 }
 
-.dropzoneIcone {
-  width: calc(24 * var(--u));
-  height: calc(24 * var(--u));
-  color: var(--app-ink);
-}
-
-.dropzoneTitulo {
-  font-size: calc(20 * var(--u));
-  color: var(--app-ink);
-  overflow-wrap: anywhere;
-}
-
-.dropzoneDica {
-  font-size: calc(13 * var(--u));
+.arteVazio,
+.arteCarregando,
+.arteIndisponivel {
+  font-size: calc(15 * var(--u));
   color: var(--app-text-gray);
-  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.arteIndisponivel {
+  color: var(--app-danger);
 }
 
 /* -------------------------------------------------- pós-criação (retry) */
@@ -358,9 +325,7 @@
     font-size: 16px;
   }
 
-  .entrada,
-  .slotSelect,
-  .recarregar {
+  .entrada {
     height: 48px;
     font-size: 15px;
   }
@@ -377,13 +342,9 @@
     font-size: 15px;
   }
 
-  .dropzone {
+  .arteBox {
     flex: none;
     min-height: 180px;
-  }
-
-  .dropzoneTitulo {
-    font-size: 17px;
   }
 
   .erro {
