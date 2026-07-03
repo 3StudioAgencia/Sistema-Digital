@@ -7,7 +7,8 @@
 > - **Autenticação:** **própria em FastAPI** (não mais Supabase Auth/GoTrue) — o backend **EMITE e verifica** JWT **ES256** (par de chaves), senha em **argon2id**, refresh token rotativo, **cookies httpOnly**. **A regra "PyJWT só verifica, nunca emite" está REVOGADA** (ADR-109). O par `request.jwt.claims` + `SET LOCAL ROLE authenticated` e **toda a RLS continuam idênticos** (o contrato de claims é preservado verbatim; a RLS de `provas` casa por `user_id`, não `sub`).
 > - **Realtime:** **próprio via SSE + Postgres `LISTEN/NOTIFY`** — etapa 3 **CONCLUÍDA** (ADR-114..118): `GET /dashboard/stream` (evento genérico → refetch escopado pela RLS), `EventoHub`+`PgEventListener`, **sem migration**. Substitui o Realtime do Supabase. Deploy **on-prem**. Ver `docs/realtime.md`.
 > - **Frontend:** `lib/auth/` (jose) no lugar de `@supabase/ssr`; rewrite `/api/*`→backend; cookies httpOnly same-origin.
-> Detalhes: `CHANGELOG.md [Unreleased]`, `DECISIONS.md ADR-107..113`, `SESSION_LOG.md` Sessão 30, memória `migracao-supabase-local`.
+> - **Storage/ERP (2026-07-03, ADR-119..124, Sessão 32):** artes **fora do Cloudflare R2** → **storage local** (`FilesystemStorage`/`STORAGE_DIR`). A criação de prova **nasce do número de requerimento**: lê o **ERP legado (Firebird)** e o **servidor de arquivos** do estúdio — **ambos SOMENTE LEITURA** (nunca escrever; a app grava só no PostgreSQL + storage local). Mapeamento vendedor por `usuarios.cod_vendedor_firebird` (migration `0024`). Ver `docs/firebird.md` e `docs/storage.md`.
+> Detalhes: `CHANGELOG.md [Unreleased]`, `DECISIONS.md ADR-107..124`, `SESSION_LOG.md` Sessões 30–32, memória `migracao-supabase-local`.
 
 ---
 
@@ -65,7 +66,7 @@ Estes pilares têm precedência sobre conveniências de implementação. Todo PR
 4. **Animações leves e suaves** — sutis, **somente `transform`/`opacity`** (GPU), durações curtas (≤ 500 ms em page transitions), sempre respeitando `prefers-reduced-motion`. Proibido animar `width/height/top/left` em produção (RF-023 a RF-027, RNF-003, RNF-010).
 5. **Observabilidade** — logging estruturado JSON com correlação por `request_id`, captura centralizada de erros (front + back) com alerta em erros críticos, health checks monitorados (RNF-024).
 
-**Custo-alvo do projeto: R$ 0**, dentro dos limites do free tier (Supabase + Cloudflare R2).
+**Custo-alvo do projeto: R$ 0** — agora **on-prem** (o Supabase e o Cloudflare R2 saíram; artes em storage local, dados/imagem lidos do ERP + servidor de arquivos do estúdio — ver a nota estrutural no topo).
 
 ---
 
@@ -90,8 +91,10 @@ Estes pilares têm precedência sobre conveniências de implementação. Todo PR
 **Banco / Auth / Realtime**
 - **PostgreSQL LOCAL** (ADR-108; *antes: via Supabase*) · **Auth PRÓPRIA em FastAPI** (ADR-109; JWT ES256 emitido+verificado, argon2id, refresh rotativo, cookies httpOnly — *antes: Supabase Auth*) · **Realtime** neutralizado → SSE/WS próprio na etapa 3 (ADR-113; *antes: Supabase Realtime*) · **Row Level Security** (camada inferior do RBAC — **inalterada**; lê `request.jwt.claims` do NOSSO JWT via os helpers `app_*`).
 
-**Storage**
-- **Cloudflare R2** (S3-compatível, egress zero) · **boto3** — artes das provas.
+**Storage / ERP** *(migração 2026-07-03 — ADR-119..124; ver `docs/storage.md` e `docs/firebird.md`)*
+- **Storage local — `FilesystemStorage`** (`StoragePort` sobre `STORAGE_DIR`): DESTINO on-prem do snapshot da arte. **Substitui o Cloudflare R2** (R2/`boto3` removidos).
+- **Servidor de arquivos do estúdio (SMB/UNC) — `ArteFontePort`**: FONTE **read-only** da imagem oficial do requerimento (`<COD_VEND_FAT>/<COD_CLIEN>/<COD_REQ_ART>/VERSAO/`). A app **nunca escreve** nele.
+- **ERP legado (Firebird) — `RequerimentoReaderPort`** (`firebird-driver`, transação `READ`, WIN1252): FONTE **read-only** de nome/cliente/vendedor por número de requerimento. **Nunca escrever** no Firebird.
 
 **Testes**
 - **pytest ≥ 8.0** + **pytest-asyncio ≥ 0.23** (unitários) · **httpx AsyncClient** (integração, Postgres real isolado) · **Playwright ≥ 1.40** (E2E, câmera mockada via API de permissões).
@@ -113,7 +116,7 @@ rastreio-provas-digitais/
 │   │   │   │   └── ports/        # StoragePort, UnitOfWork, etc.
 │   │   │   ├── adapters/
 │   │   │   │   ├── inbound/http/ # Routers FastAPI, middlewares
-│   │   │   │   └── outbound/     # DB (SQLAlchemy), storage (R2/boto3), etiqueta (fpdf2/segno), auth (PyJWT)
+│   │   │   │   └── outbound/     # DB (SQLAlchemy), storage (filesystem), arte_fonte (SMB, R/O), firebird (ERP, R/O), etiqueta (fpdf2/segno), auth (PyJWT)
 │   │   │   ├── infrastructure/   # config, database, logging, app factory
 │   │   │   ├── tasks/            # Drivers de tarefas agendadas (keep_alive — W0-C02)
 │   │   │   └── main.py           # Composition root (injeção de dependências)
@@ -329,6 +332,7 @@ Ao final de **toda** sessão de trabalho, **antes** de encerrar, o Claude Code d
 - ❌ Não usar o modelo de 2 rotas / ~10 estados do UML v3.0.
 - ❌ Não colocar regras de transição no banco — elas vivem em `rules.py`.
 - ❌ Não criar tabelas de domínio pelo painel do Supabase — só via Alembic.
+- ❌ **Não escrever NADA no ERP Firebird nem no servidor de arquivos do estúdio** — ambos são **SOMENTE LEITURA** (regra inegociável — ADR-120/123). A app grava só no PostgreSQL local e no storage local (`FilesystemStorage`). Ler o ERP é sempre em transação `READ`.
 - ❌ Não criar/alterar RLS sem versionar o `.sql` em `migrations/rls/`.
 - ❌ ~~Não emitir JWT no backend~~ — **REVOGADO (ADR-109, Sessão 30):** o backend AGORA **emite** o JWT ES256 próprio no login (além de verificar). Ao mexer na auth, preserve o **contrato de claims verbatim** (`sub`/`user_id`/`setor`/`administrador`/`aud="authenticated"`) e o role Postgres `authenticated` — é o que mantém RLS + gates + `access-matrix.ts` intactos.
 - ❌ Não animar `width/height/top/left`; só `transform`/`opacity`.

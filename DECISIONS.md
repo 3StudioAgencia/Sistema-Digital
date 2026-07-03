@@ -789,6 +789,54 @@
 
 ---
 
+## ADR-119 — Storage local (`FilesystemStorage`) substitui o Cloudflare R2 (Fatia 0)
+- **Contexto:** com a migração Supabase→local concluída, o R2 era o **último** serviço externo de dado. As artes já vivem na rede do estúdio; o servidor on-prem tem disco. Manter storage de objeto na nuvem só para elas contraria o deploy on-prem e o custo-alvo R$ 0.
+- **Decisão:** implementar `StoragePort` sobre o **filesystem local** (`STORAGE_DIR`) — `FilesystemStorage`. Escrita **atômica** (temp + `os.replace`), **anti path-traversal** (`_resolver` confina na base), `health()` = base gravável. Contrato **idêntico** ao do R2 (upload idempotente / download 404 / delete idempotente): a troca é transparente para `ProvasService`/`ProvasConsultaService`. `R2Storage` + `test_r2_mapeamento_de_erros.py` removidos; `boto3` sai como dep de storage.
+- **Status:** **Aceita e entregue** (Fatia 0).
+- **Consequências:** custo R$ 0, sem egress. O pior caso da criação atômica vira um objeto órfão no disco (logado `CRITICAL`), nunca uma prova órfã. Backup do `STORAGE_DIR` passa a ser responsabilidade de operação (antes era durabilidade do R2).
+
+---
+
+## ADR-120 — Leitor do ERP legado (Firebird) SOMENTE LEITURA (Fatia 1)
+- **Contexto:** nome/cliente/vendedor e a imagem de cada prova **já existem** no ERP do estúdio (`STUDIOEART_2010.FDB`, Firebird 4). Redigitá-los na criação seria redundante e propenso a divergência. Regra inegociável do dono: **nunca escrever no Firebird** — só ler.
+- **Decisão:** porta `RequerimentoReaderPort` + adapter `FirebirdRequerimentoReader` (`firebird-driver`). **Read-only em profundidade:** toda transação em `TraAccessMode.READ` (o motor rejeita escrita), SQL **parametrizado**, conexão **curta por lookup** (o driver não compartilha conexão entre threads do pool), charset **WIN1252**. **Síncrono** (driver bloqueante) → `asyncio.to_thread`, como a `StoragePort`. Domínio puro em `domain/requerimentos.py` (`RequerimentoArte` + erros). Falhas separadas: `RequerimentoReaderError` (infra → 503) nunca confunde "não existe" com "ERP fora". Adapter *unconfigured* mantém a app de pé sem ERP.
+- **Status:** **Aceita e entregue** (Fatia 1); validado contra **Firebird 4.0.3** real.
+- **Consequências:** dependência `firebird-driver` + a `fbclient.dll` do servidor (`FIREBIRD_CLIENT_LIBRARY`). ERP indisponível → só a criação por requerimento fica fora (readiness reporta 'down'); o resto da plataforma segue. `host:caminho` na conexão evita lock do `.FDB` legado.
+
+---
+
+## ADR-121 — Criação de prova nasce do REQUERIMENTO (não mais upload manual) (Fatia 4)
+- **Contexto:** o C06 recebia nome/cliente + arte por multipart. Com o ERP + share como fonte da verdade, o upload é redundante e pode divergir do que o estúdio produziu.
+- **Decisão:** `POST /provas` deixa de ser multipart e vira **JSON `{cod_req_art, rota, prova_id?}`**. `ProvasService.criar` resolve ERP + vendedor (só leitura), fecha a transação de leitura, **lê a imagem no share** e faz o **SNAPSHOT no storage** (`provas/<id>/arte.<ext>`) **antes** do INSERT atômico (RNF-017) com compensação em falha. Só a **rota** é manual (imutável — RN-007). Idempotência (RNF-015) por `prova_id`: como os dados do ERP são determinísticos para um requerimento, a convergência compara requerimento + rota → **409** só em rota divergente.
+- **Status:** **Aceita e entregue** (Fatia 4). **Supersede** o contrato multipart do C06 (`docs/provas.md`).
+- **Consequências:** o admin não escolhe mais nome/cliente/arte — vêm do ERP (fonte única, menos erro humano). Bloqueios claros: requerimento inexistente (404) / incompleto (422) / vendedor não mapeado (422) / imagem ausente (422). Depois de criada, detalhe/arte/etiqueta leem só do snapshot — o share não é mais tocado.
+
+---
+
+## ADR-122 — Mapeamento vendedor ERP→app via `usuarios.cod_vendedor_firebird` (migration `0024`, Fatia 3)
+- **Contexto:** o ERP tem seu cadastro de vendedores (`TB_VENDEDOR.COD_VENDE`); o app tem `usuarios`. Para definir `provas.vendedor_id` (base da RLS "vendedor só vê as suas") a partir do requerimento, é preciso casar os dois.
+- **Decisão:** coluna **`usuarios.cod_vendedor_firebird`** (nullable) + **índice UNIQUE PARCIAL** (`WHERE ... IS NOT NULL`) + **CHECK** `IS NULL OR setor = 'vendedor'`; regra espelhada em `domain/usuarios.py` (`validar_cod_vendedor_firebird`). `buscar_por_cod_vendedor_firebird(COD_VENDE)` resolve o `vendedor_id` **sozinho** — a RLS segue intacta (por `vendedor_id`, nunca por `COD_VENDE`). Vendedor não mapeado → `VendedorNaoMapeadoError` (422). Editável em `/usuarios` (só p/ Vendedor; trocar o setor limpa o código).
+- **Status:** **Aceita e entregue** (Fatia 3). Migration `0024` (aditiva; `usuarios` já tinha GRANT de tabela a `authenticated`, sem grant de coluna nem RLS nova).
+- **Consequências:** passo operacional — cadastrar o `COD_VENDE` de cada vendedor. **Rejeitada** a alternativa de casar por **nome** (frágil, ambíguo, sensível a acentuação/grafia).
+
+---
+
+## ADR-123 — Fonte da arte no servidor de arquivos (`ArteFontePort`) separada do destino (Fatia 2)
+- **Contexto:** a imagem oficial vive no **share do estúdio** (`STUDIO_TRANSICAO/<fat>/<clien>/<req>/VERSAO/`), populado pelo fluxo de arte legado. É **origem read-only**, conceitualmente distinta do **destino** (onde a app grava o snapshot — `StoragePort`).
+- **Decisão:** porta **dedicada** `ArteFontePort` (≠ `StoragePort`) + adapter `SistemaDeArquivosArteFonte`. Escolha **determinística** da imagem: o arquivo do `ANEXO_IMAGEM` (versão oficial do ERP); fallback = maior `_V{n}` / `mtime`. Valida **JPG/PNG por magic bytes**, teto anti-OOM (`ARTE_FONTE_TAMANHO_MAXIMO_MB`), subpasta `ANEXO/` **ignorada** (só `VERSAO/` tem a prova). O snapshot é copiado ao `StoragePort` na criação — **desacopla** a prova do share depois. Falhas: `ArteFonteError` (infra → 503) × `ArteNaoDisponivelError` (negócio → 422).
+- **Status:** **Aceita e entregue** (Fatia 2).
+- **Consequências:** renomear/mover a pasta legada **não** quebra provas já criadas (leem do snapshot). Duas portas de arquivo coexistem com papéis claros (ver `docs/storage.md`). Depende do gotcha de UNC da ADR-124.
+
+---
+
+## ADR-124 — UNC com barras normais no `.env` + preview da imagem na criação + truncagem da listagem
+- **Contexto:** (1) o parser de `.env` (**python-dotenv**) **colapsa `\\`→`\`**, quebrando um caminho UNC `\\host\share`; (2) o dono pediu de volta o **box da imagem** na tela de criação (como antes do R2); (3) Nome/Cliente longos **estouravam** a coluna na listagem em vez de truncar.
+- **Decisão:** (1) escrever o UNC com **barras normais** — `//172.16.0.6/Artes/STUDIO_TRANSICAO` (`pathlib` trata `//host/share` como UNC); documentado no `.env.example` e `docs/storage.md`. (2) endpoints de **preview** `GET /provas/requerimento/{cod_req_art}` (dados) e `/arte` (proxy do share, blob→objectURL) + box em `/provas/nova`, auto-preenchendo os campos travados. (3) grid `.grade` com **`minmax(0, Nfr)`** + `.trunca` (`text-overflow: ellipsis`) — só no **desktop** (os cards mobile são um render separado, intactos).
+- **Status:** **Aceita e entregue** (Fatias 2/4 + ajuste final de UX).
+- **Consequências:** qualquer caminho de rede em `.env` segue a mesma convenção de barras. O box de preview reusa o mesmo padrão proxy do detalhe (a arte nunca é exposta por URL do share). `text-overflow` exigiu um `<span>` próprio (não se aplica ao texto direto de um flex).
+
+---
+
 ### Próximas decisões a confirmar (checklist vivo)
 - [x] ADR-007 — validado: pooler/NullPool + caches off, suíte contra PostgreSQL 17.10 real (W0/C01).
 - [x] ADR-008 — propagação de claims/RLS por request **entregue** (W1/C05): listener `after_begin` + `SET LOCAL ROLE authenticated` em `propagar_claims_rls` (ADR-031).

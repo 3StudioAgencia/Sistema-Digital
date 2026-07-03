@@ -3,10 +3,10 @@
 Plataforma web da **3Studio** para controle e rastreabilidade do fluxo físico-digital de provas de impressão — da criação à conclusão na clicheria — com máquina de estados de **14 estados** em **4 rotas**, RBAC em duas camadas e identificação por QR Code (câmera) com fallback de digitação manual.
 
 - **Versão (baseline):** v1.0 — Junho/2026
-- **Custo-alvo:** R$ 0 (infra local + Cloudflare R2)
+- **Custo-alvo:** R$ 0 (infra **on-prem**; artes em storage local — sem Cloudflare R2)
 - **Documentação de contexto:** [`CLAUDE.md`](./CLAUDE.md) · [`DECISIONS.md`](./DECISIONS.md) · [`CHANGELOG.md`](./CHANGELOG.md) · [`SESSION_LOG.md`](./SESSION_LOG.md)
 
-> ✅ **Migração concluída (Sessões 30–31 · 2026-07-02): Supabase → infra LOCAL** (3 subsistemas). O projeto **saiu do Supabase**. **Etapa 1 (banco):** PostgreSQL **local** (nativo, porta 5432; migrations Alembic idênticas ao schema anterior). **Etapa 2 (auth):** **autenticação própria no FastAPI** — JWT **ES256** emitido pelo backend, refresh rotativo persistido/revogável (`auth_sessions`), senhas em **argon2id** (`auth_credentials`), cookies **httpOnly**. **Etapa 3 (realtime):** live-update próprio via **SSE + Postgres `LISTEN/NOTIFY`** (`GET /dashboard/stream`) — repõe o Realtime do Supabase, custo R$ 0, **sem migration**. Notas de Auth/Usuários abaixo que citam Supabase valem como **histórico**; a operação atual é a desta migração. Ver ADR-107..118, [`docs/realtime.md`](./docs/realtime.md) e `SESSION_LOG.md` (Sessões 30–31).
+> ✅ **Migração concluída (Sessões 30–31 · 2026-07-02): Supabase → infra LOCAL** (3 subsistemas). O projeto **saiu do Supabase**. **Etapa 1 (banco):** PostgreSQL **local** (nativo, porta 5432; migrations Alembic idênticas ao schema anterior). **Etapa 2 (auth):** **autenticação própria no FastAPI** — JWT **ES256** emitido pelo backend, refresh rotativo persistido/revogável (`auth_sessions`), senhas em **argon2id** (`auth_credentials`), cookies **httpOnly**. **Etapa 3 (realtime):** live-update próprio via **SSE + Postgres `LISTEN/NOTIFY`** (`GET /dashboard/stream`) — repõe o Realtime do Supabase, custo R$ 0, **sem migration**. **Etapa 4 (storage/ERP · Sessão 32):** artes **fora do Cloudflare R2** → **storage local** (`FilesystemStorage`); a criação de prova **nasce do número de requerimento**, lendo o **ERP legado (Firebird)** e o **servidor de arquivos** do estúdio — **ambos SOMENTE LEITURA** (migration `0024`). Notas de Auth/Usuários abaixo que citam Supabase valem como **histórico**; a operação atual é a desta migração. Ver ADR-107..124, [`docs/realtime.md`](./docs/realtime.md), [`docs/firebird.md`](./docs/firebird.md), [`docs/storage.md`](./docs/storage.md) e `SESSION_LOG.md` (Sessões 30–32).
 
 ---
 
@@ -17,7 +17,7 @@ Plataforma web da **3Studio** para controle e rastreabilidade do fluxo físico-d
 | **Frontend** | Next.js (App Router, ≥14) · TypeScript (strict) · CSS Modules · Framer Motion · Recharts · html5-qrcode · qrcode.react · react-signature-canvas |
 | **Backend** | Python 3.12 · FastAPI (async) · SQLAlchemy 2.0 async · Pydantic v2 · Alembic · PyJWT (verifica **e emite** o JWT ES256 próprio — Sessão 30) · argon2-cffi (argon2id) |
 | **Banco / Auth / Realtime** | PostgreSQL **local** (nativo, porta 5432) · **Auth própria** no FastAPI (ES256 + refresh rotativo + cookies httpOnly) · Realtime **próprio** (SSE + `LISTEN/NOTIFY`, `GET /dashboard/stream`) · Row Level Security |
-| **Storage** | Cloudflare R2 (S3-compatível) · boto3 |
+| **Storage / ERP** | Storage **local** (`FilesystemStorage`, on-prem) · Servidor de arquivos SMB/UNC (arte oficial, **R/O**) · **Firebird** (ERP legado, **R/O** — `firebird-driver`) |
 | **Testes** | pytest · pytest-asyncio · httpx · Playwright |
 
 > A stack segue o Documento de Arquitetura Técnica (DAT). As **regras de negócio e o escopo** seguem os documentos de **Requisitos v1.0** e **Backlog v1.0**. Em caso de divergência entre documentos, ver `CLAUDE.md §2`.
@@ -46,7 +46,7 @@ Detalhamento completo da arquitetura em [`CLAUDE.md §5`](./CLAUDE.md).
 - **Python** 3.12 (piso 3.11) + **uv**
 - **PostgreSQL** local (nativo, porta 5432 — cria os bancos `rastreio` e `rastreio_test`). O `docker compose up -d db` segue disponível como alternativa; a suíte de testes roda offline sem Postgres.
 - **Par de chaves EC P-256** para o JWT ES256 próprio (`AUTH_JWT_PRIVATE_KEY`/`AUTH_JWT_PUBLIC_KEY`, PEM em base64) — a privada só no backend; a pública também no `apps/web/.env` (server-only) para a verificação no proxy/SSR.
-- Conta **Cloudflare R2** (bucket) — provisionamento em [`docs/setup-infra.md`](./docs/setup-infra.md). *(Supabase não é mais necessário — ver banner acima.)*
+- **Diretório de storage local** (`STORAGE_DIR`) p/ o snapshot das artes; **servidor de arquivos do estúdio** (`ARTE_SHARE_BASE`, SMB/UNC — **R/O**) e **ERP Firebird** (`FIREBIRD_*` — **R/O**) p/ a criação por requerimento. Setup em [`docs/storage.md`](./docs/storage.md) e [`docs/firebird.md`](./docs/firebird.md). *(Cloudflare R2 e Supabase não são mais necessários — ver banner acima.)*
 
 > **Plataformas de deploy confirmadas:** **Vercel** (web) + **Railway** (API), on-prem futuro revisável (ADR-009, *Aceita*); gerenciadores de pacote `uv`/`pnpm` confirmados (ADR-010). Ver `DECISIONS.md`.
 

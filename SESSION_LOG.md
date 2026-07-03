@@ -32,6 +32,37 @@
 
 ---
 
+## Sessão 32 — 2026-07-03 — [Migração / fora do backlog] Origem de dados: R2 → storage local + ERP Firebird (read-only)
+
+**Objetivo:** tirar as artes do **Cloudflare R2** (deploy on-prem, R$ 0) e fazer a criação de prova **nascer do número de requerimento**, lendo o **ERP legado (Firebird)** e o **servidor de arquivos do estúdio** — ambos **SOMENTE LEITURA** (regra inegociável: nunca escrever no Firebird nem no share). Método: plano aprovado antes de codar + **fatias verificáveis**; qualquer dúvida, parar e perguntar.
+
+**Feito (por fatias):**
+- **Fatia 0 — storage local:** `FilesystemStorage` (`StoragePort` sobre `STORAGE_DIR`; escrita atômica, anti path-traversal), remoção do `R2Storage`/`test_r2_*`/vars `R2_*`. **ADR-119.**
+- **Fatia 1 — leitor do ERP:** porta `RequerimentoReaderPort` + `FirebirdRequerimentoReader` (`firebird-driver`, transação `READ`, WIN1252, SQL parametrizado), domínio `domain/requerimentos.py`, adapter *unconfigured*. Validado contra Firebird 4.0.3 real. **ADR-120.**
+- **Fatia 2 — fonte da arte:** porta `ArteFontePort` + `SistemaDeArquivosArteFonte` (lê `<fat>/<clien>/<req>/VERSAO/`, escolha determinística por `ANEXO_IMAGEM`/`_V{n}`, magic bytes, teto anti-OOM). Gotcha do UNC (`\\`→`\`) resolvido com barras normais. **ADR-123/124.**
+- **Fatia 3 — mapeamento vendedor:** migration `0024` (`usuarios.cod_vendedor_firebird` + unique parcial + CHECK), regra no domínio + serviço, edição em `/usuarios`. **ADR-122.**
+- **Fatia 4 — fluxo de criação:** `POST /provas` vira JSON `{cod_req_art, rota, prova_id?}`; `ProvasService.criar` resolve ERP+vendedor → lê a imagem no share → **snapshot** no storage → INSERT atômico/idempotente com compensação. Preview `GET /provas/requerimento/{n}` + `/arte`; `/provas/nova` reescrita (campos travados + **box da imagem**). Truncagem de Nome/Cliente na listagem. **ADR-121/124.**
+- **Fatia 5 — encerramento:** `docs/firebird.md` + `docs/storage.md`, CHANGELOG/DECISIONS (ADR-119..124)/SESSION_LOG/CLAUDE, limpeza de código morto (exports/CSS), commits.
+
+**Decisões (ADRs):** ADR-119 (storage local × R2), ADR-120 (leitor Firebird read-only), ADR-121 (criação por requerimento — supersede o multipart do C06), ADR-122 (mapeamento `cod_vendedor_firebird`/0024), ADR-123 (fonte da arte separada do destino), ADR-124 (UNC barras normais + preview + truncagem). Ver `DECISIONS.md`.
+
+**Testes / cobertura:**
+- api: `ruff`/`mypy --strict` limpos; **suíte @db 903 passed/0 failed** (`REQUIRE_DB_TESTS=1` + `FIREBIRD_TEST_DATABASE`/`ARTE_SHARE_TEST_BASE`/`FIREBIRD_TEST_CLIENT_LIBRARY` apontando ERP+share reais). Novos: `test_firebird_reader.py`/`test_arte_fonte_share.py` (`@firebird`/`@share`, skip offline), `test_criacao_e2e.py` (prova real ponta a ponta), `test_storage.py`/`test_unconfigured_storage.py`.
+- web: `tsc --noEmit` 0; `pnpm lint` 0 erros (2 warnings pré-existentes); `pnpm exec vitest run` **201 passed**. `nova-prova-view.test.tsx` reescrito (+ 2 testes de imagem), `provas-view` (truncagem), `test_usuarios_endpoints`/`usuarios-view` (`cod_vendedor_firebird`).
+- Migration **`0024`** (head). Validado ao vivo: req. 150288 → REGISLAINE PETRIM / LATICINIOS FLORIDA / `VERSAO_150288_V3.jpg`.
+
+**Pendências / em aberto:**
+- [ ] **Operação:** preencher `STORAGE_DIR`, `ARTE_SHARE_BASE` (barras normais!), `FIREBIRD_*` no `.env` do backend e **reiniciar** o backend (o `.env` não recarrega no `--reload`). Rodar `alembic upgrade head` (0024) no ambiente alvo.
+- [ ] Comentários do `.env.example` na seção `DATABASE_URL` ainda citam o **pooler do Supabase** (herança da Sessão 30) — cosmético; fora do escopo desta fatia.
+- [ ] Vestigiais inócuos herdados (dropar `custom_access_token_hook`, aposentar `keep_alive.py`) — opcionais.
+
+**Próximo passo:**
+- **Migração on-prem COMPLETA** (Banco + Auth + Realtime + Storage/ERP). Sugerido: smoke test ao vivo da criação por requerimento no navegador e, depois, a revisão final de sistema / auditoria de fechamento.
+
+**Definition of Done:** ✅ atendida no aplicável (testes ≥ piso: domínio/serviço; integração isolada verde; migration `0024` versionada; RLS de `provas`/`usuarios` **preservada** — nenhuma policy nova, mapeamento resolve `vendedor_id`; idempotência da criação mantida; sem N+1; error boundary/degradação graciosa via adapters *unconfigured*; sem segredos versionados). **Read-only do Firebird/share** garantido em profundidade (transação `READ` + portas sem escrita).
+
+---
+
 ## Sessão 31 — 2026-07-02 — [Migração / fora do backlog] Etapa 3 — Realtime próprio (SSE + Postgres LISTEN/NOTIFY)
 
 **Objetivo:** fechar a migração Supabase → local implementando o **realtime próprio do dashboard** (etapa 3), substituindo o Realtime do Supabase (neutralizado na ADR-113). Escopo travado: **só o realtime**. Método: plano aprovado antes de codar + fatias verificáveis.
